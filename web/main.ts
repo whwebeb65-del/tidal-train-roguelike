@@ -28,7 +28,6 @@ import {
   createRecoveryState,
   startCombatNode,
   useSkill,
-  type RecoverySource,
 } from '../src/domain/recovery/RecoverySystem';
 import {
   createCombatLoopState,
@@ -91,7 +90,6 @@ import {
   type SupportId,
 } from '../src/domain/social/SocialExpeditionSystem';
 import { MockAds, MockShare, MockStore } from '../src/platform/MockPlatform';
-import type { SharePayload } from '../src/platform/PlatformContracts';
 import {
   createMemorySaveRepository,
   defaultSave,
@@ -188,8 +186,8 @@ let route = createRoute(seed);
 let battleState: CombatLoopState = createCombatLoopState({ enemyHp: 100 });
 let failureEncounter: 'combat' | 'boss' = 'combat';
 let recoveryState = createRecoveryState();
-const pendingRecoveryActions = new Set<RecoverySource | 'skill-refresh'>();
-let lastRunRecovery: RecoverySource | 'none' = 'none';
+const pendingRecoveryActions = new Set<'ad' | 'skill-refresh'>();
+let lastRunRecovery: 'ad' | 'none' = 'none';
 let combatClears = 0;
 let interactionState: InteractionState = createInteractionState();
 let firstClearState: FirstClearState = { claimedMapIds: [...save.firstClearMapIds] };
@@ -594,12 +592,10 @@ function renderBoss(): string {
 
 function renderFailure(): string {
   const isBoss = failureEncounter === 'boss';
-  const adAvailable = canRevive(recoveryState, 'ad');
-  const shareAvailable = canRevive(recoveryState, 'share');
+  const adAvailable = canRevive(recoveryState);
   const adPending = pendingRecoveryActions.has('ad');
-  const sharePending = pendingRecoveryActions.has('share');
   const encounterLabel = isBoss ? '潮汐巨兽战' : '普通战斗';
-  return `<section class="failure-panel scene"><span class="eyebrow">RUN FAILED / ${encounterLabel}</span><div class="settlement-symbol failure-symbol">!</div><h1>列车失守</h1><p>本局构筑、互动奖励和路线进度仍然保留。选择一次救场机会，继续挑战当前敌人。</p><div class="failure-stats"><span>列车生命 <b>0 / 100</b></span><span>广告复活 <b>${adAvailable ? '可用' : '已用'}</b></span><span>分享复活 <b>${shareAvailable ? '可用' : '已用'}</b></span></div><div class="recovery-actions"><button class="primary recovery-button" data-action="ad-revive" ${!adAvailable || adPending ? 'disabled' : ''}>${adPending ? '广告加载中…' : adAvailable ? `看广告复活 · +${isBoss ? 50 : 60} 生命` : '广告复活已使用'}</button><button class="secondary recovery-button" data-action="share-revive" ${!shareAvailable || sharePending ? 'disabled' : ''}>${sharePending ? '正在生成分享卡…' : shareAvailable ? `分享战绩复活 · +${isBoss ? 40 : 50} 生命` : '分享复活已使用'}</button><button class="text-button give-up-button" data-action="give-up">放弃本局，结算并回车站</button></div><div class="note">广告和分享各自每局限一次；取消或平台失败不会消耗次数。Boss 复活后保留当前 Boss 生命。</div></section>`;
+  return `<section class="failure-panel scene"><span class="eyebrow">RUN FAILED / ${encounterLabel}</span><div class="settlement-symbol failure-symbol">!</div><h1>列车失守</h1><p>本局构筑、互动奖励和路线进度仍然保留。可选择一次广告救场，或直接结算回站。</p><div class="failure-stats"><span>列车生命 <b>0 / 100</b></span><span>广告复活 <b>${adAvailable ? '可用' : '已用'}</b></span></div><div class="recovery-actions"><button class="primary recovery-button" data-action="ad-revive" ${!adAvailable || adPending ? 'disabled' : ''}>${adPending ? '广告加载中…' : adAvailable ? `看广告复活 · +${isBoss ? 50 : 60} 生命` : '广告复活已使用'}</button><button class="text-button give-up-button" data-action="give-up">放弃本局，结算并回车站</button></div><div class="note">广告每局限一次；取消或平台失败不会消耗次数，也不会阻断结算。Boss 复活后保留当前 Boss 生命。</div></section>`;
 }
 
 function renderSettlement(): string {
@@ -636,7 +632,7 @@ function startRun(mode: 'normal' | 'daily-trial' = 'normal'): void {
     return;
   }
   if (runId) {
-    track('run_restart', { afterAdRevive: lastRunRecovery === 'ad', afterShareRevive: lastRunRecovery === 'share' });
+    track('run_restart', { afterAdRevive: lastRunRecovery === 'ad' });
   }
   runMode = mode;
   const dailyDefinition = mode === 'daily-trial' ? syncDailyTrialDay() : null;
@@ -687,7 +683,7 @@ function recordExpeditionContribution(outcome: ExpeditionOutcome): void {
 }
 
 function settleDailyTrial(victory: boolean): void {
-  const assisted = recoveryState.adReviveUsed || recoveryState.shareReviveUsed;
+  const assisted = recoveryState.adReviveUsed;
   const result = submitDailyTrial(dailyTrialState, {
     runId,
     outcome: victory ? 'victory' : 'defeat',
@@ -844,21 +840,9 @@ function handleIncomingDamage(amount: number): void {
   if (battleState.playerHp === 0) {
     failureEncounter = phase;
     phase = 'failure';
-    notice = failureEncounter === 'boss' ? '潮汐巨兽击穿了列车，仍可选择一次广告和一次分享救场。' : '潮兽击穿了列车，别急着结算。';
+    notice = failureEncounter === 'boss' ? '潮汐巨兽击穿了列车，仍可选择一次广告救场。' : '潮兽击穿了列车，可以广告复活或直接结算。';
   }
   render();
-}
-
-function createSharePayload(): SharePayload {
-  return {
-    shareType: 'recovery',
-    mapId: currentMapId,
-    depth: route.find((node) => node.id === currentNodeId)?.depth ?? 0,
-    passengers: save.unlockedPassengerIds.slice(-3),
-    modules: save.unlockedModuleIds.slice(-3),
-    failureReason: failureEncounter === 'boss' ? '潮汐巨兽击穿列车' : '潮兽击穿列车',
-    cta: '救回列车',
-  };
 }
 
 function recoveryResultName(result: 'completed' | 'closed' | 'failed'): 'completed' | 'cancelled' | 'failed' {
@@ -867,7 +851,7 @@ function recoveryResultName(result: 'completed' | 'closed' | 'failed'): 'complet
 
 async function handleAdRevive(): Promise<void> {
   if (phase !== 'failure' || pendingRecoveryActions.has('ad')) return;
-  const available = canRevive(recoveryState, 'ad');
+  const available = canRevive(recoveryState);
   track('revive_clicked', { type: 'ad', available, usedBefore: recoveryState.adReviveUsed });
   if (!available) {
     notice = '本局广告复活已经使用过。';
@@ -886,7 +870,7 @@ async function handleAdRevive(): Promise<void> {
     render();
     return;
   }
-  const revived = applyRevive({ state: recoveryState, source: 'ad', encounter, playerHp: battleState.playerHp, maxPlayerHp: battleState.maxPlayerHp, nowMs: Date.now() });
+  const revived = applyRevive({ state: recoveryState, encounter, playerHp: battleState.playerHp, maxPlayerHp: battleState.maxPlayerHp, nowMs: Date.now() });
   if (revived.result === 'completed') {
     recoveryState = revived.state;
     battleState = { ...battleState, playerHp: revived.playerHp };
@@ -897,42 +881,6 @@ async function handleAdRevive(): Promise<void> {
     notice = '这次复活请求已经结算过，生命不会重复恢复。';
   }
   track('revive_result', { type: 'ad', result: revived.result, hpRestored: revived.hpRestored });
-  render();
-}
-
-async function handleShareRevive(): Promise<void> {
-  if (phase !== 'failure' || pendingRecoveryActions.has('share')) return;
-  const available = canRevive(recoveryState, 'share');
-  track('revive_clicked', { type: 'share', available, usedBefore: recoveryState.shareReviveUsed });
-  if (!available) {
-    notice = '本局分享复活已经使用过。';
-    render();
-    return;
-  }
-  const payload = createSharePayload();
-  track('share_card_created', { mapId: payload.mapId, depth: payload.depth, passengers: payload.passengers.join(','), modules: payload.modules.join(',') });
-  pendingRecoveryActions.add('share');
-  render();
-  const encounter = failureEncounter;
-  const result = await share.share(payload);
-  pendingRecoveryActions.delete('share');
-  if (result !== 'completed') {
-    notice = result === 'cancelled' ? '你取消了分享，复活次数没有消耗。' : '分享回调无效，复活次数没有消耗。';
-    track('revive_result', { type: 'share', result, hpRestored: 0 });
-    render();
-    return;
-  }
-  const revived = applyRevive({ state: recoveryState, source: 'share', encounter, playerHp: battleState.playerHp, maxPlayerHp: battleState.maxPlayerHp, nowMs: Date.now() });
-  if (revived.result === 'completed') {
-    recoveryState = revived.state;
-    battleState = { ...battleState, playerHp: revived.playerHp };
-    lastRunRecovery = 'share';
-    phase = encounter;
-    notice = `分享卡已生成，列车恢复 ${revived.hpRestored} 点生命，继续当前战斗。`;
-  } else {
-    notice = '这次分享复活请求已经结算过，生命不会重复恢复。';
-  }
-  track('revive_result', { type: 'share', result: revived.result, hpRestored: revived.hpRestored });
   render();
 }
 
@@ -1303,7 +1251,6 @@ app.addEventListener('click', async (event) => {
   if (action === 'damage') handleIncomingDamage(35);
   if (action === 'skill-refresh') await handleSkillRefresh();
   if (action === 'ad-revive') await handleAdRevive();
-  if (action === 'share-revive') await handleShareRevive();
   if (action === 'give-up') settleRun(false);
   if (action === 'select-map' && button.dataset.mapId) { currentMapId = button.dataset.mapId as MapId; notice = `已切换路线：${formatMap(currentMapId)}。`; render(); }
   if (action === 'unlock-map' && button.dataset.mapId) { commit(unlockMap(save, button.dataset.mapId as MapId)); currentMapId = button.dataset.mapId as MapId; notice = `新地图 ${formatMap(currentMapId)} 已开放。`; render(); }

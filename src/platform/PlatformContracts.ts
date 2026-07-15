@@ -6,7 +6,7 @@ export type PurchaseResult =
   | { readonly status: 'cancelled' | 'failed' };
 
 export interface SharePayload {
-  readonly shareType?: 'recovery' | 'squad-invite' | 'daily-trial';
+  readonly shareType?: 'squad-invite' | 'daily-trial';
   readonly mapId: string;
   readonly depth: number;
   readonly passengers: readonly string[];

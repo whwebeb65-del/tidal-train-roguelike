@@ -1,26 +1,20 @@
-export type RecoverySource = 'ad' | 'share';
 export type EncounterKind = 'combat' | 'boss';
 export type RecoveryResult = 'completed' | 'duplicate' | 'not-needed';
 
 export interface RecoveryState {
   readonly adReviveUsed: boolean;
-  readonly shareReviveUsed: boolean;
   readonly skillRefreshUsed: boolean;
   readonly skillCharges: number;
   readonly reviveProtectionUntilMs: number;
 }
 
-const REVIVE_HP: Record<RecoverySource, Record<EncounterKind, number>> = {
-  ad: { combat: 60, boss: 50 },
-  share: { combat: 50, boss: 40 },
-};
+const REVIVE_HP: Record<EncounterKind, number> = { combat: 60, boss: 50 };
 
 const REVIVE_PROTECTION_MS = 3000;
 
 export function createRecoveryState(): RecoveryState {
   return {
     adReviveUsed: false,
-    shareReviveUsed: false,
     skillRefreshUsed: false,
     skillCharges: 1,
     reviveProtectionUntilMs: 0,
@@ -35,13 +29,12 @@ export function startCombatNode(state: RecoveryState): RecoveryState {
   };
 }
 
-export function canRevive(state: RecoveryState, source: RecoverySource): boolean {
-  return source === 'ad' ? !state.adReviveUsed : !state.shareReviveUsed;
+export function canRevive(state: RecoveryState): boolean {
+  return !state.adReviveUsed;
 }
 
 export function applyRevive(input: {
   state: RecoveryState;
-  source: RecoverySource;
   encounter: EncounterKind;
   playerHp: number;
   maxPlayerHp: number;
@@ -59,7 +52,7 @@ export function applyRevive(input: {
     throw new Error('Recovery timestamp must be finite');
   }
 
-  if (!canRevive(input.state, input.source)) {
+  if (!canRevive(input.state)) {
     return {
       result: 'duplicate',
       state: input.state,
@@ -68,11 +61,10 @@ export function applyRevive(input: {
     };
   }
 
-  const restoredHp = Math.min(input.maxPlayerHp, Math.max(0, input.playerHp) + REVIVE_HP[input.source][input.encounter]);
+  const restoredHp = Math.min(input.maxPlayerHp, Math.max(0, input.playerHp) + REVIVE_HP[input.encounter]);
   const nextState: RecoveryState = {
     ...input.state,
-    adReviveUsed: input.source === 'ad' ? true : input.state.adReviveUsed,
-    shareReviveUsed: input.source === 'share' ? true : input.state.shareReviveUsed,
+    adReviveUsed: true,
     reviveProtectionUntilMs: input.nowMs + REVIVE_PROTECTION_MS,
   };
 

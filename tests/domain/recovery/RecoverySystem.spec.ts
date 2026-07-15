@@ -11,7 +11,6 @@ describe('RecoverySystem', () => {
   it('allows one ad revive and caps hp at max hp', () => {
     const first = applyRevive({
       state: createRecoveryState(),
-      source: 'ad',
       encounter: 'combat',
       playerHp: 0,
       maxPlayerHp: 50,
@@ -19,7 +18,6 @@ describe('RecoverySystem', () => {
     });
     const retry = applyRevive({
       state: first.state,
-      source: 'ad',
       encounter: 'combat',
       playerHp: first.playerHp,
       maxPlayerHp: 50,
@@ -34,29 +32,26 @@ describe('RecoverySystem', () => {
     expect(retry.hpRestored).toBe(0);
   });
 
-  it('keeps ad and share revive counters independent', () => {
-    const ad = applyRevive({
-      state: createRecoveryState(),
-      source: 'ad',
+  it('exposes only one rewarded ad revive per run', () => {
+    const state = createRecoveryState();
+    expect(state).not.toHaveProperty('shareReviveUsed');
+    const first = applyRevive({
+      state,
       encounter: 'boss',
       playerHp: 0,
       maxPlayerHp: 100,
       nowMs: 1,
     });
-    const share = applyRevive({
-      state: ad.state,
-      source: 'share',
+    const duplicate = applyRevive({
+      state: first.state,
       encounter: 'boss',
       playerHp: 0,
       maxPlayerHp: 100,
       nowMs: 2,
     });
 
-    expect(ad.playerHp).toBe(50);
-    expect(share.playerHp).toBe(40);
-    expect(share.result).toBe('completed');
-    expect(share.state.adReviveUsed).toBe(true);
-    expect(share.state.shareReviveUsed).toBe(true);
+    expect(first.playerHp).toBe(50);
+    expect(duplicate.result).toBe('duplicate');
   });
 
   it('consumes one skill charge and refreshes it only once per run', () => {

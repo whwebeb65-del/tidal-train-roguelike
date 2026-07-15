@@ -26,7 +26,7 @@ describe('TelemetryClient', () => {
 
   it('records recovery and share-card events', () => {
     const telemetry = createMemoryTelemetry();
-    telemetry.track({ name: 'revive_result', runId: 'r1', timestampMs: 4, payload: { type: 'share', hpRestored: 50 } });
+    telemetry.track({ name: 'revive_result', runId: 'r1', timestampMs: 4, payload: { type: 'ad', hpRestored: 50 } });
     telemetry.track({ name: 'skill_refresh_result', runId: 'r1', timestampMs: 5, payload: { chargesGranted: 1 } });
     telemetry.track({ name: 'share_card_created', runId: 'r1', timestampMs: 6, payload: { depth: 3 } });
     expect(telemetry.flush().map((event) => event.name)).toEqual([
