@@ -5,12 +5,17 @@ import type {
   IShare,
   IStore,
   RewardedPlacement,
+  SharePayload,
+  ShareResult,
 } from './PlatformContracts';
 
 export class MockAds implements IAds {
+  public readonly placements: RewardedPlacement[] = [];
+
   public constructor(private readonly result: AdResult) {}
 
-  public showRewardedAd(_placement: RewardedPlacement): Promise<AdResult> {
+  public showRewardedAd(placement: RewardedPlacement): Promise<AdResult> {
+    this.placements.push(placement);
     return Promise.resolve(this.result);
   }
 }
@@ -42,9 +47,12 @@ export class MockAnalytics implements IAnalytics {
 }
 
 export class MockShare implements IShare {
-  public constructor(private readonly result: boolean) {}
+  public readonly payloads: SharePayload[] = [];
 
-  public share(): Promise<boolean> {
+  public constructor(private readonly result: ShareResult) {}
+
+  public share(payload: SharePayload): Promise<ShareResult> {
+    this.payloads.push({ ...payload, passengers: [...payload.passengers], modules: [...payload.modules] });
     return Promise.resolve(this.result);
   }
 }

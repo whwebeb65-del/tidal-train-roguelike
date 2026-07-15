@@ -7,6 +7,10 @@ export type PrototypeEventName =
   | 'boss_enter'
   | 'run_settled'
   | 'revive_clicked'
+  | 'revive_result'
+  | 'skill_refresh_clicked'
+  | 'skill_refresh_result'
+  | 'share_card_created'
   | 'run_restart';
 
 export interface PrototypeEvent {
@@ -15,4 +19,3 @@ export interface PrototypeEvent {
   readonly timestampMs: number;
   readonly payload: Readonly<Record<string, string | number | boolean>>;
 }
-
