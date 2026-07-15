@@ -52,6 +52,18 @@ import {
   type LaunchCampaignState,
 } from '../src/domain/campaign/LaunchCampaignSystem';
 import {
+  claimDailyTrialMilestone,
+  createDailyTrialState,
+  getChinaDayId,
+  getDailyTrialDefinition,
+  normalizeDailyTrialState,
+  submitDailyTrial,
+  type DailyTrialDefinition,
+  type DailyTrialMilestoneId,
+  type DailyTrialState,
+  type DailyTrialSubmissionResult,
+} from '../src/domain/challenge/DailyTrialSystem';
+import {
   claimExpeditionMilestone,
   contributeToExpedition,
   createSocialExpeditionState,
@@ -76,11 +88,17 @@ import {
 } from '../src/save/SaveRepository';
 import { createMemoryTelemetry } from '../src/telemetry/TelemetryClient';
 import type { PrototypeEventName } from '../src/telemetry/TelemetryEvents';
+import {
+  renderDailyTrialHub,
+  renderDailyTrialRunBanner,
+  renderDailyTrialSettlement,
+} from './views/DailyTrialView';
 import './styles.css';
 
 const SAVE_KEY = 'tidal-train-prototype-save-v1';
 const SOCIAL_SAVE_KEY = 'tidal-train-social-v1';
 const CAMPAIGN_SAVE_KEY = 'tidal-train-launch-campaign-v1';
+const DAILY_TRIAL_SAVE_KEY = 'tidal-train-daily-trial-v1';
 const app = document.querySelector<HTMLDivElement>('#app');
 if (!app) {
   throw new Error('App root is missing');
@@ -117,6 +135,16 @@ function readCampaignState(): LaunchCampaignState {
   }
 }
 
+function readDailyTrialState(): DailyTrialState {
+  const dayId = getChinaDayId(Date.now());
+  try {
+    const raw = window.localStorage.getItem(DAILY_TRIAL_SAVE_KEY);
+    return normalizeDailyTrialState(raw ? JSON.parse(raw) : null, dayId);
+  } catch {
+    return createDailyTrialState(dayId);
+  }
+}
+
 const repository = createMemorySaveRepository(readSave());
 const telemetry = createMemoryTelemetry();
 const ads = new MockAds('completed');
@@ -125,7 +153,9 @@ const store = new MockStore('success');
 let save = repository.load();
 let socialState = readSocialState();
 let campaignState = readCampaignState();
+let dailyTrialState = readDailyTrialState();
 let phase: 'station' | 'combat' | 'reward' | 'route' | 'boss' | 'failure' | 'settlement' = 'station';
+let runMode: 'normal' | 'daily-trial' = 'normal';
 let currentMapId: MapId = 'drift-suburb';
 let runId = '';
 let seed = 0;
@@ -143,6 +173,8 @@ let interactionAttempts: Record<string, number> = {};
 let lastSettlementWasFirstClear = false;
 let lastExpeditionContribution = 0;
 let squadSharePending = false;
+let lastDailySubmission: DailyTrialSubmissionResult | null = null;
+let dailyTrialSharePending = false;
 let notice = '欢迎登车，先选择一条可以活着回来的路线。';
 
 function commit(next: PlayerSave): void {
@@ -159,6 +191,23 @@ function commitSocial(next: SocialExpeditionState): void {
 function commitCampaign(next: LaunchCampaignState): void {
   campaignState = normalizeLaunchCampaignState(next);
   window.localStorage.setItem(CAMPAIGN_SAVE_KEY, JSON.stringify(campaignState));
+}
+
+function commitDailyTrial(next: DailyTrialState): void {
+  dailyTrialState = normalizeDailyTrialState(next, next.dayId);
+  window.localStorage.setItem(DAILY_TRIAL_SAVE_KEY, JSON.stringify(dailyTrialState));
+}
+
+function syncDailyTrialDay(): DailyTrialDefinition {
+  const currentDayId = getChinaDayId(Date.now());
+  if (dailyTrialState.dayId !== currentDayId) {
+    commitDailyTrial(createDailyTrialState(currentDayId));
+  }
+  return getDailyTrialDefinition(dailyTrialState.dayId);
+}
+
+function getActiveDailyTrialDefinition(): DailyTrialDefinition | null {
+  return runMode === 'daily-trial' ? getDailyTrialDefinition(dailyTrialState.dayId) : null;
 }
 
 function applyCampaignReward(reward: CampaignReward): void {
@@ -202,12 +251,18 @@ function createBattleModifier(seedValue: number, nodeId: string): TideModifier {
 
 function resetBattleState(enemyHp: number): void {
   const bonuses = getSquadBonuses(socialState);
+  const rule = getActiveDailyTrialDefinition()?.rule;
   battleState = createCombatLoopState({
-    enemyHp,
+    enemyHp: enemyHp + (rule?.enemyHpBonus ?? 0),
     modifier: createBattleModifier(seed, currentNodeId),
-    maxPlayerHp: 100 + bonuses.maxPlayerHpBonus,
-    initialMomentum: bonuses.initialMomentum,
+    maxPlayerHp: Math.max(1, 100 + bonuses.maxPlayerHpBonus + (rule?.maxPlayerHpDelta ?? 0)),
+    initialMomentum: Math.min(100, bonuses.initialMomentum + (rule?.initialMomentumBonus ?? 0)),
   });
+}
+
+function getActionDamageBonus(): number {
+  return getSquadBonuses(socialState).damageBonus
+    + (getActiveDailyTrialDefinition()?.rule.damageBonus ?? 0);
 }
 
 function renderBattleStatus(): string {
@@ -227,7 +282,7 @@ function renderBattleStatus(): string {
 function renderBattleActions(isBoss: boolean): string {
   const burstReady = battleState.momentum >= 100 && !battleState.burstUsed;
   const repairReady = !battleState.repairUsed && battleState.playerHp < battleState.maxPlayerHp;
-  const damageBonus = getSquadBonuses(socialState).damageBonus;
+  const damageBonus = getActionDamageBonus();
   const attackDamage = (battleState.modifier === 'surge-current' ? 30 : 25) + damageBonus;
   const skillDamage = (battleState.modifier === 'echo-fog' ? 60 : 50) + damageBonus;
   return `<div class="battle-actions action-row">
@@ -343,6 +398,7 @@ function renderSocialHub(): string {
 
 function renderStation(): string {
   const nextLevelCost = save.stationLevel * 80;
+  const dailyDefinition = syncDailyTrialDay();
   const mapCards = MAP_PROGRESSION.map((map) => {
     const unlocked = isMapUnlocked(save, map.id);
     const canUnlock = canUnlockMap(save, map.id);
@@ -363,6 +419,7 @@ function renderStation(): string {
     <div class="section-title"><h2>航线逐步开放</h2><span>已开放 ${save.unlockedMapIds.length}/${MAP_PROGRESSION.length}</span></div>
     <div class="map-grid">${mapCards}</div>
     <div class="station-footer"><div><b>车站升级</b><span>当前 Lv.${save.stationLevel} · 下一次需要 ${nextLevelCost} 齿轮</span></div><button class="secondary" data-action="upgrade-station" ${save.gears < nextLevelCost ? 'disabled' : ''}>升级车站</button></div>
+    ${renderDailyTrialHub({ stationLevel: save.stationLevel, state: dailyTrialState, definition: dailyDefinition })}
     ${renderLaunchCampaignCenter()}
     ${renderSocialHub()}
     <div class="monetize-strip"><div><span class="eyebrow">航线补给</span><b>确定性内容，不卖随机胜率</b><small>星票可换外观、通行证与固定礼包；齿轮和徽记来自玩法。</small></div><button class="chip" data-action="buy-pack">模拟购买 60 星票</button></div>
@@ -385,10 +442,9 @@ function renderInteractionCards(): string {
 }
 
 function handleCombatAction(action: CombatAction): void {
-  const supportBonuses = getSquadBonuses(socialState);
   const result = resolveCombatAction(battleState, action, {
     skillAvailable: recoveryState.skillCharges > 0,
-    damageBonus: supportBonuses.damageBonus,
+    damageBonus: getActionDamageBonus(),
   });
   if (!result.accepted) {
     const messages = {
@@ -444,21 +500,28 @@ function handleCombatAction(action: CombatAction): void {
 function renderCombat(): string {
   const damagePercent = Math.max(0, Math.round((battleState.enemyHp / battleState.enemyMaxHp) * 100));
   const node = route.find((item) => item.id === currentNodeId);
+  const dailyDefinition = getActiveDailyTrialDefinition();
+  const dailyBanner = dailyDefinition ? renderDailyTrialRunBanner({ definition: dailyDefinition }) : '';
+  const interactionContent = dailyDefinition
+    ? '<div class="note daily-trial-fairness">每日试炼关闭常规互动货币，避免无限重玩刷取资源；战斗、救援和成绩仍会正常记录。</div>'
+    : '<div class="section-title"><h2>同局互动奖励</h2><span>点击越多，路线资源越厚</span></div><div class="interaction-list">' + renderInteractionCards() + '</div>';
   return `<section class="run scene">
     <div class="run-heading"><div><span class="eyebrow">RUN ${runId}</span><h1>${node?.type === 'event' ? '潮汐事件' : '漂流带遭遇'}</h1><p>自动战斗会推进列车，点击技能可以改变本局构筑节奏。</p></div><span class="risk">危险度 ${Math.round((node?.risk ?? 0.2) * 100)}%</span></div>
+    ${dailyBanner}
     <div class="combat-board"><div class="water-lines"></div><div class="enemy ${battleState.enemyHp <= 0 ? 'defeated' : ''}"><div class="enemy-eye"></div><div class="enemy-mouth"></div><span>潮兽</span></div><div class="train small"><div class="train-window"></div><div class="train-light">潮</div></div><div class="lane-row"><button data-action="lane" data-lane="0">左航道</button><button class="active" data-action="lane" data-lane="1">中航道</button><button data-action="lane" data-lane="2">右航道</button></div></div>
     <div class="hp-line"><div><span>潮兽护甲</span><b>${battleState.enemyHp} / ${battleState.enemyMaxHp}</b></div><div class="progress"><i style="width:${damagePercent}%"></i></div></div>
     <div class="hp-line player-hp"><div><span>列车生命</span><b>${battleState.playerHp} / ${battleState.maxPlayerHp}</b></div><div class="progress"><i style="width:${Math.round((battleState.playerHp / battleState.maxPlayerHp) * 100)}%"></i></div></div>
     <div class="skill-meter"><span>技能充能 ${recoveryState.skillCharges}/1</span>${canRefreshSkill(recoveryState) ? `<button class="chip" data-action="skill-refresh" ${pendingRecoveryActions.has('skill-refresh') ? 'disabled' : ''}>看广告刷新技能</button>` : '<small>下一战斗节点自动补充</small>'}</div>
     ${renderBattleStatus()}
     ${renderBattleActions(false)}
-    <div class="section-title"><h2>同局互动奖励</h2><span>点击越多，路线资源越厚</span></div><div class="interaction-list">${renderInteractionCards()}</div>
+    ${interactionContent}
   </section>`;
 }
 
 function renderReward(): string {
   const options = createRewardOptions(seed, currentNodeId);
-  return `<section class="run scene compact"><div class="run-heading"><div><span class="eyebrow">REWARD CHOICE</span><h1>潮汐回响</h1><p>只选一张，下一站的风险会记住你的选择。</p></div><span class="choice-count">3 选 1</span></div><div class="choice-grid">${options.map((option) => `<button class="choice-card" data-action="reward" data-option-id="${option.id}"><small>${option.kind}</small><b>${option.contentId}</b><span>${option.kind === 'gear' ? '补充车站齿轮' : '加入本局构筑'}</span></button>`).join('')}</div><div class="note">奖励由规则层生成；客户端只提交选择 ID，正式服由服务端校验发放。</div></section>`;
+  const dailyDefinition = getActiveDailyTrialDefinition();
+  return `<section class="run scene compact"><div class="run-heading"><div><span class="eyebrow">REWARD CHOICE</span><h1>潮汐回响</h1><p>只选一张，下一站的风险会记住你的选择。</p></div><span class="choice-count">3 选 1</span></div>${dailyDefinition ? renderDailyTrialRunBanner({ definition: dailyDefinition }) : ''}<div class="choice-grid">${options.map((option) => `<button class="choice-card" data-action="reward" data-option-id="${option.id}"><small>${option.kind}</small><b>${option.contentId}</b><span>${dailyDefinition ? '试炼本局临时选择' : option.kind === 'gear' ? '补充车站齿轮' : '加入本局构筑'}</span></button>`).join('')}</div><div class="note">${dailyDefinition ? '每日试炼的构筑选择不写入永久资源，避免无限重玩刷取奖励。' : '奖励由规则层生成；客户端只提交选择 ID，正式服由服务端校验发放。'}</div></section>`;
 }
 
 function renderRoute(): string {
@@ -468,7 +531,12 @@ function renderRoute(): string {
 
 function renderBoss(): string {
   const percent = Math.max(0, Math.round((battleState.enemyHp / battleState.enemyMaxHp) * 100));
-  return `<section class="run scene boss-scene"><div class="run-heading"><div><span class="eyebrow">FINAL BOSS</span><h1>潮汐巨兽 · 深海回响</h1><p>击败它，首次通关奖励将以地图为单位结算一次。</p></div><span class="risk danger">高风险</span></div><div class="boss-board"><div class="boss-orb">${battleState.enemyHp > 0 ? '◉' : '✦'}</div><div class="boss-name">${battleState.enemyHp > 0 ? '潮汐巨兽' : '潮位已平息'}</div></div><div class="hp-line"><div><span>Boss 生命</span><b>${battleState.enemyHp} / ${battleState.enemyMaxHp}</b></div><div class="progress danger"><i style="width:${percent}%"></i></div></div><div class="hp-line player-hp"><div><span>列车生命</span><b>${battleState.playerHp} / ${battleState.maxPlayerHp}</b></div><div class="progress"><i style="width:${Math.round((battleState.playerHp / battleState.maxPlayerHp) * 100)}%"></i></div></div><div class="skill-meter"><span>技能充能 ${recoveryState.skillCharges}/1</span>${canRefreshSkill(recoveryState) ? `<button class="chip" data-action="skill-refresh" ${pendingRecoveryActions.has('skill-refresh') ? 'disabled' : ''}>看广告刷新技能</button>` : '<small>下一战斗节点自动补充</small>'}</div>${renderBattleStatus()}${renderBattleActions(true)}<div class="first-clear-callout">首次通关：+400 齿轮 · +10 航线徽记 · +3 星票</div></section>`;
+  const dailyDefinition = getActiveDailyTrialDefinition();
+  const dailyBanner = dailyDefinition ? renderDailyTrialRunBanner({ definition: dailyDefinition }) : '';
+  const rewardCallout = dailyDefinition
+    ? '<div class="first-clear-callout">试炼胜利只提交今日分数，不触发普通地图首通或重复通关奖励。</div>'
+    : '<div class="first-clear-callout">首次通关：+400 齿轮 · +10 航线徽记 · +3 星票</div>';
+  return `<section class="run scene boss-scene"><div class="run-heading"><div><span class="eyebrow">FINAL BOSS</span><h1>潮汐巨兽 · 深海回响</h1><p>${dailyDefinition ? '击败它，提交今日固定种子试炼成绩。' : '击败它，首次通关奖励将以地图为单位结算一次。'}</p></div><span class="risk danger">高风险</span></div>${dailyBanner}<div class="boss-board"><div class="boss-orb">${battleState.enemyHp > 0 ? '◉' : '✦'}</div><div class="boss-name">${battleState.enemyHp > 0 ? '潮汐巨兽' : '潮位已平息'}</div></div><div class="hp-line"><div><span>Boss 生命</span><b>${battleState.enemyHp} / ${battleState.enemyMaxHp}</b></div><div class="progress danger"><i style="width:${percent}%"></i></div></div><div class="hp-line player-hp"><div><span>列车生命</span><b>${battleState.playerHp} / ${battleState.maxPlayerHp}</b></div><div class="progress"><i style="width:${Math.round((battleState.playerHp / battleState.maxPlayerHp) * 100)}%"></i></div></div><div class="skill-meter"><span>技能充能 ${recoveryState.skillCharges}/1</span>${canRefreshSkill(recoveryState) ? `<button class="chip" data-action="skill-refresh" ${pendingRecoveryActions.has('skill-refresh') ? 'disabled' : ''}>看广告刷新技能</button>` : '<small>下一战斗节点自动补充</small>'}</div>${renderBattleStatus()}${renderBattleActions(true)}${rewardCallout}</section>`;
 }
 
 function renderFailure(): string {
@@ -482,6 +550,16 @@ function renderFailure(): string {
 }
 
 function renderSettlement(): string {
+  if (runMode === 'daily-trial' && lastDailySubmission) {
+    return renderDailyTrialSettlement({
+      score: lastDailySubmission.score,
+      bestScore: dailyTrialState.bestScore,
+      attempts: dailyTrialState.attempts,
+      improved: lastDailySubmission.improved,
+      assisted: lastDailySubmission.assisted,
+      sharePending: dailyTrialSharePending,
+    });
+  }
   const repeatSettlement = !lastSettlementWasFirstClear;
   const expeditionResult = socialState.legionId
     ? `<div class="expedition-settlement"><span>潮汐灯塔团</span><b>本局远征贡献 +${lastExpeditionContribution}</b><small>本周累计 ${socialState.contribution} / 100</small></div>`
@@ -498,12 +576,19 @@ function persistInteractionState(): void {
   commit({ ...save, claimedInteractionIds: [...interactionState.claimedClaimIds] });
 }
 
-function startRun(): void {
+function startRun(mode: 'normal' | 'daily-trial' = 'normal'): void {
+  if (mode === 'daily-trial' && save.stationLevel < 2) {
+    notice = '每日潮汐试炼将在车站达到 Lv.2 后开放。';
+    render();
+    return;
+  }
   if (runId) {
     track('run_restart', { afterAdRevive: lastRunRecovery === 'ad', afterShareRevive: lastRunRecovery === 'share' });
   }
-  seed = Math.floor(Math.random() * 1000000) + 1;
-  runId = `run-${Date.now()}`;
+  runMode = mode;
+  const dailyDefinition = mode === 'daily-trial' ? syncDailyTrialDay() : null;
+  seed = dailyDefinition?.seed ?? Math.floor(Math.random() * 1000000) + 1;
+  runId = mode === 'daily-trial' ? `daily-${dailyDefinition?.dayId}-${Date.now()}` : `run-${Date.now()}`;
   route = createRoute(seed);
   currentNodeId = 'node-0';
   resetBattleState(100);
@@ -513,10 +598,14 @@ function startRun(): void {
   lastRunRecovery = 'none';
   combatClears = 0;
   lastExpeditionContribution = 0;
+  lastDailySubmission = null;
+  dailyTrialSharePending = false;
   interactionAttempts = {};
   interactionState = { claimedClaimIds: [...save.claimedInteractionIds] };
   phase = 'combat';
-  notice = `第 ${save.stationLevel} 级车站出发，潮汐种子 ${seed} 已锁定。`;
+  notice = dailyDefinition
+    ? `${dailyDefinition.dayId} 每日试炼出发：${dailyDefinition.rule.name}，固定种子 ${seed}。`
+    : `第 ${save.stationLevel} 级车站出发，潮汐种子 ${seed} 已锁定。`;
   track('run_start', { seed, mapId: currentMapId });
   render();
 }
@@ -537,7 +626,31 @@ function recordExpeditionContribution(outcome: ExpeditionOutcome): void {
   });
 }
 
+function settleDailyTrial(victory: boolean): void {
+  const result = submitDailyTrial(dailyTrialState, {
+    runId,
+    outcome: victory ? 'victory' : 'defeat',
+    completedNodes: combatClears + (victory ? 1 : 0),
+    remainingHp: victory ? battleState.playerHp : 0,
+    assisted: recoveryState.adReviveUsed || recoveryState.shareReviveUsed,
+  });
+  if (result.accepted) commitDailyTrial(result.state);
+  lastDailySubmission = result;
+  lastSettlementWasFirstClear = false;
+  lastExpeditionContribution = 0;
+  notice = result.accepted
+    ? `今日试炼成绩已提交：${result.score} 分${result.improved ? '，刷新个人最佳。' : '。'}`
+    : '这局试炼成绩已经提交过，未重复计分。';
+  phase = 'settlement';
+  track('run_settled', { victory, dailyTrial: true, score: result.score });
+  render();
+}
+
 function settleRun(victory: boolean): void {
+  if (runMode === 'daily-trial') {
+    settleDailyTrial(victory);
+    return;
+  }
   recordExpeditionContribution(victory ? 'victory' : 'defeat');
   if (!victory) {
     lastSettlementWasFirstClear = false;
@@ -570,6 +683,11 @@ function settleRun(victory: boolean): void {
 }
 
 function handleInteraction(actionId: string): void {
+  if (runMode === 'daily-trial') {
+    notice = '每日试炼不结算常规互动货币，避免无限重玩刷取资源。';
+    render();
+    return;
+  }
   const definitions = {
     'salvage-a': { actionId: 'salvage-a', currency: 'gears' as const, amount: 8, maxClaims: 2 },
     'aid-b': { actionId: 'aid-b', currency: 'routeMarks' as const, amount: 1, maxClaims: 1 },
@@ -593,10 +711,14 @@ function handleInteraction(actionId: string): void {
 
 function chooseReward(optionId: string): void {
   const [kind, contentId] = optionId.split(':');
-  if (kind === 'passenger') commit(unlockPassenger(save, contentId));
-  if (kind === 'module') commit(unlockModule(save, contentId));
-  if (kind === 'gear') commit({ ...save, gears: save.gears + Number(contentId) });
-  notice = `已选择 ${contentId}，构筑记录已写入本局。`;
+  if (runMode !== 'daily-trial') {
+    if (kind === 'passenger') commit(unlockPassenger(save, contentId));
+    if (kind === 'module') commit(unlockModule(save, contentId));
+    if (kind === 'gear') commit({ ...save, gears: save.gears + Number(contentId) });
+  }
+  notice = runMode === 'daily-trial'
+    ? `已选择 ${contentId} 作为试炼构筑，本局不写入永久资源。`
+    : `已选择 ${contentId}，构筑记录已写入本局。`;
   track('reward_choice', { optionId });
   phase = 'route';
   render();
@@ -861,6 +983,52 @@ function handleGiftCodeRedeem(rawCode: string): void {
   render();
 }
 
+function handleClaimDailyTrial(milestoneId: DailyTrialMilestoneId): void {
+  const result = claimDailyTrialMilestone(dailyTrialState, milestoneId);
+  if (!result.accepted) {
+    const messages = {
+      'threshold-not-reached': '今日最佳分还没有达到这个试炼里程碑。',
+      'already-claimed': '这个试炼里程碑今天已经领取。',
+      'unknown-milestone': '试炼里程碑配置无效。',
+    } as const;
+    notice = messages[result.reason ?? 'unknown-milestone'];
+    render();
+    return;
+  }
+  commitDailyTrial(result.state);
+  commit({
+    ...save,
+    gears: save.gears + result.reward.gears,
+    routeMarks: save.routeMarks + result.reward.routeMarks,
+    starTickets: save.starTickets + result.reward.starTickets,
+  });
+  notice = `今日试炼里程碑已领取：${formatExpeditionReward(result.reward)}。`;
+  render();
+}
+
+async function handleShareDailyTrial(): Promise<void> {
+  if (runMode !== 'daily-trial' || !lastDailySubmission || dailyTrialSharePending) return;
+  const definition = getDailyTrialDefinition(dailyTrialState.dayId);
+  dailyTrialSharePending = true;
+  render();
+  const result = await share.share({
+    shareType: 'daily-trial',
+    mapId: currentMapId,
+    depth: dailyTrialState.bestScore,
+    passengers: [definition.rule.id],
+    modules: [`seed-${definition.seed}`],
+    failureReason: `${definition.dayId} · ${definition.rule.name} · 最佳 ${dailyTrialState.bestScore} 分`,
+    cta: '挑战同一潮汐种子',
+  });
+  dailyTrialSharePending = false;
+  notice = result === 'completed'
+    ? '今日试炼成绩卡已生成；分享不会直接发放货币。'
+    : result === 'cancelled'
+      ? '已取消成绩分享，分数和奖励状态不变。'
+      : '成绩分享接口暂时不可用，请稍后再试。';
+  render();
+}
+
 function handleJoinLegion(): void {
   if (socialState.legionId) {
     notice = '你已经加入潮汐灯塔团。';
@@ -957,7 +1125,8 @@ app.addEventListener('click', async (event) => {
   const button = target.closest<HTMLButtonElement>('[data-action]');
   if (!button) return;
   const action = button.dataset.action;
-  if (action === 'start-run') startRun();
+  if (action === 'start-run') startRun('normal');
+  if (action === 'start-daily-trial') startRun('daily-trial');
   if (action === 'back-station') { phase = 'station'; render(); }
   if (action === 'interaction' && button.dataset.interactionId) handleInteraction(button.dataset.interactionId);
   if (action === 'combat-action' && button.dataset.combatAction) handleCombatAction(button.dataset.combatAction as CombatAction);
@@ -975,12 +1144,14 @@ app.addEventListener('click', async (event) => {
   if (action === 'apply-beta') handleBetaApplication();
   if (action === 'claim-beta-gift') handleBetaGiftClaim();
   if (action === 'claim-launch-gift') handleLaunchGiftClaim();
+  if (action === 'claim-daily-trial' && button.dataset.milestoneId) handleClaimDailyTrial(button.dataset.milestoneId as DailyTrialMilestoneId);
+  if (action === 'share-daily-trial') await handleShareDailyTrial();
   if (action === 'join-legion') handleJoinLegion();
   if (action === 'toggle-support' && button.dataset.supportId) handleToggleSupport(button.dataset.supportId as SupportId);
   if (action === 'claim-expedition' && button.dataset.milestoneId) handleClaimExpedition(button.dataset.milestoneId as ExpeditionMilestoneId);
   if (action === 'share-squad') await handleShareSquad();
   if (action === 'buy-pack') { const result = await store.purchase('starter-star-ticket-pack'); if (result === 'success') { commit({ ...save, starTickets: save.starTickets + 60 }); notice = '模拟购买成功：固定获得 60 星票。'; render(); } }
-  if (action === 'reset-save') { window.localStorage.removeItem(SAVE_KEY); window.localStorage.removeItem(SOCIAL_SAVE_KEY); window.localStorage.removeItem(CAMPAIGN_SAVE_KEY); window.location.reload(); }
+  if (action === 'reset-save') { window.localStorage.removeItem(SAVE_KEY); window.localStorage.removeItem(SOCIAL_SAVE_KEY); window.localStorage.removeItem(CAMPAIGN_SAVE_KEY); window.localStorage.removeItem(DAILY_TRIAL_SAVE_KEY); window.location.reload(); }
 });
 
 app.addEventListener('submit', (event) => {
