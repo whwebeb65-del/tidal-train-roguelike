@@ -24,6 +24,7 @@ export interface CombatLoopOptions {
 
 export interface CombatActionOptions {
   readonly skillAvailable: boolean;
+  readonly damageBonus?: number;
 }
 
 export interface CombatActionResult {
@@ -83,6 +84,10 @@ export function resolveCombatAction(
   action: CombatAction,
   options: CombatActionOptions,
 ): CombatActionResult {
+  const damageBonus = options.damageBonus ?? 0;
+  if (!Number.isFinite(damageBonus) || damageBonus < 0) {
+    throw new Error('Damage bonus must be a finite non-negative number');
+  }
   if (state.enemyHp <= 0) return rejected(state, 'enemy-defeated');
   if (action === 'skill' && !options.skillAvailable) return rejected(state, 'skill-unavailable');
   if (action === 'repair' && state.repairUsed) return rejected(state, 'repair-used');
@@ -118,6 +123,10 @@ export function resolveCombatAction(
     momentumGained = -state.momentum;
     combo = 0;
     burstUsed = true;
+  }
+
+  if (rawDamage > 0) {
+    rawDamage += damageBonus;
   }
 
   const damageDealt = Math.min(state.enemyHp, rawDamage);

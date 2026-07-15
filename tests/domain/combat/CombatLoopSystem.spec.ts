@@ -71,6 +71,26 @@ describe('CombatLoopSystem', () => {
     expect(result.damageDealt).toBe(30);
   });
 
+  it('applies a non-negative squad damage bonus to damaging actions', () => {
+    const state = createCombatLoopState({ enemyHp: 200 });
+    const attack = resolveCombatAction(state, 'attack', {
+      skillAvailable: true,
+      damageBonus: 5,
+    });
+    const repair = resolveCombatAction(
+      createCombatLoopState({ enemyHp: 200, playerHp: 50 }),
+      'repair',
+      { skillAvailable: true, damageBonus: 5 },
+    );
+
+    expect(attack.damageDealt).toBe(30);
+    expect(repair.damageDealt).toBe(0);
+    expect(() => resolveCombatAction(state, 'attack', {
+      skillAvailable: true,
+      damageBonus: -1,
+    })).toThrow('Damage bonus must be a finite non-negative number');
+  });
+
   it('rejects actions after the enemy is defeated and clamps incoming damage', () => {
     const defeated = resolveCombatAction(createCombatLoopState({ enemyHp: 1 }), 'attack', { skillAvailable: true });
     const rejected = resolveCombatAction(defeated.state, 'attack', { skillAvailable: true });
