@@ -24,6 +24,14 @@ export type PrototypeEventName =
   | 'daily_trial_reward_claimed'
   | 'daily_trial_shared'
   | 'daily_check_in_claimed'
+  | 'store_viewed'
+  | 'product_clicked'
+  | 'purchase_started'
+  | 'purchase_result'
+  | 'rewarded_ad_offer_shown'
+  | 'rewarded_ad_clicked'
+  | 'rewarded_ad_result'
+  | 'economy_reward_granted'
   | 'run_restart';
 
 export interface PrototypeEvent {

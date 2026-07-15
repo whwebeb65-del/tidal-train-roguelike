@@ -70,6 +70,11 @@ import {
   type DailyCheckInState,
 } from '../src/domain/retention/DailyCheckInSystem';
 import {
+  getProductDefinition,
+  PRODUCT_CATALOG,
+} from '../src/domain/commerce/ProductCatalog';
+import { settlePurchase } from '../src/domain/commerce/PurchaseService';
+import {
   claimExpeditionMilestone,
   contributeToExpedition,
   createSocialExpeditionState,
@@ -101,6 +106,7 @@ import {
   renderDailyTrialSettlement,
 } from './views/DailyTrialView';
 import { renderDailyCheckIn } from './views/DailyCheckInView';
+import { renderCommerceStore } from './views/CommerceView';
 import './styles.css';
 
 const SAVE_KEY = 'tidal-train-prototype-save-v1';
@@ -166,7 +172,7 @@ const repository = createMemorySaveRepository(readSave());
 const telemetry = createMemoryTelemetry();
 const ads = new MockAds('completed');
 const share = new MockShare('completed');
-const store = new MockStore('success');
+const store = new MockStore('verified');
 let save = repository.load();
 let socialState = readSocialState();
 let campaignState = readCampaignState();
@@ -193,6 +199,8 @@ let lastExpeditionContribution = 0;
 let squadSharePending = false;
 let lastDailySubmission: DailyTrialSubmissionResult | null = null;
 let dailyTrialSharePending = false;
+let pendingProductId: string | null = null;
+let storeViewTracked = false;
 let notice = '欢迎登车，先选择一条可以活着回来的路线。';
 
 function commit(next: PlayerSave): void {
@@ -336,6 +344,18 @@ function formatExpeditionReward(reward: { readonly gears: number; readonly route
   ].filter(Boolean).join(' · ');
 }
 
+function formatCommerceReward(reward: {
+  readonly gears: number;
+  readonly routeMarks: number;
+  readonly starTickets: number;
+  readonly cosmeticIds: readonly string[];
+}): string {
+  return [
+    formatExpeditionReward(reward),
+    reward.cosmeticIds.length > 0 ? `${reward.cosmeticIds.length} 件非战力外观` : '',
+  ].filter(Boolean).join(' · ');
+}
+
 function renderLaunchCampaignCenter(): string {
   const betaAction = !campaignState.betaQualified
     ? '<button class="primary" data-action="apply-beta">申请内测资格</button>'
@@ -420,6 +440,10 @@ function renderSocialHub(): string {
 }
 
 function renderStation(): string {
+  if (!storeViewTracked) {
+    track('store_viewed', { productCount: PRODUCT_CATALOG.length });
+    storeViewTracked = true;
+  }
   const nextLevelCost = save.stationLevel * 80;
   const currentDayId = getChinaDayId(Date.now());
   const dailyDefinition = syncDailyTrialDay();
@@ -447,7 +471,11 @@ function renderStation(): string {
     ${renderDailyTrialHub({ stationLevel: save.stationLevel, state: dailyTrialState, definition: dailyDefinition })}
     ${renderLaunchCampaignCenter()}
     ${renderSocialHub()}
-    <div class="monetize-strip"><div><span class="eyebrow">航线补给</span><b>确定性内容，不卖随机胜率</b><small>星票可换外观、通行证与固定礼包；齿轮和徽记来自玩法。</small></div><button class="chip" data-action="buy-pack">模拟购买 60 星票</button></div>
+    ${renderCommerceStore({
+      products: PRODUCT_CATALOG,
+      purchasedProductIds: save.purchasedProductIds,
+      pendingProductId,
+    })}
   </section>`;
 }
 
@@ -938,6 +966,64 @@ async function handleSkillRefresh(): Promise<void> {
   render();
 }
 
+async function handlePurchase(productId: string): Promise<void> {
+  if (pendingProductId) return;
+  const product = getProductDefinition(productId);
+  track('product_clicked', { productId });
+  if (!product) {
+    track('purchase_result', { productId, result: 'unknown-product', transactionRef: 'none' });
+    notice = '商品配置不存在，没有发起支付。';
+    render();
+    return;
+  }
+  if (save.purchasedProductIds.includes(productId)) {
+    track('purchase_result', { productId, result: 'already-owned', transactionRef: 'none' });
+    notice = `${product.name} 已经拥有，不会重复发起购买。`;
+    render();
+    return;
+  }
+
+  pendingProductId = productId;
+  track('purchase_started', { productId, displayPrice: product.displayPrice });
+  render();
+  const platformResult = await store.purchase(productId);
+  pendingProductId = null;
+  const settlement = settlePurchase(save, { productId, result: platformResult });
+  const transactionRef = platformResult.status === 'verified'
+    ? `mock:${platformResult.transactionId.split('-').at(-1) ?? 'verified'}`
+    : 'none';
+  track('purchase_result', {
+    productId,
+    result: settlement.accepted ? 'verified' : settlement.reason ?? platformResult.status,
+    transactionRef,
+  });
+
+  if (!settlement.accepted) {
+    const messages = {
+      cancelled: '已取消模拟购买，没有扣款或发货。',
+      failed: '模拟支付暂时失败，没有发货，可以稍后重试。',
+      'unknown-product': '商品配置不存在，没有发货。',
+      'duplicate-transaction': '这笔模拟交易已经结算过，没有重复发货。',
+      'already-owned': '这件一次性商品已经拥有，没有重复发货。',
+    } as const;
+    notice = messages[settlement.reason ?? 'failed'];
+    render();
+    return;
+  }
+
+  commit(settlement.save);
+  track('economy_reward_granted', {
+    source: 'purchase',
+    productId,
+    gears: settlement.reward.gears,
+    routeMarks: settlement.reward.routeMarks,
+    starTickets: settlement.reward.starTickets,
+    cosmetics: settlement.reward.cosmeticIds.length,
+  });
+  notice = `模拟验单完成：${product.name}，固定获得 ${formatCommerceReward(settlement.reward)}。`;
+  render();
+}
+
 function campaignFailureMessage(reason: CampaignFailureReason | undefined): string {
   const messages: Record<CampaignFailureReason, string> = {
     'already-qualified': '内测资格已经锁定，不需要重复申请。',
@@ -1232,7 +1318,7 @@ app.addEventListener('click', async (event) => {
   if (action === 'toggle-support' && button.dataset.supportId) handleToggleSupport(button.dataset.supportId as SupportId);
   if (action === 'claim-expedition' && button.dataset.milestoneId) handleClaimExpedition(button.dataset.milestoneId as ExpeditionMilestoneId);
   if (action === 'share-squad') await handleShareSquad();
-  if (action === 'buy-pack') { const result = await store.purchase('starter-star-ticket-pack'); if (result === 'success') { commit({ ...save, starTickets: save.starTickets + 60 }); notice = '模拟购买成功：固定获得 60 星票。'; render(); } }
+  if (action === 'purchase-product' && button.dataset.productId) await handlePurchase(button.dataset.productId);
   if (action === 'reset-save') { window.localStorage.removeItem(SAVE_KEY); window.localStorage.removeItem(SOCIAL_SAVE_KEY); window.localStorage.removeItem(CAMPAIGN_SAVE_KEY); window.localStorage.removeItem(DAILY_TRIAL_SAVE_KEY); window.localStorage.removeItem(DAILY_CHECK_IN_SAVE_KEY); window.location.reload(); }
 });
 

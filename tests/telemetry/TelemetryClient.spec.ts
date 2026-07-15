@@ -82,4 +82,21 @@ describe('TelemetryClient', () => {
 
     expect(telemetry.flush().map((event) => event.name)).toEqual(['daily_check_in_claimed']);
   });
+
+  it('records the commerce and rewarded-ad funnel without sensitive payment data', () => {
+    const telemetry = createMemoryTelemetry();
+    telemetry.track({ name: 'store_viewed', runId: 'station', timestampMs: 20, payload: { productCount: 2 } });
+    telemetry.track({ name: 'product_clicked', runId: 'station', timestampMs: 21, payload: { productId: 'starter-star-ticket-pack' } });
+    telemetry.track({ name: 'purchase_started', runId: 'station', timestampMs: 22, payload: { productId: 'starter-star-ticket-pack' } });
+    telemetry.track({ name: 'purchase_result', runId: 'station', timestampMs: 23, payload: { productId: 'starter-star-ticket-pack', result: 'verified', transactionRef: 'mock-1' } });
+    telemetry.track({ name: 'rewarded_ad_offer_shown', runId: 'r1', timestampMs: 24, payload: { placement: 'reroll' } });
+    telemetry.track({ name: 'rewarded_ad_clicked', runId: 'r1', timestampMs: 25, payload: { placement: 'reroll' } });
+    telemetry.track({ name: 'rewarded_ad_result', runId: 'r1', timestampMs: 26, payload: { placement: 'reroll', result: 'completed' } });
+    telemetry.track({ name: 'economy_reward_granted', runId: 'r1', timestampMs: 27, payload: { source: 'reroll', gears: 0 } });
+
+    const serialized = JSON.stringify(telemetry.flush());
+    expect(serialized).not.toContain('bank');
+    expect(serialized).not.toContain('qr');
+    expect(serialized).not.toContain('secret');
+  });
 });

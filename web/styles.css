@@ -61,6 +61,21 @@ main { width: min(1060px, 100%); margin: 0 auto; padding: 40px 18px 24px; }
 .station-footer, .monetize-strip { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: 16px; padding: 18px; border-radius: 16px; }
 .station-footer { background: #0b202a; border: 1px solid #193f4d; } .station-footer b, .station-footer span { display: block; } .station-footer span { color: #77969e; font-size: 12px; margin-top: 4px; }
 .monetize-strip { background: linear-gradient(90deg, #19203c, #18233b); border: 1px solid #3f416d; } .monetize-strip b, .monetize-strip small { display: block; } .monetize-strip b { margin: 5px 0; color: #e4d9ff; } .monetize-strip small { color: #9d99bd; font-size: 11px; }
+.commerce-store { margin-top: 20px; padding: 20px; border-radius: 20px; background: linear-gradient(145deg, #171f3a, #101d31); border: 1px solid #41476f; contain: layout paint; }
+.commerce-heading, .commerce-card-heading { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+.commerce-heading h2 { margin: 6px 0; font-size: 20px; }
+.commerce-heading p { max-width: 620px; margin: 0; color: #9695b5; font-size: 12px; }
+.commerce-heading > span { padding: 8px 11px; border-radius: 99px; background: #27284a; color: #d6c8ff; font-size: 10px; white-space: nowrap; }
+.commerce-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 18px 0 12px; }
+.commerce-card { display: flex; flex-direction: column; gap: 10px; padding: 17px; border-radius: 16px; background: #111f36; border: 1px solid #3b4569; }
+.commerce-card.owned { filter: saturate(.65); }
+.commerce-card h3, .commerce-card p { margin: 0; }
+.commerce-card h3 { color: #eee9ff; font-size: 16px; }
+.commerce-card p { min-height: 34px; color: #929ab4; font-size: 11px; line-height: 1.55; }
+.commerce-card .chip { width: 100%; margin-top: auto; text-align: center; }
+.commerce-price { color: #ffcf7b; font-size: 18px; font-weight: 800; }
+.commerce-card-heading small { color: #888bac; font-size: 10px; }
+.commerce-reward { padding: 10px; border-radius: 10px; background: #1a2942; color: #b8bad0; font-size: 10px; }
 
 .daily-check-in { margin-top: 20px; padding: 20px; border-radius: 20px; background: linear-gradient(145deg, #282133, #122d36 58%, #0c202c); border: 1px solid #79664b; contain: layout paint; }
 .daily-check-in-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; }
@@ -249,6 +264,9 @@ main { width: min(1060px, 100%); margin: 0 auto; padding: 40px 18px 24px; }
   .map-grid { grid-template-columns: repeat(2, 1fr); } .interaction-list, .choice-grid { grid-template-columns: 1fr; }
   .train { left: 15%; width: 65%; } .train-platform { height: 190px; }
   .station-footer, .monetize-strip { align-items: flex-start; flex-direction: column; } .station-footer button, .monetize-strip button { width: 100%; }
+  .commerce-heading { align-items: flex-start; flex-direction: column; }
+  .commerce-heading > span { width: 100%; text-align: center; }
+  .commerce-grid { grid-template-columns: 1fr; }
   .daily-check-in-heading, .daily-check-in-progress, .daily-check-in-action { align-items: flex-start; flex-direction: column; }
   .daily-check-in-status, .daily-check-in-action button { width: 100%; text-align: center; }
   .daily-check-in-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
