@@ -34,7 +34,12 @@ describe('RecoverySystem', () => {
 
   it('exposes only one rewarded ad revive per run', () => {
     const state = createRecoveryState();
-    expect(state).not.toHaveProperty('shareReviveUsed');
+    expect(Object.keys(state).sort()).toEqual([
+      'adReviveUsed',
+      'reviveProtectionUntilMs',
+      'skillCharges',
+      'skillRefreshUsed',
+    ]);
     const first = applyRevive({
       state,
       encounter: 'boss',
