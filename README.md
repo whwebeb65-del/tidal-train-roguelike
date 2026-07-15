@@ -39,3 +39,10 @@ npm run build
 - `assets/scripts/`：面向 Cocos Creator 的场景、战斗、奖励、车站和教程脚本骨架
 - `web/`：无需安装 Cocos 即可运行的浏览器 MVP
 - `docs/`：需求、设计、计划和验证文档
+
+## 工具链与替代编辑方式
+
+- 常用验证命令：`npm test`、`npm run typecheck`、`npm run build`。
+- Web MVP 使用广告、分享和商店 Mock，可直接验证复活、技能刷新、三货币和结算闭环。
+- Cocos Dashboard 官方安装包下载失败不会阻塞源码修改：可继续用 VS Code、其他代码编辑器或命令行编辑当前工程；以后有可用的官方 Cocos Creator 环境时，再打开同一工程做场景预览和抖音真机打包。
+- 不使用来源不明的安装包或修改版编辑器；正式广告、分享、登录、支付和合规审核仍需接入抖音小游戏真实 SDK。
