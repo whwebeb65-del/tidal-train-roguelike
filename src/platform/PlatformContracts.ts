@@ -3,6 +3,7 @@ export type AdResult = 'completed' | 'closed' | 'failed';
 export type ShareResult = 'completed' | 'cancelled' | 'failed';
 
 export interface SharePayload {
+  readonly shareType?: 'recovery' | 'squad-invite';
   readonly mapId: string;
   readonly depth: number;
   readonly passengers: readonly string[];

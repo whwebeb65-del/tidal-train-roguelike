@@ -39,6 +39,22 @@ import {
   type CombatLoopState,
   type TideModifier,
 } from '../src/domain/combat/CombatLoopSystem';
+import {
+  claimExpeditionMilestone,
+  contributeToExpedition,
+  createSocialExpeditionState,
+  EXPEDITION_MILESTONES,
+  getIsoWeekCycleId,
+  getSquadBonuses,
+  joinLegion,
+  normalizeSocialExpeditionState,
+  SUPPORT_ROSTER,
+  toggleSquadMember,
+  type ExpeditionMilestoneId,
+  type ExpeditionOutcome,
+  type SocialExpeditionState,
+  type SupportId,
+} from '../src/domain/social/SocialExpeditionSystem';
 import { MockAds, MockShare, MockStore } from '../src/platform/MockPlatform';
 import type { SharePayload } from '../src/platform/PlatformContracts';
 import {
@@ -51,6 +67,7 @@ import type { PrototypeEventName } from '../src/telemetry/TelemetryEvents';
 import './styles.css';
 
 const SAVE_KEY = 'tidal-train-prototype-save-v1';
+const SOCIAL_SAVE_KEY = 'tidal-train-social-v1';
 const app = document.querySelector<HTMLDivElement>('#app');
 if (!app) {
   throw new Error('App root is missing');
@@ -67,12 +84,24 @@ function readSave(): PlayerSave {
   }
 }
 
+const expeditionCycleId = getIsoWeekCycleId(new Date());
+
+function readSocialState(): SocialExpeditionState {
+  try {
+    const raw = window.localStorage.getItem(SOCIAL_SAVE_KEY);
+    return normalizeSocialExpeditionState(raw ? JSON.parse(raw) : null, expeditionCycleId);
+  } catch {
+    return createSocialExpeditionState(expeditionCycleId);
+  }
+}
+
 const repository = createMemorySaveRepository(readSave());
 const telemetry = createMemoryTelemetry();
 const ads = new MockAds('completed');
 const share = new MockShare('completed');
 const store = new MockStore('success');
 let save = repository.load();
+let socialState = readSocialState();
 let phase: 'station' | 'combat' | 'reward' | 'route' | 'boss' | 'failure' | 'settlement' = 'station';
 let currentMapId: MapId = 'drift-suburb';
 let runId = '';
@@ -89,12 +118,19 @@ let interactionState: InteractionState = createInteractionState();
 let firstClearState: FirstClearState = { claimedMapIds: [...save.firstClearMapIds] };
 let interactionAttempts: Record<string, number> = {};
 let lastSettlementWasFirstClear = false;
+let lastExpeditionContribution = 0;
+let squadSharePending = false;
 let notice = '欢迎登车，先选择一条可以活着回来的路线。';
 
 function commit(next: PlayerSave): void {
   save = next;
   repository.save(next);
   window.localStorage.setItem(SAVE_KEY, JSON.stringify(next));
+}
+
+function commitSocial(next: SocialExpeditionState): void {
+  socialState = normalizeSocialExpeditionState(next, expeditionCycleId);
+  window.localStorage.setItem(SOCIAL_SAVE_KEY, JSON.stringify(socialState));
 }
 
 function track(name: PrototypeEventName, payload: Record<string, string | number | boolean> = {}): void {
@@ -128,26 +164,40 @@ function createBattleModifier(seedValue: number, nodeId: string): TideModifier {
 }
 
 function resetBattleState(enemyHp: number): void {
-  battleState = createCombatLoopState({ enemyHp, modifier: createBattleModifier(seed, currentNodeId) });
+  const bonuses = getSquadBonuses(socialState);
+  battleState = createCombatLoopState({
+    enemyHp,
+    modifier: createBattleModifier(seed, currentNodeId),
+    maxPlayerHp: 100 + bonuses.maxPlayerHpBonus,
+    initialMomentum: bonuses.initialMomentum,
+  });
 }
 
 function renderBattleStatus(): string {
   const modifier = getTideModifierLabel(battleState.modifier);
+  const supportNames = SUPPORT_ROSTER
+    .filter((support) => socialState.squadMemberIds.includes(support.id))
+    .map((support) => support.displayName)
+    .join(' · ');
   return `<div class="battle-status">
     <div class="momentum-panel"><div><span>潮汐动能</span><b>${battleState.momentum}/100</b></div><div class="momentum-progress"><i style="width:${battleState.momentum}%"></i></div></div>
     <span class="combo-chip">连击 x${battleState.combo}</span>
     <span class="modifier-chip"><b>${modifier.name}</b><small>${modifier.effect}</small></span>
+    <span class="squad-battle-chip"><b>${supportNames || '单车作战'}</b><small>${supportNames ? '异步队友支援已生效' : '可在车站选择两名支援队友'}</small></span>
   </div>`;
 }
 
 function renderBattleActions(isBoss: boolean): string {
   const burstReady = battleState.momentum >= 100 && !battleState.burstUsed;
   const repairReady = !battleState.repairUsed && battleState.playerHp < battleState.maxPlayerHp;
+  const damageBonus = getSquadBonuses(socialState).damageBonus;
+  const attackDamage = (battleState.modifier === 'surge-current' ? 30 : 25) + damageBonus;
+  const skillDamage = (battleState.modifier === 'echo-fog' ? 60 : 50) + damageBonus;
   return `<div class="battle-actions action-row">
-    <button class="primary battle-action" data-action="combat-action" data-combat-action="attack">${isBoss ? '集中火力' : '自动开炮'} · ${battleState.modifier === 'surge-current' ? '-30' : '-25'}</button>
-    <button class="secondary battle-action" data-action="combat-action" data-combat-action="skill" ${recoveryState.skillCharges <= 0 || battleState.enemyHp <= 0 ? 'disabled' : ''}>释放「汽笛共鸣」 · ${battleState.modifier === 'echo-fog' ? '-60' : '-50'}</button>
+    <button class="primary battle-action" data-action="combat-action" data-combat-action="attack">${isBoss ? '集中火力' : '自动开炮'} · -${attackDamage}</button>
+    <button class="secondary battle-action" data-action="combat-action" data-combat-action="skill" ${recoveryState.skillCharges <= 0 || battleState.enemyHp <= 0 ? 'disabled' : ''}>释放「汽笛共鸣」 · -${skillDamage}</button>
     <button class="secondary battle-action repair-action" data-action="combat-action" data-combat-action="repair" ${!repairReady ? 'disabled' : ''}>维修车厢 · +${battleState.modifier === 'calm-water' ? '24' : '18'}</button>
-    <button class="burst-action ${burstReady ? 'burst-ready' : ''}" data-action="combat-action" data-combat-action="burst" ${!burstReady ? 'disabled' : ''}>潮汐爆发 · -60</button>
+    <button class="burst-action ${burstReady ? 'burst-ready' : ''}" data-action="combat-action" data-combat-action="burst" ${!burstReady ? 'disabled' : ''}>潮汐爆发 · -${60 + damageBonus}</button>
     <button class="debug-hit" data-action="damage">模拟受击 · -35</button>
   </div>`;
 }
@@ -161,6 +211,55 @@ function renderHeader(): string {
       ${currency('星票', save.starTickets, 'ticket')}
     </div>
   </header>`;
+}
+
+function formatExpeditionReward(reward: { readonly gears: number; readonly routeMarks: number; readonly starTickets: number }): string {
+  return [
+    reward.gears > 0 ? `${reward.gears} 齿轮` : '',
+    reward.routeMarks > 0 ? `${reward.routeMarks} 航线徽记` : '',
+    reward.starTickets > 0 ? `${reward.starTickets} 星票` : '',
+  ].filter(Boolean).join(' · ');
+}
+
+function renderSocialHub(): string {
+  if (!socialState.legionId) {
+    return `<section class="social-hub social-intro">
+      <div><span class="eyebrow">CO-OP / ${socialState.cycleId}</span><h2>联合作战中心</h2><p>加入异步军团，选择两名队友支援单局，并用每次结算推进共同远征。</p></div>
+      <button class="primary" data-action="join-legion">加入「潮汐灯塔团」</button>
+    </section>`;
+  }
+
+  const supportCards = SUPPORT_ROSTER.map((support) => {
+    const selected = socialState.squadMemberIds.includes(support.id);
+    return `<button class="support-card ${selected ? 'selected' : ''}" data-action="toggle-support" data-support-id="${support.id}">
+      <span class="support-avatar">${support.id === 'navigator' ? '航' : support.id === 'gunner' ? '炮' : '修'}</span>
+      <span class="support-copy"><small>${support.role}</small><b>${support.displayName}</b><em>${support.description}</em></span>
+      <strong>${selected ? '已上车' : '选择'}</strong>
+    </button>`;
+  }).join('');
+  const milestones = EXPEDITION_MILESTONES.map((milestone) => {
+    const claimed = socialState.claimedMilestoneIds.includes(milestone.id);
+    const reached = socialState.contribution >= milestone.threshold;
+    const progress = Math.min(socialState.contribution, milestone.threshold);
+    return `<article class="expedition-milestone ${reached ? 'reached' : ''}">
+      <span><small>${progress}/${milestone.threshold}</small><b>${milestone.label}</b><em>${formatExpeditionReward(milestone.reward)}</em></span>
+      <button class="chip" data-action="claim-expedition" data-milestone-id="${milestone.id}" ${claimed || !reached ? 'disabled' : ''}>${claimed ? '已领取' : reached ? '领取' : '未达成'}</button>
+    </article>`;
+  }).join('');
+  const bonuses = getSquadBonuses(socialState);
+  const supportSummary = [
+    bonuses.initialMomentum ? `开场动能 +${bonuses.initialMomentum}` : '',
+    bonuses.damageBonus ? `行动伤害 +${bonuses.damageBonus}` : '',
+    bonuses.maxPlayerHpBonus ? `最大生命 +${bonuses.maxPlayerHpBonus}` : '',
+  ].filter(Boolean).join(' · ') || '尚未选择支援';
+
+  return `<section class="social-hub">
+    <div class="social-heading"><div><span class="eyebrow">LEGION / ${socialState.cycleId}</span><h2>潮汐灯塔团</h2><p>异步远征不要求队友同时在线；正式服贡献和奖励由服务端校验。</p></div><button class="chip" data-action="share-squad" ${squadSharePending ? 'disabled' : ''}>${squadSharePending ? '生成招募卡中…' : '分享列车队招募卡'}</button></div>
+    <div class="expedition-progress"><div><span>本周远征贡献</span><b>${socialState.contribution} / 100</b></div><div class="progress"><i style="width:${Math.min(100, socialState.contribution)}%"></i></div></div>
+    <div class="expedition-milestones">${milestones}</div>
+    <div class="section-title"><h2>异步列车队</h2><span>${socialState.squadMemberIds.length}/2 名支援 · ${supportSummary}</span></div>
+    <div class="support-grid">${supportCards}</div>
+  </section>`;
 }
 
 function renderStation(): string {
@@ -185,6 +284,7 @@ function renderStation(): string {
     <div class="section-title"><h2>航线逐步开放</h2><span>已开放 ${save.unlockedMapIds.length}/${MAP_PROGRESSION.length}</span></div>
     <div class="map-grid">${mapCards}</div>
     <div class="station-footer"><div><b>车站升级</b><span>当前 Lv.${save.stationLevel} · 下一次需要 ${nextLevelCost} 齿轮</span></div><button class="secondary" data-action="upgrade-station" ${save.gears < nextLevelCost ? 'disabled' : ''}>升级车站</button></div>
+    ${renderSocialHub()}
     <div class="monetize-strip"><div><span class="eyebrow">航线补给</span><b>确定性内容，不卖随机胜率</b><small>星票可换外观、通行证与固定礼包；齿轮和徽记来自玩法。</small></div><button class="chip" data-action="buy-pack">模拟购买 60 星票</button></div>
   </section>`;
 }
@@ -205,8 +305,10 @@ function renderInteractionCards(): string {
 }
 
 function handleCombatAction(action: CombatAction): void {
+  const supportBonuses = getSquadBonuses(socialState);
   const result = resolveCombatAction(battleState, action, {
     skillAvailable: recoveryState.skillCharges > 0,
+    damageBonus: supportBonuses.damageBonus,
   });
   if (!result.accepted) {
     const messages = {
@@ -301,7 +403,10 @@ function renderFailure(): string {
 
 function renderSettlement(): string {
   const repeatSettlement = !lastSettlementWasFirstClear;
-  return `<section class="settlement scene"><div class="settlement-symbol">✦</div><span class="eyebrow">RUN SETTLED</span><h1>${repeatSettlement ? '潮汐已平息' : '首次通关完成'}</h1><p>${repeatSettlement ? '这条线路的首次通关奖励已经领取过，重复挑战会转为普通收益。' : `你完成了 ${formatMap(currentMapId)} 的首次通关，车站将从此拥有新的扩建方向。`}</p><div class="settlement-rewards">${currency(repeatSettlement ? '普通齿轮' : '首通齿轮', repeatSettlement ? 80 : 400, 'gear')}${currency(repeatSettlement ? '航线徽记' : '首通徽记', repeatSettlement ? 2 : 10, 'route-mark')}${currency(repeatSettlement ? '星票' : '首通星票', repeatSettlement ? 0 : 3, 'ticket')}</div><button class="primary" data-action="back-station">回到车站</button></section>`;
+  const expeditionResult = socialState.legionId
+    ? `<div class="expedition-settlement"><span>潮汐灯塔团</span><b>本局远征贡献 +${lastExpeditionContribution}</b><small>本周累计 ${socialState.contribution} / 100</small></div>`
+    : '<div class="expedition-settlement muted"><span>军团远征</span><b>尚未加入军团</b><small>回到车站加入后，下一局开始累计贡献。</small></div>';
+  return `<section class="settlement scene"><div class="settlement-symbol">✦</div><span class="eyebrow">RUN SETTLED</span><h1>${repeatSettlement ? '潮汐已平息' : '首次通关完成'}</h1><p>${repeatSettlement ? '这条线路的首次通关奖励已经领取过，重复挑战会转为普通收益。' : `你完成了 ${formatMap(currentMapId)} 的首次通关，车站将从此拥有新的扩建方向。`}</p><div class="settlement-rewards">${currency(repeatSettlement ? '普通齿轮' : '首通齿轮', repeatSettlement ? 80 : 400, 'gear')}${currency(repeatSettlement ? '航线徽记' : '首通徽记', repeatSettlement ? 2 : 10, 'route-mark')}${currency(repeatSettlement ? '星票' : '首通星票', repeatSettlement ? 0 : 3, 'ticket')}</div>${expeditionResult}<button class="primary" data-action="back-station">回到车站</button></section>`;
 }
 
 function render(): void {
@@ -327,6 +432,7 @@ function startRun(): void {
   pendingRecoveryActions.clear();
   lastRunRecovery = 'none';
   combatClears = 0;
+  lastExpeditionContribution = 0;
   interactionAttempts = {};
   interactionState = { claimedClaimIds: [...save.claimedInteractionIds] };
   phase = 'combat';
@@ -335,7 +441,24 @@ function startRun(): void {
   render();
 }
 
+function recordExpeditionContribution(outcome: ExpeditionOutcome): void {
+  const result = contributeToExpedition(socialState, {
+    runId,
+    outcome,
+    completedNodes: combatClears + (outcome === 'victory' ? 1 : 0),
+  });
+  lastExpeditionContribution = result.pointsGranted;
+  if (!result.accepted) return;
+  commitSocial(result.state);
+  track('expedition_contributed', {
+    outcome,
+    points: result.pointsGranted,
+    total: socialState.contribution,
+  });
+}
+
 function settleRun(victory: boolean): void {
+  recordExpeditionContribution(victory ? 'victory' : 'defeat');
   if (!victory) {
     lastSettlementWasFirstClear = false;
     notice = '列车撤回车站，保留本局互动奖励；下一局仍然可以重新挑战。';
@@ -458,6 +581,7 @@ function handleIncomingDamage(amount: number): void {
 
 function createSharePayload(): SharePayload {
   return {
+    shareType: 'recovery',
     mapId: currentMapId,
     depth: route.find((node) => node.id === currentNodeId)?.depth ?? 0,
     passengers: save.unlockedPassengerIds.slice(-3),
@@ -572,6 +696,97 @@ async function handleSkillRefresh(): Promise<void> {
   render();
 }
 
+function handleJoinLegion(): void {
+  if (socialState.legionId) {
+    notice = '你已经加入潮汐灯塔团。';
+    render();
+    return;
+  }
+  commitSocial(joinLegion(socialState, 'tide-beacon'));
+  notice = '已加入潮汐灯塔团。现在选择最多两名异步队友。';
+  track('legion_joined', { legionId: 'tide-beacon', cycleId: socialState.cycleId });
+  render();
+}
+
+function handleToggleSupport(supportId: SupportId): void {
+  const result = toggleSquadMember(socialState, supportId);
+  if (!result.accepted) {
+    notice = result.reason === 'squad-full'
+      ? '列车队只有两个支援位，请先让一名队友下车。'
+      : '请先加入军团，再选择支援队友。';
+    render();
+    return;
+  }
+  commitSocial(result.state);
+  const support = SUPPORT_ROSTER.find((item) => item.id === supportId);
+  const selected = socialState.squadMemberIds.includes(supportId);
+  notice = selected
+    ? `${support?.displayName ?? supportId} 已加入列车队，下个战斗节点生效。`
+    : `${support?.displayName ?? supportId} 已离开列车队。`;
+  track('squad_changed', {
+    supportId,
+    selected,
+    squadSize: socialState.squadMemberIds.length,
+  });
+  render();
+}
+
+function handleClaimExpedition(milestoneId: ExpeditionMilestoneId): void {
+  const result = claimExpeditionMilestone(socialState, milestoneId);
+  if (!result.accepted) {
+    const messages = {
+      'legion-required': '请先加入军团。',
+      'threshold-not-reached': '本周远征贡献还没有达到这个里程碑。',
+      'already-claimed': '这个里程碑本周期已经领取。',
+      'unknown-milestone': '远征里程碑配置无效。',
+    } as const;
+    notice = messages[result.reason ?? 'unknown-milestone'];
+    render();
+    return;
+  }
+  commitSocial(result.state);
+  commit({
+    ...save,
+    gears: save.gears + result.reward.gears,
+    routeMarks: save.routeMarks + result.reward.routeMarks,
+    starTickets: save.starTickets + result.reward.starTickets,
+  });
+  notice = `军团里程碑已领取：${formatExpeditionReward(result.reward)}。`;
+  track('expedition_reward_claimed', {
+    milestoneId,
+    gears: result.reward.gears,
+    routeMarks: result.reward.routeMarks,
+    starTickets: result.reward.starTickets,
+  });
+  render();
+}
+
+async function handleShareSquad(): Promise<void> {
+  if (!socialState.legionId || squadSharePending) return;
+  squadSharePending = true;
+  render();
+  const result = await share.share({
+    shareType: 'squad-invite',
+    mapId: currentMapId,
+    depth: 0,
+    passengers: [...socialState.squadMemberIds],
+    modules: [],
+    failureReason: '潮汐灯塔团正在集结异步列车队',
+    cta: '加入列车队',
+  });
+  squadSharePending = false;
+  notice = result === 'completed'
+    ? '列车队招募卡已生成；分享本身不直接发放货币。'
+    : result === 'cancelled'
+      ? '已取消分享，不影响军团和队伍状态。'
+      : '分享接口暂时不可用，请稍后再试。';
+  track('squad_invite_shared', {
+    result,
+    squadSize: socialState.squadMemberIds.length,
+  });
+  render();
+}
+
 app.addEventListener('click', async (event) => {
   const target = event.target as HTMLElement;
   const button = target.closest<HTMLButtonElement>('[data-action]');
@@ -592,8 +807,12 @@ app.addEventListener('click', async (event) => {
   if (action === 'select-map' && button.dataset.mapId) { currentMapId = button.dataset.mapId as MapId; notice = `已切换路线：${formatMap(currentMapId)}。`; render(); }
   if (action === 'unlock-map' && button.dataset.mapId) { commit(unlockMap(save, button.dataset.mapId as MapId)); currentMapId = button.dataset.mapId as MapId; notice = `新地图 ${formatMap(currentMapId)} 已开放。`; render(); }
   if (action === 'upgrade-station') upgradeStationAtStation();
+  if (action === 'join-legion') handleJoinLegion();
+  if (action === 'toggle-support' && button.dataset.supportId) handleToggleSupport(button.dataset.supportId as SupportId);
+  if (action === 'claim-expedition' && button.dataset.milestoneId) handleClaimExpedition(button.dataset.milestoneId as ExpeditionMilestoneId);
+  if (action === 'share-squad') await handleShareSquad();
   if (action === 'buy-pack') { const result = await store.purchase('starter-star-ticket-pack'); if (result === 'success') { commit({ ...save, starTickets: save.starTickets + 60 }); notice = '模拟购买成功：固定获得 60 星票。'; render(); } }
-  if (action === 'reset-save') { window.localStorage.removeItem(SAVE_KEY); window.location.reload(); }
+  if (action === 'reset-save') { window.localStorage.removeItem(SAVE_KEY); window.localStorage.removeItem(SOCIAL_SAVE_KEY); window.location.reload(); }
 });
 
 render();

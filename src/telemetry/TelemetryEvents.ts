@@ -11,6 +11,11 @@ export type PrototypeEventName =
   | 'skill_refresh_clicked'
   | 'skill_refresh_result'
   | 'share_card_created'
+  | 'legion_joined'
+  | 'squad_changed'
+  | 'squad_invite_shared'
+  | 'expedition_contributed'
+  | 'expedition_reward_claimed'
   | 'run_restart';
 
 export interface PrototypeEvent {
