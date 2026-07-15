@@ -18,6 +18,10 @@
 - 随机结果使用可复现种子，奖励结算必须幂等。
 - 客户端不得直接决定正式货币、订单和奖励发放；原型用 Mock，但接口要保留服务端边界。
 - 所有关键开局、节点、奖励、Boss和再次开局事件必须有埋点。
+- 同一局允许多个不同互动点领取奖励；同一互动点按 `claimId` 幂等，达到领取上限后不再发放。
+- 首次通关奖励按地图ID只发放一次，奖励价值高于普通通关。
+- 货币只使用齿轮、航线徽记和星票三种；星票不参与付费随机抽取。
+- 地图和功能按车站等级逐步开放，原型实现等级1和等级3的解锁骨架。
 - 变更只在 `C:\Users\asus\Desktop\workspace\project-002-tidal-train-roguelike` 内进行。
 
 ---
@@ -38,6 +42,8 @@
 - Create: `src/domain/route/RewardResolver.ts` — 三选一奖励和撤离奖励
 - Create: `src/domain/boss/TidalBeastBoss.ts` — 区域Boss状态和机制
 - Create: `src/domain/settlement/SettlementService.ts` — 胜利、失败、撤离和幂等结算
+- Create: `src/domain/reward/InteractionRewardService.ts` — 同局多互动点奖励和重复点击幂等
+- Create: `src/domain/reward/FirstClearRewardService.ts` — 区域首次通关高额奖励
 
 ### 内容与平台边界
 
@@ -69,6 +75,8 @@
 - Create: `tests/domain/build/SynergySystem.spec.ts`
 - Create: `tests/domain/route/RouteGenerator.spec.ts`
 - Create: `tests/domain/settlement/SettlementService.spec.ts`
+- Create: `tests/domain/reward/InteractionRewardService.spec.ts`
+- Create: `tests/domain/reward/FirstClearRewardService.spec.ts`
 - Create: `tests/content/PrototypeCatalog.spec.ts`
 - Create: `tests/platform/MockPlatform.spec.ts`
 - Create: `tests/save/SaveRepository.spec.ts`
@@ -669,6 +677,140 @@ Expected: 全部 PASS。
 
 Commit: `feat: add tidal beast boss and idempotent settlement`
 
+## Task 7A: 实现同局互动奖励与首次通关高额奖励
+
+**Files:**
+- Create: `src/domain/reward/InteractionRewardService.ts`
+- Create: `src/domain/reward/FirstClearRewardService.ts`
+- Create: `tests/domain/reward/InteractionRewardService.spec.ts`
+- Create: `tests/domain/reward/FirstClearRewardService.spec.ts`
+
+**Interfaces:**
+
+```ts
+export type RewardCurrency = 'gears' | 'routeMarks' | 'starTickets';
+
+export interface InteractionRewardDefinition {
+  actionId: string;
+  currency: RewardCurrency;
+  amount: number;
+  maxClaims: number;
+}
+
+export interface InteractionState {
+  claimedClaimIds: readonly string[];
+}
+
+export interface InteractionClaimInput {
+  runId: string;
+  actionId: string;
+  attempt: number;
+  definition: InteractionRewardDefinition;
+}
+
+export interface InteractionClaimResult {
+  state: InteractionState;
+  accepted: boolean;
+  alreadyClaimed: boolean;
+  claimId: string;
+  currency: RewardCurrency;
+  amount: number;
+}
+
+export function createInteractionState(): InteractionState;
+export function claimInteractionReward(state: InteractionState, input: InteractionClaimInput): InteractionClaimResult;
+
+export interface FirstClearState {
+  claimedMapIds: readonly string[];
+}
+
+export interface FirstClearReward {
+  mapId: string;
+  gears: number;
+  routeMarks: number;
+  starTickets: number;
+  collectionId: string;
+}
+
+export function claimFirstClear(state: FirstClearState, reward: FirstClearReward): {
+  state: FirstClearState;
+  granted: boolean;
+  reward: FirstClearReward;
+};
+```
+
+- [ ] **Step 1: 写同局多互动点、重复点击和上限测试**
+
+```ts
+it('allows different interaction points to reward within one run', () => {
+  const state = createInteractionState();
+  const first = claimInteractionReward(state, {
+    runId: 'run-1', actionId: 'salvage-a', attempt: 0,
+    definition: { actionId: 'salvage-a', currency: 'gears', amount: 5, maxClaims: 2 },
+  });
+  const second = claimInteractionReward(first.state, {
+    runId: 'run-1', actionId: 'aid-b', attempt: 0,
+    definition: { actionId: 'aid-b', currency: 'routeMarks', amount: 1, maxClaims: 1 },
+  });
+  expect(first.accepted).toBe(true);
+  expect(second.accepted).toBe(true);
+});
+
+it('does not pay twice for the same click claim', () => {
+  const input = {
+    runId: 'run-1', actionId: 'salvage-a', attempt: 0,
+    definition: { actionId: 'salvage-a', currency: 'gears' as const, amount: 5, maxClaims: 2 },
+  };
+  const first = claimInteractionReward(createInteractionState(), input);
+  const retry = claimInteractionReward(first.state, input);
+  expect(retry.alreadyClaimed).toBe(true);
+  expect(retry.amount).toBe(0);
+});
+
+it('rejects attempts beyond the interaction limit', () => {
+  const result = claimInteractionReward(createInteractionState(), {
+    runId: 'run-1', actionId: 'salvage-a', attempt: 2,
+    definition: { actionId: 'salvage-a', currency: 'gears', amount: 5, maxClaims: 2 },
+  });
+  expect(result.accepted).toBe(false);
+  expect(result.amount).toBe(0);
+});
+```
+
+- [ ] **Step 2: 写首次通关只发一次测试**
+
+```ts
+it('grants a high-value first clear reward once per map', () => {
+  const reward = { mapId: 'drift-suburb', gears: 200, routeMarks: 3, starTickets: 0, collectionId: 'suburb-lantern' };
+  const first = claimFirstClear({ claimedMapIds: [] }, reward);
+  const repeat = claimFirstClear(first.state, reward);
+  expect(first.granted).toBe(true);
+  expect(first.reward.gears).toBe(200);
+  expect(repeat.granted).toBe(false);
+  expect(repeat.reward.gears).toBe(0);
+});
+```
+
+- [ ] **Step 3: 运行测试确认失败**
+
+Run: `npm test -- --run tests/domain/reward`
+
+Expected: FAIL，因为互动奖励和首次通关服务尚未实现。
+
+- [ ] **Step 4: 实现两套奖励状态**
+
+互动奖励使用 `${runId}:${actionId}:${attempt}` 作为 `claimId`；同一局可以领取不同 `actionId`，同一个 `claimId`重复调用返回 `amount: 0`；`attempt`必须是非负整数且小于 `maxClaims`。首次通关以 `mapId` 去重，重复调用返回全为0的奖励对象。
+
+- [ ] **Step 5: 运行测试和类型检查**
+
+Run: `npm test -- --run tests/domain/reward && npm run typecheck`
+
+Expected: 全部 PASS。
+
+- [ ] **Step 6: 提交**
+
+Commit: `feat: add repeatable interaction and first-clear rewards`
+
 ## Task 8: 建立存档和平台适配接口
 
 **Files:**
@@ -697,8 +839,14 @@ export interface IAnalytics {
 export interface PlayerSave {
   version: 1;
   gears: number;
+  routeMarks: number;
+  starTickets: number;
+  stationLevel: number;
   unlockedPassengerIds: readonly string[];
   unlockedModuleIds: readonly string[];
+  unlockedMapIds: readonly string[];
+  firstClearMapIds: readonly string[];
+  claimedInteractionIds: readonly string[];
 }
 
 export interface SaveRepository {
@@ -718,8 +866,14 @@ it('returns a safe default save when no data exists', () => {
   expect(repository.load()).toEqual({
     version: 1,
     gears: 0,
+    routeMarks: 0,
+    starTickets: 0,
+    stationLevel: 1,
     unlockedPassengerIds: [],
     unlockedModuleIds: [],
+    unlockedMapIds: ['drift-suburb'],
+    firstClearMapIds: [],
+    claimedInteractionIds: [],
   });
 });
 
@@ -737,7 +891,7 @@ Expected: FAIL，因为平台接口和存档实现尚未创建。
 
 - [ ] **Step 3: 实现内存Mock和版本为1的存档**
 
-存档读取失败时返回安全默认值；保存时拒绝负齿轮；对象写入使用深拷贝；Mock广告不调用任何真实平台接口。
+存档读取失败时返回安全默认值；保存时拒绝负齿轮、航线徽记和星票；对象写入使用深拷贝；Mock广告不调用任何真实平台接口。
 
 - [ ] **Step 4: 运行测试和类型检查**
 
@@ -799,7 +953,9 @@ Commit: `feat: add playable run scene and prototype hud`
 - Create: `assets/scripts/station/StationSceneController.ts`
 - Create: `assets/scripts/tutorial/TutorialController.ts`
 - Modify: `src/save/SaveRepository.ts`
+- Create: `src/domain/station/MapProgression.ts`
 - Create: `tests/save/StationProgress.spec.ts`
+- Create: `tests/domain/station/MapProgression.spec.ts`
 
 **Interfaces:**
 
@@ -812,6 +968,10 @@ export interface TutorialStep {
 
 export function unlockPassenger(save: PlayerSave, passengerId: string): PlayerSave;
 export function unlockModule(save: PlayerSave, moduleId: string): PlayerSave;
+
+export type MapId = 'drift-suburb' | 'old-port' | 'glass-city' | 'deep-tunnel';
+export function canUnlockMap(save: PlayerSave, mapId: MapId): boolean;
+export function unlockMap(save: PlayerSave, mapId: MapId): PlayerSave;
 ```
 
 - [ ] **Step 1: 写永久解锁和引导进度测试**
@@ -821,8 +981,14 @@ it('unlocks a passenger without duplicating the id', () => {
   const save: PlayerSave = {
     version: 1,
     gears: 0,
+    routeMarks: 0,
+    starTickets: 0,
+    stationLevel: 1,
     unlockedPassengerIds: [],
     unlockedModuleIds: [],
+    unlockedMapIds: ['drift-suburb'],
+    firstClearMapIds: [],
+    claimedInteractionIds: [],
   };
   const next = unlockPassenger(unlockPassenger(save, 'mechanic'), 'mechanic');
   expect(next.unlockedPassengerIds).toEqual(['mechanic']);
@@ -837,13 +1003,15 @@ Expected: FAIL，因为永久解锁函数尚未实现。
 
 - [ ] **Step 3: 实现车站和五步引导**
 
-引导顺序固定为：变道、自动战斗、奖励选择、路线选择、结算再次开局。玩家完成一步后才进入下一步，但允许跳过已完成引导；引导不显示付费或广告内容。
+引导顺序固定为：变道、自动战斗、奖励选择、路线选择、结算再次开局。玩家完成一步后才进入下一步，但允许跳过已完成引导；引导不显示付费或广告内容。车站同时显示三种货币：齿轮用于维修和普通成长，航线徽记用于地图/功能开放，星票只用于确定性外观和礼包。
+
+地图开放规则固定为：等级1解锁 `drift-suburb`，等级3解锁 `old-port`，等级5解锁 `glass-city`，等级8解锁 `deep-tunnel`。原型只实现等级1与等级3的实际场景入口，等级5和等级8只写入配置数据。
 
 - [ ] **Step 4: 手工验证新玩家路径**
 
 Run: 清空本地存档后运行游戏，完成首局，再退出并重新进入车站。
 
-Expected: 齿轮和解锁内容保留；再次开局不重复播放已经完成的引导；存档损坏时回到安全默认值。
+Expected: 齿轮、航线徽记、星票、地图和解锁内容保留；首次通关奖励只记录一次；再次开局不重复播放已经完成的引导；存档损坏时回到安全默认值。
 
 - [ ] **Step 5: 提交**
 
@@ -977,6 +1145,8 @@ Commit: `test: validate tidal train prototype flow`
 - 短局、单手和首局理解：Tasks 2、3、9、10、12。
 - 乘客、模块、标签和至少三种流派：Tasks 4、5、9。
 - 路线、节点、奖励、撤离和Boss：Tasks 6、7、9。
+- 同局互动奖励和首次通关高额奖励：Task 7A。
+- 三种货币、车站等级、地图和功能开放：Tasks 8、10。
 - 车站、永久解锁和基础存档：Tasks 8、10。
 - 配置/接口/Mock平台边界：Tasks 1、4、8、11。
 - 版本后续可运营的数据基础：Tasks 4、6、11。
