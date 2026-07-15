@@ -1,6 +1,9 @@
 export type RewardedPlacement = 'revive' | 'double-settlement' | 'reroll' | 'skill-refresh';
 export type AdResult = 'completed' | 'closed' | 'failed';
 export type ShareResult = 'completed' | 'cancelled' | 'failed';
+export type PurchaseResult =
+  | { readonly status: 'verified'; readonly transactionId: string }
+  | { readonly status: 'cancelled' | 'failed' };
 
 export interface SharePayload {
   readonly shareType?: 'recovery' | 'squad-invite' | 'daily-trial';
@@ -21,7 +24,7 @@ export interface IAds {
 }
 
 export interface IStore {
-  purchase(productId: string): Promise<'success' | 'cancelled' | 'failed'>;
+  purchase(productId: string): Promise<PurchaseResult>;
 }
 
 export interface IAnalytics {

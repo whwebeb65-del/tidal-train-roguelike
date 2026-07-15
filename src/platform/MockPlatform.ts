@@ -4,6 +4,7 @@ import type {
   IAnalytics,
   IShare,
   IStore,
+  PurchaseResult,
   RewardedPlacement,
   SharePayload,
   ShareResult,
@@ -23,13 +24,17 @@ export class MockAds implements IAds {
 export class MockStore implements IStore {
   public readonly purchases: string[] = [];
 
-  public constructor(private readonly result: 'success' | 'cancelled' | 'failed') {}
+  public constructor(private readonly result: 'verified' | 'cancelled' | 'failed') {}
 
-  public purchase(productId: string): Promise<'success' | 'cancelled' | 'failed'> {
-    if (this.result === 'success') {
+  public purchase(productId: string): Promise<PurchaseResult> {
+    if (this.result === 'verified') {
       this.purchases.push(productId);
+      return Promise.resolve({
+        status: 'verified',
+        transactionId: `mock-${productId}-${this.purchases.length}`,
+      });
     }
-    return Promise.resolve(this.result);
+    return Promise.resolve({ status: this.result });
   }
 }
 
