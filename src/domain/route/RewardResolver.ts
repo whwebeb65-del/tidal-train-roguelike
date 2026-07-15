@@ -12,7 +12,10 @@ function hashNode(seed: number, nodeId: string): number {
   return value >>> 0;
 }
 
-export function createRewardOptions(seed: number, nodeId: string): readonly RewardOption[] {
+export function createRewardOptions(seed: number, nodeId: string, offset = 0): readonly RewardOption[] {
+  if (!Number.isInteger(offset) || offset < 0) {
+    throw new Error('Reward offset must be a non-negative integer');
+  }
   const catalog = getPrototypeCatalog();
   const candidates: RewardOption[] = [
     ...catalog.passengers.map((item) => ({ id: `passenger:${item.id}`, kind: 'passenger' as const, contentId: item.id })),
@@ -21,6 +24,6 @@ export function createRewardOptions(seed: number, nodeId: string): readonly Rewa
     ...gearRewards.map((contentId) => ({ id: `gear:${contentId}`, kind: 'gear' as const, contentId })),
   ];
 
-  const start = hashNode(seed, nodeId) % (candidates.length - 2);
+  const start = (hashNode(seed, nodeId) + offset * 3) % (candidates.length - 2);
   return [candidates[start], candidates[start + 1], candidates[start + 2]];
 }

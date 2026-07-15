@@ -90,6 +90,7 @@ import {
   type SupportId,
 } from '../src/domain/social/SocialExpeditionSystem';
 import { MockAds, MockShare, MockStore } from '../src/platform/MockPlatform';
+import type { RewardedPlacement } from '../src/platform/PlatformContracts';
 import {
   createMemorySaveRepository,
   defaultSave,
@@ -186,7 +187,8 @@ let route = createRoute(seed);
 let battleState: CombatLoopState = createCombatLoopState({ enemyHp: 100 });
 let failureEncounter: 'combat' | 'boss' = 'combat';
 let recoveryState = createRecoveryState();
-const pendingRecoveryActions = new Set<'ad' | 'skill-refresh'>();
+const pendingRecoveryActions = new Set<'ad' | RewardedPlacement>();
+const trackedAdOffers = new Set<RewardedPlacement>();
 let lastRunRecovery: 'ad' | 'none' = 'none';
 let combatClears = 0;
 let interactionState: InteractionState = createInteractionState();
@@ -199,6 +201,10 @@ let lastDailySubmission: DailyTrialSubmissionResult | null = null;
 let dailyTrialSharePending = false;
 let pendingProductId: string | null = null;
 let storeViewTracked = false;
+let rewardRerollUsed = false;
+let rewardRerollOffset = 0;
+let settlementDoubleAvailable = false;
+let settlementDoubleClaimed = false;
 let notice = '欢迎登车，先选择一条可以活着回来的路线。';
 
 function commit(next: PlayerSave): void {
@@ -250,6 +256,12 @@ function applyCampaignReward(reward: CampaignReward): void {
 
 function track(name: PrototypeEventName, payload: Record<string, string | number | boolean> = {}): void {
   telemetry.track({ name, runId: runId || 'station', timestampMs: Date.now(), payload });
+}
+
+function trackAdOfferOnce(placement: RewardedPlacement): void {
+  if (trackedAdOffers.has(placement)) return;
+  trackedAdOffers.add(placement);
+  track('rewarded_ad_offer_shown', { placement });
 }
 
 function formatMap(mapId: MapId): string {
@@ -481,7 +493,7 @@ function renderInteractionCards(): string {
   const actions = [
     { id: 'salvage-a', label: '打捞废弃信标', currency: '齿轮', amount: 8, maxClaims: 2, tone: 'gear' },
     { id: 'aid-b', label: '给漂流者递水', currency: '航线徽记', amount: 1, maxClaims: 1, tone: 'route-mark' },
-    { id: 'signal-c', label: '点亮潮汐信号', currency: '星票', amount: 1, maxClaims: 1, tone: 'ticket' },
+    { id: 'signal-c', label: '点亮潮汐信号', currency: '齿轮', amount: 12, maxClaims: 1, tone: 'gear' },
   ] as const;
   return actions.map((action) => {
     const attempt = interactionAttempts[action.id] ?? 0;
@@ -553,6 +565,8 @@ function renderCombat(): string {
   const node = route.find((item) => item.id === currentNodeId);
   const dailyDefinition = getActiveDailyTrialDefinition();
   const dailyBanner = dailyDefinition ? renderDailyTrialRunBanner({ definition: dailyDefinition }) : '';
+  const skillRefreshAvailable = canRefreshSkill(recoveryState);
+  if (skillRefreshAvailable) trackAdOfferOnce('skill-refresh');
   const interactionContent = dailyDefinition
     ? '<div class="note daily-trial-fairness">每日试炼关闭常规互动货币，避免无限重玩刷取资源；战斗、救援和成绩仍会正常记录。</div>'
     : '<div class="section-title"><h2>同局互动奖励</h2><span>点击越多，路线资源越厚</span></div><div class="interaction-list">' + renderInteractionCards() + '</div>';
@@ -562,7 +576,7 @@ function renderCombat(): string {
     <div class="combat-board"><div class="water-lines"></div><div class="enemy ${battleState.enemyHp <= 0 ? 'defeated' : ''}"><div class="enemy-eye"></div><div class="enemy-mouth"></div><span>潮兽</span></div><div class="train small"><div class="train-window"></div><div class="train-light">潮</div></div><div class="lane-row"><button data-action="lane" data-lane="0">左航道</button><button class="active" data-action="lane" data-lane="1">中航道</button><button data-action="lane" data-lane="2">右航道</button></div></div>
     <div class="hp-line"><div><span>潮兽护甲</span><b>${battleState.enemyHp} / ${battleState.enemyMaxHp}</b></div><div class="progress"><i style="width:${damagePercent}%"></i></div></div>
     <div class="hp-line player-hp"><div><span>列车生命</span><b>${battleState.playerHp} / ${battleState.maxPlayerHp}</b></div><div class="progress"><i style="width:${Math.round((battleState.playerHp / battleState.maxPlayerHp) * 100)}%"></i></div></div>
-    <div class="skill-meter"><span>技能充能 ${recoveryState.skillCharges}/1</span>${canRefreshSkill(recoveryState) ? `<button class="chip" data-action="skill-refresh" ${pendingRecoveryActions.has('skill-refresh') ? 'disabled' : ''}>看广告刷新技能</button>` : '<small>下一战斗节点自动补充</small>'}</div>
+    <div class="skill-meter"><span>技能充能 ${recoveryState.skillCharges}/1</span>${skillRefreshAvailable ? `<button class="chip" data-action="skill-refresh" ${pendingRecoveryActions.has('skill-refresh') ? 'disabled' : ''}>看广告刷新技能</button>` : '<small>下一战斗节点自动补充</small>'}</div>
     ${renderBattleStatus()}
     ${renderBattleActions(false)}
     ${interactionContent}
@@ -570,9 +584,14 @@ function renderCombat(): string {
 }
 
 function renderReward(): string {
-  const options = createRewardOptions(seed, currentNodeId);
+  const options = createRewardOptions(seed, currentNodeId, rewardRerollOffset);
   const dailyDefinition = getActiveDailyTrialDefinition();
-  return `<section class="run scene compact"><div class="run-heading"><div><span class="eyebrow">REWARD CHOICE</span><h1>潮汐回响</h1><p>只选一张，下一站的风险会记住你的选择。</p></div><span class="choice-count">3 选 1</span></div>${dailyDefinition ? renderDailyTrialRunBanner({ definition: dailyDefinition }) : ''}<div class="choice-grid">${options.map((option) => `<button class="choice-card" data-action="reward" data-option-id="${option.id}"><small>${option.kind}</small><b>${option.contentId}</b><span>${dailyDefinition ? '试炼本局临时选择' : option.kind === 'gear' ? '补充车站齿轮' : '加入本局构筑'}</span></button>`).join('')}</div><div class="note">${dailyDefinition ? '每日试炼的构筑选择不写入永久资源，避免无限重玩刷取奖励。' : '奖励由规则层生成；客户端只提交选择 ID，正式服由服务端校验发放。'}</div></section>`;
+  const rerollPending = pendingRecoveryActions.has('reroll');
+  if (!dailyDefinition && !rewardRerollUsed) trackAdOfferOnce('reroll');
+  const rerollAction = dailyDefinition
+    ? ''
+    : `<div class="rewarded-actions"><button class="secondary" data-action="reward-reroll" ${rewardRerollUsed || rerollPending ? 'disabled' : ''}>${rerollPending ? '广告加载中…' : rewardRerollUsed ? '本局已重选' : '看广告重选一次'}</button><small>取消或广告失败不会消耗本局重选机会。</small></div>`;
+  return `<section class="run scene compact"><div class="run-heading"><div><span class="eyebrow">REWARD CHOICE</span><h1>潮汐回响</h1><p>只选一张，下一站的风险会记住你的选择。</p></div><span class="choice-count">3 选 1</span></div>${dailyDefinition ? renderDailyTrialRunBanner({ definition: dailyDefinition }) : ''}<div class="choice-grid">${options.map((option) => `<button class="choice-card" data-action="reward" data-option-id="${option.id}"><small>${option.kind}</small><b>${option.contentId}</b><span>${dailyDefinition ? '试炼本局临时选择' : option.kind === 'gear' ? '补充车站齿轮' : '加入本局构筑'}</span></button>`).join('')}</div>${rerollAction}<div class="note">${dailyDefinition ? '每日试炼保持同种子公平，不开放广告重选，构筑选择也不写入永久资源。' : '奖励由规则层生成；客户端只提交选择 ID，正式服由服务端校验发放。'}</div></section>`;
 }
 
 function renderRoute(): string {
@@ -584,16 +603,19 @@ function renderBoss(): string {
   const percent = Math.max(0, Math.round((battleState.enemyHp / battleState.enemyMaxHp) * 100));
   const dailyDefinition = getActiveDailyTrialDefinition();
   const dailyBanner = dailyDefinition ? renderDailyTrialRunBanner({ definition: dailyDefinition }) : '';
+  const skillRefreshAvailable = canRefreshSkill(recoveryState);
+  if (skillRefreshAvailable) trackAdOfferOnce('skill-refresh');
   const rewardCallout = dailyDefinition
     ? '<div class="first-clear-callout">试炼胜利只提交今日分数，不触发普通地图首通或重复通关奖励。</div>'
     : '<div class="first-clear-callout">首次通关：+400 齿轮 · +10 航线徽记 · +3 星票</div>';
-  return `<section class="run scene boss-scene"><div class="run-heading"><div><span class="eyebrow">FINAL BOSS</span><h1>潮汐巨兽 · 深海回响</h1><p>${dailyDefinition ? '击败它，提交今日固定种子试炼成绩。' : '击败它，首次通关奖励将以地图为单位结算一次。'}</p></div><span class="risk danger">高风险</span></div>${dailyBanner}<div class="boss-board"><div class="boss-orb">${battleState.enemyHp > 0 ? '◉' : '✦'}</div><div class="boss-name">${battleState.enemyHp > 0 ? '潮汐巨兽' : '潮位已平息'}</div></div><div class="hp-line"><div><span>Boss 生命</span><b>${battleState.enemyHp} / ${battleState.enemyMaxHp}</b></div><div class="progress danger"><i style="width:${percent}%"></i></div></div><div class="hp-line player-hp"><div><span>列车生命</span><b>${battleState.playerHp} / ${battleState.maxPlayerHp}</b></div><div class="progress"><i style="width:${Math.round((battleState.playerHp / battleState.maxPlayerHp) * 100)}%"></i></div></div><div class="skill-meter"><span>技能充能 ${recoveryState.skillCharges}/1</span>${canRefreshSkill(recoveryState) ? `<button class="chip" data-action="skill-refresh" ${pendingRecoveryActions.has('skill-refresh') ? 'disabled' : ''}>看广告刷新技能</button>` : '<small>下一战斗节点自动补充</small>'}</div>${renderBattleStatus()}${renderBattleActions(true)}${rewardCallout}</section>`;
+  return `<section class="run scene boss-scene"><div class="run-heading"><div><span class="eyebrow">FINAL BOSS</span><h1>潮汐巨兽 · 深海回响</h1><p>${dailyDefinition ? '击败它，提交今日固定种子试炼成绩。' : '击败它，首次通关奖励将以地图为单位结算一次。'}</p></div><span class="risk danger">高风险</span></div>${dailyBanner}<div class="boss-board"><div class="boss-orb">${battleState.enemyHp > 0 ? '◉' : '✦'}</div><div class="boss-name">${battleState.enemyHp > 0 ? '潮汐巨兽' : '潮位已平息'}</div></div><div class="hp-line"><div><span>Boss 生命</span><b>${battleState.enemyHp} / ${battleState.enemyMaxHp}</b></div><div class="progress danger"><i style="width:${percent}%"></i></div></div><div class="hp-line player-hp"><div><span>列车生命</span><b>${battleState.playerHp} / ${battleState.maxPlayerHp}</b></div><div class="progress"><i style="width:${Math.round((battleState.playerHp / battleState.maxPlayerHp) * 100)}%"></i></div></div><div class="skill-meter"><span>技能充能 ${recoveryState.skillCharges}/1</span>${skillRefreshAvailable ? `<button class="chip" data-action="skill-refresh" ${pendingRecoveryActions.has('skill-refresh') ? 'disabled' : ''}>看广告刷新技能</button>` : '<small>下一战斗节点自动补充</small>'}</div>${renderBattleStatus()}${renderBattleActions(true)}${rewardCallout}</section>`;
 }
 
 function renderFailure(): string {
   const isBoss = failureEncounter === 'boss';
   const adAvailable = canRevive(recoveryState);
   const adPending = pendingRecoveryActions.has('ad');
+  if (adAvailable) trackAdOfferOnce('revive');
   const encounterLabel = isBoss ? '潮汐巨兽战' : '普通战斗';
   return `<section class="failure-panel scene"><span class="eyebrow">RUN FAILED / ${encounterLabel}</span><div class="settlement-symbol failure-symbol">!</div><h1>列车失守</h1><p>本局构筑、互动奖励和路线进度仍然保留。可选择一次广告救场，或直接结算回站。</p><div class="failure-stats"><span>列车生命 <b>0 / 100</b></span><span>广告复活 <b>${adAvailable ? '可用' : '已用'}</b></span></div><div class="recovery-actions"><button class="primary recovery-button" data-action="ad-revive" ${!adAvailable || adPending ? 'disabled' : ''}>${adPending ? '广告加载中…' : adAvailable ? `看广告复活 · +${isBoss ? 50 : 60} 生命` : '广告复活已使用'}</button><button class="text-button give-up-button" data-action="give-up">放弃本局，结算并回车站</button></div><div class="note">广告每局限一次；取消或平台失败不会消耗次数，也不会阻断结算。Boss 复活后保留当前 Boss 生命。</div></section>`;
 }
@@ -610,10 +632,17 @@ function renderSettlement(): string {
     });
   }
   const repeatSettlement = !lastSettlementWasFirstClear;
+  const settlementDoublePending = pendingRecoveryActions.has('double-settlement');
+  if (settlementDoubleAvailable && !settlementDoubleClaimed) trackAdOfferOnce('double-settlement');
+  const doubleAction = settlementDoubleClaimed
+    ? '<div class="rewarded-actions"><button class="secondary" disabled>普通奖励已加倍</button></div>'
+    : settlementDoubleAvailable
+      ? `<div class="rewarded-actions"><button class="secondary" data-action="double-settlement" ${settlementDoublePending ? 'disabled' : ''}>${settlementDoublePending ? '广告加载中…' : '看广告再领 80 齿轮 · 2 航线徽记'}</button><small>仅重复通关可用；取消或失败不会消耗机会。</small></div>`
+      : '';
   const expeditionResult = socialState.legionId
     ? `<div class="expedition-settlement"><span>潮汐灯塔团</span><b>本局远征贡献 +${lastExpeditionContribution}</b><small>本周累计 ${socialState.contribution} / 100</small></div>`
     : '<div class="expedition-settlement muted"><span>军团远征</span><b>尚未加入军团</b><small>回到车站加入后，下一局开始累计贡献。</small></div>';
-  return `<section class="settlement scene"><div class="settlement-symbol">✦</div><span class="eyebrow">RUN SETTLED</span><h1>${repeatSettlement ? '潮汐已平息' : '首次通关完成'}</h1><p>${repeatSettlement ? '这条线路的首次通关奖励已经领取过，重复挑战会转为普通收益。' : `你完成了 ${formatMap(currentMapId)} 的首次通关，车站将从此拥有新的扩建方向。`}</p><div class="settlement-rewards">${currency(repeatSettlement ? '普通齿轮' : '首通齿轮', repeatSettlement ? 80 : 400, 'gear')}${currency(repeatSettlement ? '航线徽记' : '首通徽记', repeatSettlement ? 2 : 10, 'route-mark')}${currency(repeatSettlement ? '星票' : '首通星票', repeatSettlement ? 0 : 3, 'ticket')}</div>${expeditionResult}<button class="primary" data-action="back-station">回到车站</button></section>`;
+  return `<section class="settlement scene"><div class="settlement-symbol">✦</div><span class="eyebrow">RUN SETTLED</span><h1>${repeatSettlement ? '潮汐已平息' : '首次通关完成'}</h1><p>${repeatSettlement ? '这条线路的首次通关奖励已经领取过，重复挑战会转为普通收益。' : `你完成了 ${formatMap(currentMapId)} 的首次通关，车站将从此拥有新的扩建方向。`}</p><div class="settlement-rewards">${currency(repeatSettlement ? '普通齿轮' : '首通齿轮', repeatSettlement ? 80 : 400, 'gear')}${currency(repeatSettlement ? '航线徽记' : '首通徽记', repeatSettlement ? 2 : 10, 'route-mark')}${currency(repeatSettlement ? '星票' : '首通星票', repeatSettlement ? 0 : 3, 'ticket')}</div>${doubleAction}${expeditionResult}<button class="primary" data-action="back-station">回到车站</button></section>`;
 }
 
 function render(): void {
@@ -644,11 +673,16 @@ function startRun(mode: 'normal' | 'daily-trial' = 'normal'): void {
   failureEncounter = 'combat';
   recoveryState = createRecoveryState();
   pendingRecoveryActions.clear();
+  trackedAdOffers.clear();
   lastRunRecovery = 'none';
   combatClears = 0;
   lastExpeditionContribution = 0;
   lastDailySubmission = null;
   dailyTrialSharePending = false;
+  rewardRerollUsed = false;
+  rewardRerollOffset = 0;
+  settlementDoubleAvailable = false;
+  settlementDoubleClaimed = false;
   interactionAttempts = {};
   interactionState = { claimedClaimIds: [...save.claimedInteractionIds] };
   phase = 'combat';
@@ -683,6 +717,8 @@ function recordExpeditionContribution(outcome: ExpeditionOutcome): void {
 }
 
 function settleDailyTrial(victory: boolean): void {
+  settlementDoubleAvailable = false;
+  settlementDoubleClaimed = false;
   const assisted = recoveryState.adReviveUsed;
   const result = submitDailyTrial(dailyTrialState, {
     runId,
@@ -718,6 +754,8 @@ function settleRun(victory: boolean): void {
   recordExpeditionContribution(victory ? 'victory' : 'defeat');
   if (!victory) {
     lastSettlementWasFirstClear = false;
+    settlementDoubleAvailable = false;
+    settlementDoubleClaimed = false;
     notice = '列车撤回车站，保留本局互动奖励；下一局仍然可以重新挑战。';
     phase = 'settlement';
     track('run_settled', { victory: false });
@@ -733,12 +771,20 @@ function settleRun(victory: boolean): void {
   });
   firstClearState = result.state;
   lastSettlementWasFirstClear = result.granted;
+  settlementDoubleAvailable = !result.granted;
+  settlementDoubleClaimed = false;
   commit({
     ...save,
     gears: save.gears + (result.granted ? result.reward.gears : 80),
     routeMarks: save.routeMarks + (result.granted ? result.reward.routeMarks : 2),
     starTickets: save.starTickets + result.reward.starTickets,
     firstClearMapIds: [...firstClearState.claimedMapIds],
+  });
+  track('economy_reward_granted', {
+    source: result.granted ? 'first-clear' : 'repeat-victory',
+    gears: result.granted ? result.reward.gears : 80,
+    routeMarks: result.granted ? result.reward.routeMarks : 2,
+    starTickets: result.reward.starTickets,
   });
   notice = result.granted ? '首通奖励只在这张地图发放一次，欢迎回来刷构筑。' : '已是通关线路，重复挑战转为普通结算。';
   phase = 'settlement';
@@ -755,7 +801,7 @@ function handleInteraction(actionId: string): void {
   const definitions = {
     'salvage-a': { actionId: 'salvage-a', currency: 'gears' as const, amount: 8, maxClaims: 2 },
     'aid-b': { actionId: 'aid-b', currency: 'routeMarks' as const, amount: 1, maxClaims: 1 },
-    'signal-c': { actionId: 'signal-c', currency: 'starTickets' as const, amount: 1, maxClaims: 1 },
+    'signal-c': { actionId: 'signal-c', currency: 'gears' as const, amount: 12, maxClaims: 1 },
   } as const;
   const definition = definitions[actionId as keyof typeof definitions];
   if (!definition) return;
@@ -767,6 +813,12 @@ function handleInteraction(actionId: string): void {
     commit({ ...save, [result.currency]: save[result.currency] + result.amount, claimedInteractionIds: [...interactionState.claimedClaimIds] });
     notice = `互动成功：+${result.amount} ${result.currency}。同一局仍可尝试其它互动点。`;
     track('first_action', { actionId, attempt });
+    track('economy_reward_granted', {
+      source: 'interaction',
+      actionId,
+      currency: result.currency,
+      amount: result.amount,
+    });
   } else {
     notice = result.alreadyClaimed ? '这次点击已经结算过，奖励不会重复发放。' : '这个互动点本局次数已用完。';
   }
@@ -859,11 +911,13 @@ async function handleAdRevive(): Promise<void> {
     return;
   }
   pendingRecoveryActions.add('ad');
+  track('rewarded_ad_clicked', { placement: 'revive' });
   render();
   const encounter = failureEncounter;
   const result = await ads.showRewardedAd('revive');
   pendingRecoveryActions.delete('ad');
   const resultName = recoveryResultName(result);
+  track('rewarded_ad_result', { placement: 'revive', result: resultName });
   if (resultName !== 'completed') {
     notice = resultName === 'cancelled' ? '你取消了广告，复活次数没有消耗。' : '广告播放失败，复活次数没有消耗。';
     track('revive_result', { type: 'ad', result: resultName, hpRestored: 0 });
@@ -894,9 +948,12 @@ async function handleSkillRefresh(): Promise<void> {
     return;
   }
   pendingRecoveryActions.add('skill-refresh');
+  track('rewarded_ad_clicked', { placement: 'skill-refresh' });
   render();
   const result = await ads.showRewardedAd('skill-refresh');
   pendingRecoveryActions.delete('skill-refresh');
+  const resultName = recoveryResultName(result);
+  track('rewarded_ad_result', { placement: 'skill-refresh', result: resultName });
   if (result !== 'completed') {
     notice = result === 'closed' ? '你取消了广告，技能刷新次数没有消耗。' : '广告播放失败，技能刷新次数没有消耗。';
     track('skill_refresh_result', { result: result === 'closed' ? 'cancelled' : 'failed', chargesGranted: 0 });
@@ -911,6 +968,75 @@ async function handleSkillRefresh(): Promise<void> {
     notice = '技能刷新请求已经结算过。';
   }
   track('skill_refresh_result', { result: refreshed.result, chargesGranted: refreshed.chargesGranted });
+  render();
+}
+
+async function handleRewardReroll(): Promise<void> {
+  if (
+    phase !== 'reward'
+    || runMode === 'daily-trial'
+    || rewardRerollUsed
+    || pendingRecoveryActions.has('reroll')
+  ) return;
+
+  pendingRecoveryActions.add('reroll');
+  track('rewarded_ad_clicked', { placement: 'reroll' });
+  render();
+  const result = await ads.showRewardedAd('reroll');
+  pendingRecoveryActions.delete('reroll');
+  const resultName = recoveryResultName(result);
+  track('rewarded_ad_result', { placement: 'reroll', result: resultName });
+
+  if (result === 'completed') {
+    rewardRerollUsed = true;
+    rewardRerollOffset = 1;
+    notice = '广告完成，三张构筑奖励已按本局种子重新生成。';
+  } else {
+    notice = result === 'closed'
+      ? '你取消了广告，本局奖励重选机会仍然保留。'
+      : '广告播放失败，本局奖励重选机会仍然保留。';
+  }
+  render();
+}
+
+async function handleSettlementDouble(): Promise<void> {
+  if (
+    phase !== 'settlement'
+    || runMode === 'daily-trial'
+    || !settlementDoubleAvailable
+    || settlementDoubleClaimed
+    || pendingRecoveryActions.has('double-settlement')
+  ) return;
+
+  pendingRecoveryActions.add('double-settlement');
+  track('rewarded_ad_clicked', { placement: 'double-settlement' });
+  render();
+  const result = await ads.showRewardedAd('double-settlement');
+  pendingRecoveryActions.delete('double-settlement');
+  const resultName = recoveryResultName(result);
+  track('rewarded_ad_result', { placement: 'double-settlement', result: resultName });
+
+  if (result === 'completed') {
+    commit({
+      ...save,
+      gears: save.gears + 80,
+      routeMarks: save.routeMarks + 2,
+    });
+    settlementDoubleAvailable = false;
+    settlementDoubleClaimed = true;
+    track('economy_reward_granted', {
+      source: 'rewarded-ad',
+      placement: 'double-settlement',
+      gears: 80,
+      routeMarks: 2,
+      starTickets: 0,
+    });
+    notice = '广告完成，重复通关奖励已追加 80 齿轮和 2 航线徽记。';
+  } else {
+    notice = result === 'closed'
+      ? '你取消了广告，重复通关加倍机会仍然保留。'
+      : '广告播放失败，重复通关加倍机会仍然保留。';
+  }
   render();
 }
 
@@ -1247,10 +1373,12 @@ app.addEventListener('click', async (event) => {
   if (action === 'combat-action' && button.dataset.combatAction) handleCombatAction(button.dataset.combatAction as CombatAction);
   if (action === 'lane') { notice = `已切换至${button.dataset.lane === '0' ? '左' : button.dataset.lane === '2' ? '右' : '中'}航道。`; render(); }
   if (action === 'reward' && button.dataset.optionId) chooseReward(button.dataset.optionId);
+  if (action === 'reward-reroll') await handleRewardReroll();
   if (action === 'route' && button.dataset.nodeId) chooseRoute(button.dataset.nodeId);
   if (action === 'damage') handleIncomingDamage(35);
   if (action === 'skill-refresh') await handleSkillRefresh();
   if (action === 'ad-revive') await handleAdRevive();
+  if (action === 'double-settlement') await handleSettlementDouble();
   if (action === 'give-up') settleRun(false);
   if (action === 'select-map' && button.dataset.mapId) { currentMapId = button.dataset.mapId as MapId; notice = `已切换路线：${formatMap(currentMapId)}。`; render(); }
   if (action === 'unlock-map' && button.dataset.mapId) { commit(unlockMap(save, button.dataset.mapId as MapId)); currentMapId = button.dataset.mapId as MapId; notice = `新地图 ${formatMap(currentMapId)} 已开放。`; render(); }

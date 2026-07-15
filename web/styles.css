@@ -244,6 +244,8 @@ main { width: min(1060px, 100%); margin: 0 auto; padding: 40px 18px 24px; }
 .debug-hit { background: #3a2730; border: 1px solid #79505a; color: #ffb0a2; }
 .compact { min-height: 500px; } .choice-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin: 34px 0; }
 .choice-card { display: flex; flex-direction: column; align-items: flex-start; min-height: 180px; padding: 18px; text-align: left; border-radius: 18px; background: linear-gradient(155deg, #123441, #0b202a); border: 1px solid #2d6570; transition: transform .2s, border .2s; } .choice-card:hover { transform: translateY(-5px); border-color: #70e1d5; } .choice-card small { color: #62c9c4; text-transform: uppercase; font-size: 10px; letter-spacing: .12em; } .choice-card b { margin-top: auto; font-size: 19px; } .choice-card span { margin-top: 8px; color: #7d9fa4; font-size: 11px; } .route-choice b { text-transform: capitalize; }
+.rewarded-actions { width: min(460px, 100%); display: flex; align-items: center; justify-content: center; gap: 12px; margin: 0 auto 22px; padding: 12px; border-radius: 14px; background: #102d36; border: 1px solid #35606b; }
+.rewarded-actions small { color: #7f9da3; font-size: 10px; line-height: 1.5; text-align: left; }
 .note { padding: 12px; border-left: 3px solid #61d9cf; background: #0d2530; color: #82a6ab; font-size: 11px; }
 .boss-board { height: 245px; display: grid; place-items: center; margin: 30px 0 20px; background: radial-gradient(circle, #3d264c, #102737 60%, #081722); border-color: #714c6f; } .boss-orb { position: relative; z-index: 1; display: grid; place-items: center; width: 120px; height: 120px; border-radius: 50%; background: #d69dff44; color: #eccbff; font-size: 58px; box-shadow: 0 0 80px #c08aff99; } .boss-name { position: absolute; bottom: 25px; z-index: 1; color: #ead8ff; font-size: 12px; letter-spacing: .16em; }
 .first-clear-callout { margin-top: 18px; padding: 14px; border-radius: 12px; background: #2a1b3b; color: #d9c8f4; font-size: 12px; }
@@ -284,6 +286,8 @@ main { width: min(1060px, 100%); margin: 0 auto; padding: 40px 18px 24px; }
   .expedition-milestones, .support-grid { grid-template-columns: 1fr; }
   .social-hub .section-title { align-items: flex-start; flex-direction: column; gap: 5px; }
   .settlement-rewards { flex-wrap: wrap; justify-content: center; }
+  .rewarded-actions { align-items: stretch; flex-direction: column; }
+  .rewarded-actions button, .rewarded-actions small { width: 100%; text-align: center; }
   .battle-status { grid-template-columns: 1fr 1fr; }
   .modifier-chip { grid-column: span 2; }
   .battle-actions > button { flex: 1 1 calc(50% - 10px); }
