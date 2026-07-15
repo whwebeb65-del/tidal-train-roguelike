@@ -19,6 +19,10 @@ export type PrototypeEventName =
   | 'beta_application_result'
   | 'campaign_reward_claimed'
   | 'gift_code_redeem_result'
+  | 'daily_trial_started'
+  | 'daily_trial_submitted'
+  | 'daily_trial_reward_claimed'
+  | 'daily_trial_shared'
   | 'run_restart';
 
 export interface PrototypeEvent {

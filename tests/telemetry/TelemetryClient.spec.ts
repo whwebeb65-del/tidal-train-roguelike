@@ -50,4 +50,19 @@ describe('TelemetryClient', () => {
     ]);
     expect(events[2]?.payload).toEqual({ result: 'unknown-code', codeId: 'unknown' });
   });
+
+  it('records the complete daily trial lifecycle', () => {
+    const telemetry = createMemoryTelemetry();
+    telemetry.track({ name: 'daily_trial_started', runId: 'daily-1', timestampMs: 10, payload: { seed: 42 } });
+    telemetry.track({ name: 'daily_trial_submitted', runId: 'daily-1', timestampMs: 11, payload: { score: 20, assisted: false } });
+    telemetry.track({ name: 'daily_trial_reward_claimed', runId: 'station', timestampMs: 12, payload: { milestoneId: 'participation' } });
+    telemetry.track({ name: 'daily_trial_shared', runId: 'daily-1', timestampMs: 13, payload: { result: 'completed' } });
+
+    expect(telemetry.flush().map((event) => event.name)).toEqual([
+      'daily_trial_started',
+      'daily_trial_submitted',
+      'daily_trial_reward_claimed',
+      'daily_trial_shared',
+    ]);
+  });
 });

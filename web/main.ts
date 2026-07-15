@@ -607,6 +607,13 @@ function startRun(mode: 'normal' | 'daily-trial' = 'normal'): void {
     ? `${dailyDefinition.dayId} 每日试炼出发：${dailyDefinition.rule.name}，固定种子 ${seed}。`
     : `第 ${save.stationLevel} 级车站出发，潮汐种子 ${seed} 已锁定。`;
   track('run_start', { seed, mapId: currentMapId });
+  if (dailyDefinition) {
+    track('daily_trial_started', {
+      dayId: dailyDefinition.dayId,
+      seed: dailyDefinition.seed,
+      ruleId: dailyDefinition.rule.id,
+    });
+  }
   render();
 }
 
@@ -627,14 +634,22 @@ function recordExpeditionContribution(outcome: ExpeditionOutcome): void {
 }
 
 function settleDailyTrial(victory: boolean): void {
+  const assisted = recoveryState.adReviveUsed || recoveryState.shareReviveUsed;
   const result = submitDailyTrial(dailyTrialState, {
     runId,
     outcome: victory ? 'victory' : 'defeat',
     completedNodes: combatClears + (victory ? 1 : 0),
     remainingHp: victory ? battleState.playerHp : 0,
-    assisted: recoveryState.adReviveUsed || recoveryState.shareReviveUsed,
+    assisted,
   });
   if (result.accepted) commitDailyTrial(result.state);
+  track('daily_trial_submitted', {
+    outcome: victory ? 'victory' : 'defeat',
+    score: result.score,
+    bestScore: result.state.bestScore,
+    assisted,
+    accepted: result.accepted,
+  });
   lastDailySubmission = result;
   lastSettlementWasFirstClear = false;
   lastExpeditionContribution = 0;
@@ -1002,6 +1017,12 @@ function handleClaimDailyTrial(milestoneId: DailyTrialMilestoneId): void {
     routeMarks: save.routeMarks + result.reward.routeMarks,
     starTickets: save.starTickets + result.reward.starTickets,
   });
+  track('daily_trial_reward_claimed', {
+    milestoneId,
+    gears: result.reward.gears,
+    routeMarks: result.reward.routeMarks,
+    starTickets: result.reward.starTickets,
+  });
   notice = `今日试炼里程碑已领取：${formatExpeditionReward(result.reward)}。`;
   render();
 }
@@ -1021,6 +1042,11 @@ async function handleShareDailyTrial(): Promise<void> {
     cta: '挑战同一潮汐种子',
   });
   dailyTrialSharePending = false;
+  track('daily_trial_shared', {
+    result,
+    seed: definition.seed,
+    bestScore: dailyTrialState.bestScore,
+  });
   notice = result === 'completed'
     ? '今日试炼成绩卡已生成；分享不会直接发放货币。'
     : result === 'cancelled'
