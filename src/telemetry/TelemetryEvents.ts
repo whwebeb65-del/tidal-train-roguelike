@@ -23,6 +23,7 @@ export type PrototypeEventName =
   | 'daily_trial_submitted'
   | 'daily_trial_reward_claimed'
   | 'daily_trial_shared'
+  | 'daily_check_in_claimed'
   | 'run_restart';
 
 export interface PrototypeEvent {

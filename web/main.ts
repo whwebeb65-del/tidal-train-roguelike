@@ -1040,6 +1040,15 @@ function handleDailyCheckInClaim(): void {
     routeMarks: save.routeMarks + result.reward.routeMarks,
     starTickets: save.starTickets + result.reward.starTickets,
   });
+  track('daily_check_in_claimed', {
+    cycleNumber: result.state.cycleNumber,
+    rewardDay: result.rewardDay,
+    totalClaims: result.state.totalClaims,
+    gears: result.reward.gears,
+    routeMarks: result.reward.routeMarks,
+    starTickets: result.reward.starTickets,
+    completedCycle: result.completedCycle,
+  });
   notice = `第 ${result.rewardDay} 格值班奖励已领取：${formatExpeditionReward(result.reward)}。${result.completedCycle ? ' 本轮七日值班簿已完成。' : ''}`;
   render();
 }

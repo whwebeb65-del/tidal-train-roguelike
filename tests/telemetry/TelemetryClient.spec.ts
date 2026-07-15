@@ -65,4 +65,21 @@ describe('TelemetryClient', () => {
       'daily_trial_shared',
     ]);
   });
+
+  it('records successful daily check-in claims', () => {
+    const telemetry = createMemoryTelemetry();
+    telemetry.track({
+      name: 'daily_check_in_claimed',
+      runId: 'station',
+      timestampMs: 14,
+      payload: {
+        cycleNumber: 1,
+        rewardDay: 1,
+        totalClaims: 1,
+        completedCycle: false,
+      },
+    });
+
+    expect(telemetry.flush().map((event) => event.name)).toEqual(['daily_check_in_claimed']);
+  });
 });
