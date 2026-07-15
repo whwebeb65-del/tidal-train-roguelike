@@ -30,6 +30,15 @@ import {
   useSkill,
   type RecoverySource,
 } from '../src/domain/recovery/RecoverySystem';
+import {
+  createCombatLoopState,
+  getTideModifierLabel,
+  receiveDamage,
+  resolveCombatAction,
+  type CombatAction,
+  type CombatLoopState,
+  type TideModifier,
+} from '../src/domain/combat/CombatLoopSystem';
 import { MockAds, MockShare, MockStore } from '../src/platform/MockPlatform';
 import type { SharePayload } from '../src/platform/PlatformContracts';
 import {
@@ -70,9 +79,7 @@ let runId = '';
 let seed = 0;
 let currentNodeId = 'node-0';
 let route = createRoute(seed);
-let combatHp = 100;
-let bossHp = 120;
-let playerHp = 100;
+let battleState: CombatLoopState = createCombatLoopState({ enemyHp: 100 });
 let failureEncounter: 'combat' | 'boss' = 'combat';
 let recoveryState = createRecoveryState();
 const pendingRecoveryActions = new Set<RecoverySource | 'skill-refresh'>();
@@ -110,6 +117,39 @@ function escapeHtml(value: string): string {
     '"': '&quot;',
     "'": '&#39;',
   })[character] ?? character);
+}
+
+function createBattleModifier(seedValue: number, nodeId: string): TideModifier {
+  let hash = seedValue >>> 0;
+  for (const character of nodeId) {
+    hash = Math.imul(hash ^ character.charCodeAt(0), 16777619) >>> 0;
+  }
+  return (['calm-water', 'surge-current', 'echo-fog'] as const)[hash % 3];
+}
+
+function resetBattleState(enemyHp: number): void {
+  battleState = createCombatLoopState({ enemyHp, modifier: createBattleModifier(seed, currentNodeId) });
+}
+
+function renderBattleStatus(): string {
+  const modifier = getTideModifierLabel(battleState.modifier);
+  return `<div class="battle-status">
+    <div class="momentum-panel"><div><span>潮汐动能</span><b>${battleState.momentum}/100</b></div><div class="momentum-progress"><i style="width:${battleState.momentum}%"></i></div></div>
+    <span class="combo-chip">连击 x${battleState.combo}</span>
+    <span class="modifier-chip"><b>${modifier.name}</b><small>${modifier.effect}</small></span>
+  </div>`;
+}
+
+function renderBattleActions(isBoss: boolean): string {
+  const burstReady = battleState.momentum >= 100 && !battleState.burstUsed;
+  const repairReady = !battleState.repairUsed && battleState.playerHp < battleState.maxPlayerHp;
+  return `<div class="battle-actions action-row">
+    <button class="primary battle-action" data-action="combat-action" data-combat-action="attack">${isBoss ? '集中火力' : '自动开炮'} · ${battleState.modifier === 'surge-current' ? '-30' : '-25'}</button>
+    <button class="secondary battle-action" data-action="combat-action" data-combat-action="skill" ${recoveryState.skillCharges <= 0 || battleState.enemyHp <= 0 ? 'disabled' : ''}>释放「汽笛共鸣」 · ${battleState.modifier === 'echo-fog' ? '-60' : '-50'}</button>
+    <button class="secondary battle-action repair-action" data-action="combat-action" data-combat-action="repair" ${!repairReady ? 'disabled' : ''}>维修车厢 · +${battleState.modifier === 'calm-water' ? '24' : '18'}</button>
+    <button class="burst-action ${burstReady ? 'burst-ready' : ''}" data-action="combat-action" data-combat-action="burst" ${!burstReady ? 'disabled' : ''}>潮汐爆发 · -60</button>
+    <button class="debug-hit" data-action="damage">模拟受击 · -35</button>
+  </div>`;
 }
 
 function renderHeader(): string {
@@ -164,16 +204,72 @@ function renderInteractionCards(): string {
   }).join('');
 }
 
+function handleCombatAction(action: CombatAction): void {
+  const result = resolveCombatAction(battleState, action, {
+    skillAvailable: recoveryState.skillCharges > 0,
+  });
+  if (!result.accepted) {
+    const messages = {
+      'enemy-defeated': '敌人已经倒下，先选择奖励。',
+      'skill-unavailable': '技能充能不足，请等待下一节点或看广告刷新。',
+      'repair-used': '本节点的维修机会已经使用。',
+      'momentum-not-ready': '潮汐动能还未蓄满。',
+      'burst-used': '本节点的潮汐爆发已经使用。',
+    } as const;
+    notice = messages[result.reason ?? 'enemy-defeated'];
+    render();
+    return;
+  }
+
+  if (action === 'skill') {
+    const used = useSkill(recoveryState);
+    if (!used.accepted) {
+      notice = '技能充能不足，请等待下一节点或看广告刷新。';
+      render();
+      return;
+    }
+    recoveryState = used.state;
+  }
+
+  battleState = result.state;
+  if (result.defeated) {
+    if (phase === 'boss') {
+      notice = '潮汐爆发撕开深海回响，正在结算首通。';
+      settleRun(true);
+    } else {
+      notice = '敌人已击破，选择一张潮汐卡。';
+      phase = 'reward';
+      render();
+    }
+    return;
+  }
+
+  notice = action === 'repair'
+    ? `维修完成，恢复 ${result.hpRestored} 点生命。`
+    : action === 'burst'
+      ? '潮汐爆发命中，动能归零。'
+      : action === 'skill'
+        ? '汽笛共鸣触发，技能充能归零。'
+        : `列车开炮，连击达到 x${battleState.combo}。`;
+  track(action === 'skill' ? 'synergy_activated' : 'first_action', {
+    actionId: action,
+    damage: result.damageDealt,
+    momentum: battleState.momentum,
+  });
+  render();
+}
+
 function renderCombat(): string {
-  const damagePercent = Math.max(0, Math.round((combatHp / 100) * 100));
+  const damagePercent = Math.max(0, Math.round((battleState.enemyHp / battleState.enemyMaxHp) * 100));
   const node = route.find((item) => item.id === currentNodeId);
   return `<section class="run scene">
     <div class="run-heading"><div><span class="eyebrow">RUN ${runId}</span><h1>${node?.type === 'event' ? '潮汐事件' : '漂流带遭遇'}</h1><p>自动战斗会推进列车，点击技能可以改变本局构筑节奏。</p></div><span class="risk">危险度 ${Math.round((node?.risk ?? 0.2) * 100)}%</span></div>
-    <div class="combat-board"><div class="water-lines"></div><div class="enemy ${combatHp <= 0 ? 'defeated' : ''}"><div class="enemy-eye"></div><div class="enemy-mouth"></div><span>潮兽</span></div><div class="train small"><div class="train-window"></div><div class="train-light">潮</div></div><div class="lane-row"><button data-action="lane" data-lane="0">左航道</button><button class="active" data-action="lane" data-lane="1">中航道</button><button data-action="lane" data-lane="2">右航道</button></div></div>
-    <div class="hp-line"><div><span>潮兽护甲</span><b>${Math.max(0, combatHp)} / 100</b></div><div class="progress"><i style="width:${damagePercent}%"></i></div></div>
-    <div class="hp-line player-hp"><div><span>列车生命</span><b>${Math.max(0, playerHp)} / 100</b></div><div class="progress"><i style="width:${playerHp}%"></i></div></div>
+    <div class="combat-board"><div class="water-lines"></div><div class="enemy ${battleState.enemyHp <= 0 ? 'defeated' : ''}"><div class="enemy-eye"></div><div class="enemy-mouth"></div><span>潮兽</span></div><div class="train small"><div class="train-window"></div><div class="train-light">潮</div></div><div class="lane-row"><button data-action="lane" data-lane="0">左航道</button><button class="active" data-action="lane" data-lane="1">中航道</button><button data-action="lane" data-lane="2">右航道</button></div></div>
+    <div class="hp-line"><div><span>潮兽护甲</span><b>${battleState.enemyHp} / ${battleState.enemyMaxHp}</b></div><div class="progress"><i style="width:${damagePercent}%"></i></div></div>
+    <div class="hp-line player-hp"><div><span>列车生命</span><b>${battleState.playerHp} / ${battleState.maxPlayerHp}</b></div><div class="progress"><i style="width:${Math.round((battleState.playerHp / battleState.maxPlayerHp) * 100)}%"></i></div></div>
     <div class="skill-meter"><span>技能充能 ${recoveryState.skillCharges}/1</span>${canRefreshSkill(recoveryState) ? `<button class="chip" data-action="skill-refresh" ${pendingRecoveryActions.has('skill-refresh') ? 'disabled' : ''}>看广告刷新技能</button>` : '<small>下一战斗节点自动补充</small>'}</div>
-    <div class="action-row"><button class="primary" data-action="attack">自动开炮 · -25</button><button class="secondary" data-action="skill" ${recoveryState.skillCharges <= 0 ? 'disabled' : ''}>释放「汽笛共鸣」 · -40</button><button class="debug-hit" data-action="damage">模拟受击 · -35</button></div>
+    ${renderBattleStatus()}
+    ${renderBattleActions(false)}
     <div class="section-title"><h2>同局互动奖励</h2><span>点击越多，路线资源越厚</span></div><div class="interaction-list">${renderInteractionCards()}</div>
   </section>`;
 }
@@ -189,8 +285,8 @@ function renderRoute(): string {
 }
 
 function renderBoss(): string {
-  const percent = Math.max(0, Math.round((bossHp / 120) * 100));
-  return `<section class="run scene boss-scene"><div class="run-heading"><div><span class="eyebrow">FINAL BOSS</span><h1>潮汐巨兽 · 深海回响</h1><p>击败它，首次通关奖励将以地图为单位结算一次。</p></div><span class="risk danger">高风险</span></div><div class="boss-board"><div class="boss-orb">${bossHp > 0 ? '◉' : '✦'}</div><div class="boss-name">${bossHp > 0 ? '潮汐巨兽' : '潮位已平息'}</div></div><div class="hp-line"><div><span>Boss 生命</span><b>${Math.max(0, bossHp)} / 120</b></div><div class="progress danger"><i style="width:${percent}%"></i></div></div><div class="hp-line player-hp"><div><span>列车生命</span><b>${Math.max(0, playerHp)} / 100</b></div><div class="progress"><i style="width:${playerHp}%"></i></div></div><div class="skill-meter"><span>技能充能 ${recoveryState.skillCharges}/1</span>${canRefreshSkill(recoveryState) ? `<button class="chip" data-action="skill-refresh" ${pendingRecoveryActions.has('skill-refresh') ? 'disabled' : ''}>看广告刷新技能</button>` : '<small>下一战斗节点自动补充</small>'}</div><div class="action-row"><button class="primary" data-action="boss-attack" ${bossHp <= 0 ? 'disabled' : ''}>集中火力 · -40</button><button class="secondary" data-action="skill" ${recoveryState.skillCharges <= 0 || bossHp <= 0 ? 'disabled' : ''}>释放「汽笛共鸣」 · -40</button><button class="debug-hit" data-action="damage" ${bossHp <= 0 ? 'disabled' : ''}>模拟受击 · -35</button></div><div class="first-clear-callout">首次通关：+400 齿轮 · +10 航线徽记 · +3 星票</div></section>`;
+  const percent = Math.max(0, Math.round((battleState.enemyHp / battleState.enemyMaxHp) * 100));
+  return `<section class="run scene boss-scene"><div class="run-heading"><div><span class="eyebrow">FINAL BOSS</span><h1>潮汐巨兽 · 深海回响</h1><p>击败它，首次通关奖励将以地图为单位结算一次。</p></div><span class="risk danger">高风险</span></div><div class="boss-board"><div class="boss-orb">${battleState.enemyHp > 0 ? '◉' : '✦'}</div><div class="boss-name">${battleState.enemyHp > 0 ? '潮汐巨兽' : '潮位已平息'}</div></div><div class="hp-line"><div><span>Boss 生命</span><b>${battleState.enemyHp} / ${battleState.enemyMaxHp}</b></div><div class="progress danger"><i style="width:${percent}%"></i></div></div><div class="hp-line player-hp"><div><span>列车生命</span><b>${battleState.playerHp} / ${battleState.maxPlayerHp}</b></div><div class="progress"><i style="width:${Math.round((battleState.playerHp / battleState.maxPlayerHp) * 100)}%"></i></div></div><div class="skill-meter"><span>技能充能 ${recoveryState.skillCharges}/1</span>${canRefreshSkill(recoveryState) ? `<button class="chip" data-action="skill-refresh" ${pendingRecoveryActions.has('skill-refresh') ? 'disabled' : ''}>看广告刷新技能</button>` : '<small>下一战斗节点自动补充</small>'}</div>${renderBattleStatus()}${renderBattleActions(true)}<div class="first-clear-callout">首次通关：+400 齿轮 · +10 航线徽记 · +3 星票</div></section>`;
 }
 
 function renderFailure(): string {
@@ -225,9 +321,7 @@ function startRun(): void {
   runId = `run-${Date.now()}`;
   route = createRoute(seed);
   currentNodeId = 'node-0';
-  combatHp = 100;
-  bossHp = 120;
-  playerHp = 100;
+  resetBattleState(100);
   failureEncounter = 'combat';
   recoveryState = createRecoveryState();
   pendingRecoveryActions.clear();
@@ -313,14 +407,15 @@ function chooseRoute(nodeId: string): void {
   if (node.type === 'boss') {
     phase = 'boss';
     recoveryState = startCombatNode(recoveryState);
-    playerHp = 100;
+    failureEncounter = 'boss';
+    resetBattleState(120);
     track('boss_enter', { nodeId });
     notice = '潮汐巨兽出现了，先观察它的护甲节奏。';
   } else {
     combatClears += 1;
-    combatHp = 100;
+    failureEncounter = 'combat';
+    resetBattleState(100);
     recoveryState = startCombatNode(recoveryState);
-    playerHp = 100;
     phase = 'combat';
     notice = `${node.type} 节点已进入，点击互动奖励可以增加本局资源。`;
   }
@@ -351,9 +446,9 @@ function handleIncomingDamage(amount: number): void {
     render();
     return;
   }
-  playerHp = Math.max(0, playerHp - amount);
+  battleState = receiveDamage(battleState, amount);
   track('first_action', { actionId: 'debug-hit', amount });
-  if (playerHp === 0) {
+  if (battleState.playerHp === 0) {
     failureEncounter = phase;
     phase = 'failure';
     notice = failureEncounter === 'boss' ? '潮汐巨兽击穿了列车，仍可选择一次广告和一次分享救场。' : '潮兽击穿了列车，别急着结算。';
@@ -397,10 +492,10 @@ async function handleAdRevive(): Promise<void> {
     render();
     return;
   }
-  const revived = applyRevive({ state: recoveryState, source: 'ad', encounter, playerHp, maxPlayerHp: 100, nowMs: Date.now() });
+  const revived = applyRevive({ state: recoveryState, source: 'ad', encounter, playerHp: battleState.playerHp, maxPlayerHp: battleState.maxPlayerHp, nowMs: Date.now() });
   if (revived.result === 'completed') {
     recoveryState = revived.state;
-    playerHp = revived.playerHp;
+    battleState = { ...battleState, playerHp: revived.playerHp };
     lastRunRecovery = 'ad';
     phase = encounter;
     notice = `广告完成，列车恢复 ${revived.hpRestored} 点生命，继续当前战斗。`;
@@ -433,10 +528,10 @@ async function handleShareRevive(): Promise<void> {
     render();
     return;
   }
-  const revived = applyRevive({ state: recoveryState, source: 'share', encounter, playerHp, maxPlayerHp: 100, nowMs: Date.now() });
+  const revived = applyRevive({ state: recoveryState, source: 'share', encounter, playerHp: battleState.playerHp, maxPlayerHp: battleState.maxPlayerHp, nowMs: Date.now() });
   if (revived.result === 'completed') {
     recoveryState = revived.state;
-    playerHp = revived.playerHp;
+    battleState = { ...battleState, playerHp: revived.playerHp };
     lastRunRecovery = 'share';
     phase = encounter;
     notice = `分享卡已生成，列车恢复 ${revived.hpRestored} 点生命，继续当前战斗。`;
@@ -485,12 +580,10 @@ app.addEventListener('click', async (event) => {
   if (action === 'start-run') startRun();
   if (action === 'back-station') { phase = 'station'; render(); }
   if (action === 'interaction' && button.dataset.interactionId) handleInteraction(button.dataset.interactionId);
-  if (action === 'attack') { combatHp = Math.max(0, combatHp - 25); notice = combatHp === 0 ? '敌人已击破，选择一张潮汐卡。' : '列车自动开炮，敌人护甲下降。'; if (combatHp === 0) phase = 'reward'; track('first_action', { actionId: 'auto-attack' }); render(); }
-  if (action === 'skill') { const used = useSkill(recoveryState); if (!used.accepted) { notice = '技能充能不足，请等待下一节点或看广告刷新。'; render(); } else { recoveryState = used.state; combatHp = Math.max(0, combatHp - 40); notice = combatHp === 0 ? '汽笛共鸣撕开潮雾，奖励已经出现。' : '汽笛共鸣触发，技能充能归零。'; if (combatHp === 0) phase = 'reward'; track('synergy_activated', { synergyId: 'sound-copy' }); render(); } }
+  if (action === 'combat-action' && button.dataset.combatAction) handleCombatAction(button.dataset.combatAction as CombatAction);
   if (action === 'lane') { notice = `已切换至${button.dataset.lane === '0' ? '左' : button.dataset.lane === '2' ? '右' : '中'}航道。`; render(); }
   if (action === 'reward' && button.dataset.optionId) chooseReward(button.dataset.optionId);
   if (action === 'route' && button.dataset.nodeId) chooseRoute(button.dataset.nodeId);
-  if (action === 'boss-attack') { bossHp = Math.max(0, bossHp - 40); notice = bossHp === 0 ? 'Boss 已击破，正在发放首通判定。' : '炮火命中潮汐巨兽。'; if (bossHp === 0) settleRun(true); else render(); }
   if (action === 'damage') handleIncomingDamage(35);
   if (action === 'skill-refresh') await handleSkillRefresh();
   if (action === 'ad-revive') await handleAdRevive();

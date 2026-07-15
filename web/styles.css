@@ -36,7 +36,8 @@ main { width: min(1060px, 100%); margin: 0 auto; padding: 40px 18px 24px; }
 .primary:hover, .secondary:hover, .chip:hover, .debug-hit:hover { transform: translateY(-2px); }
 .primary span { margin-left: 18px; }
 
-.train-platform, .combat-board, .boss-board { position: relative; overflow: hidden; border-radius: 22px; border: 1px solid #275360; }
+.scene { contain: layout paint; }
+.train-platform, .combat-board, .boss-board { position: relative; overflow: hidden; border-radius: 22px; border: 1px solid #275360; contain: layout paint; }
 .train-platform { height: 220px; margin: 38px 0 32px; background: linear-gradient(160deg, #0c2631, #081722 60%, #122c3b); }
 .water-lines { position: absolute; inset: 0; background: repeating-linear-gradient(170deg, transparent 0 26px, #1f6170 28px 29px, transparent 31px 58px); opacity: .23; }
 .signal { position: absolute; left: 9%; top: 25%; width: 12px; height: 58px; border-radius: 8px; background: #ffcf7b; box-shadow: 0 0 22px #ffcf7b; }
@@ -74,6 +75,29 @@ main { width: min(1060px, 100%); margin: 0 auto; padding: 40px 18px 24px; }
 .hp-line { margin: 14px 0; } .hp-line > div:first-child { display: flex; justify-content: space-between; color: #719198; font-size: 11px; } .hp-line b { color: #d4edef; }
 .progress { height: 8px; margin-top: 8px; border-radius: 99px; background: #122d38; overflow: hidden; } .progress i { display: block; height: 100%; background: #61d9cf; border-radius: 99px; transition: width .25s; } .progress.danger i { background: #ef927f; }
 .action-row { display: flex; gap: 10px; flex-wrap: wrap; }
+.battle-actions { margin: 16px 0 22px; align-items: stretch; }
+.battle-action, .repair-action, .burst-action, .debug-hit { min-height: 48px; }
+.battle-action { flex: 1 1 190px; }
+.repair-action { flex: 0 1 160px; }
+.burst-action { flex: 0 1 170px; padding: 11px 14px; border-radius: 14px; background: #291b42; border: 1px solid #8158a6; color: #e8ccff; }
+.burst-action.burst-ready { background: linear-gradient(135deg, #d79cff, #7d63ff); color: #170d28; box-shadow: 0 0 28px #b58aff66; }
+.battle-status { display: grid; grid-template-columns: minmax(180px, 1fr) auto minmax(180px, 1fr); gap: 10px; align-items: center; margin: 8px 0 2px; padding: 12px 14px; border-radius: 16px; background: #0a1d28; border: 1px solid #1c4652; }
+.momentum-panel > div:first-child { display: flex; justify-content: space-between; color: #7fa8af; font-size: 11px; }
+.momentum-panel b { color: #d4fff8; }
+.momentum-progress { height: 6px; margin-top: 7px; border-radius: 99px; overflow: hidden; background: #122f3b; }
+.momentum-progress i { display: block; width: 0; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #61d9cf, #ffcf7b); transition: width .2s ease-out; }
+.combo-chip, .modifier-chip { padding: 7px 10px; border-radius: 10px; background: #132f3b; color: #b8ddda; font-size: 11px; white-space: nowrap; }
+.combo-chip { color: #ffcf7b; border: 1px solid #715b38; }
+.modifier-chip { display: flex; flex-direction: column; gap: 2px; border: 1px solid #2b5d68; }
+.modifier-chip b { color: #71e0d6; font-size: 11px; }
+.modifier-chip small { color: #759ba1; font-size: 10px; }
+.combat-board, .boss-board { isolation: isolate; transform: translateZ(0); }
+.combat-board:after, .boss-board:after { content: ""; position: absolute; inset: auto 0 0; height: 36%; z-index: -1; background: linear-gradient(180deg, transparent, #06151e99); clip-path: polygon(0 60%, 18% 34%, 38% 58%, 58% 28%, 80% 55%, 100% 25%, 100% 100%, 0 100%); opacity: .75; }
+.combat-board .enemy { animation: enemy-hover 3.2s ease-in-out infinite; }
+.combat-board .train.small { transform: translateZ(0); box-shadow: 0 10px 0 #0b202b, 0 0 36px #58d8ce25; }
+.boss-orb { animation: orb-pulse 2.4s ease-in-out infinite; }
+@keyframes enemy-hover { 0%, 100% { transform: translate3d(0, 0, 0); } 50% { transform: translate3d(-5px, -8px, 0); } }
+@keyframes orb-pulse { 0%, 100% { transform: scale(1); filter: saturate(.9); } 50% { transform: scale(1.05); filter: saturate(1.2); } }
 .interaction-list { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; } .interaction-card { display: flex; align-items: center; gap: 10px; padding: 13px; border-radius: 14px; background: #0b222d; border: 1px solid #24515b; text-align: left; } .interaction-icon { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 9px; background: #163e48; color: #75e3d4; font-size: 18px; } .interaction-card span:nth-child(2) { flex: 1; } .interaction-card b, .interaction-card small { display: block; } .interaction-card b { font-size: 12px; } .interaction-card small { color: #77989d; font-size: 10px; margin-top: 3px; } .interaction-card strong { font-size: 10px; color: #61d9cf; }
 
 .skill-meter { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 12px 0; color: #8bb1b3; font-size: 11px; } .skill-meter small { color: #63838b; }
@@ -95,4 +119,13 @@ main { width: min(1060px, 100%); margin: 0 auto; padding: 40px 18px 24px; }
   .train { left: 15%; width: 65%; } .train-platform { height: 190px; }
   .station-footer, .monetize-strip { align-items: flex-start; flex-direction: column; } .station-footer button, .monetize-strip button { width: 100%; }
   .settlement-rewards { flex-wrap: wrap; justify-content: center; }
+  .battle-status { grid-template-columns: 1fr 1fr; }
+  .modifier-chip { grid-column: span 2; }
+  .battle-actions > button { flex: 1 1 calc(50% - 10px); }
+  .topbar { backdrop-filter: none; background: #081722; }
+  .combat-board .enemy, .boss-orb { animation: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; transition-duration: .01ms !important; }
 }

@@ -1,7 +1,9 @@
 import { _decorator, Component, EventTarget } from 'cc';
+import type { CombatAction } from '../../../src/domain/combat/CombatLoopSystem';
 const { ccclass } = _decorator;
 
 export interface RunScenePorts {
+  onCombatActionRequested(action: CombatAction): void;
   onLaneChanged(lane: number): void;
   onSkillPressed(skillId: string): void;
   onSkillRefreshPressed(): void;
@@ -17,6 +19,10 @@ export type RecoverySource = 'ad' | 'share';
 @ccclass('RunSceneController')
 export class RunSceneController extends Component implements RunScenePorts {
   public readonly events = new EventTarget();
+
+  public onCombatActionRequested(action: CombatAction): void {
+    this.events.emit('combat-action-requested', action);
+  }
 
   public onLaneChanged(lane: number): void {
     this.events.emit('lane-changed', lane);

@@ -1,8 +1,17 @@
 import { _decorator, Component } from 'cc';
+import type { CombatAction, CombatLoopState } from '../../../src/domain/combat/CombatLoopSystem';
 const { ccclass } = _decorator;
 
 @ccclass('CombatHud')
 export class CombatHud extends Component {
+  public onCombatActionButtonPressed(action: CombatAction): void {
+    this.node.emit('combat-action-requested', action);
+  }
+
+  public updateBattleState(state: CombatLoopState): void {
+    this.node.emit('battle-state-updated', state);
+  }
+
   public onLaneButtonPressed(lane: number): void {
     this.node.emit('lane-requested', lane);
   }
