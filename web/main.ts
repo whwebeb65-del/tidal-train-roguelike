@@ -20,7 +20,18 @@ import {
   upgradeStation,
   type MapId,
 } from '../src/domain/station/MapProgression';
-import { MockAds, MockStore } from '../src/platform/MockPlatform';
+import {
+  applyRevive,
+  applySkillRefresh,
+  canRevive,
+  canRefreshSkill,
+  createRecoveryState,
+  startCombatNode,
+  useSkill,
+  type RecoverySource,
+} from '../src/domain/recovery/RecoverySystem';
+import { MockAds, MockShare, MockStore } from '../src/platform/MockPlatform';
+import type { SharePayload } from '../src/platform/PlatformContracts';
 import {
   createMemorySaveRepository,
   defaultSave,
@@ -50,9 +61,10 @@ function readSave(): PlayerSave {
 const repository = createMemorySaveRepository(readSave());
 const telemetry = createMemoryTelemetry();
 const ads = new MockAds('completed');
+const share = new MockShare('completed');
 const store = new MockStore('success');
 let save = repository.load();
-let phase: 'station' | 'combat' | 'reward' | 'route' | 'boss' | 'settlement' = 'station';
+let phase: 'station' | 'combat' | 'reward' | 'route' | 'boss' | 'failure' | 'settlement' = 'station';
 let currentMapId: MapId = 'drift-suburb';
 let runId = '';
 let seed = 0;
@@ -60,6 +72,11 @@ let currentNodeId = 'node-0';
 let route = createRoute(seed);
 let combatHp = 100;
 let bossHp = 120;
+let playerHp = 100;
+let failureEncounter: 'combat' | 'boss' = 'combat';
+let recoveryState = createRecoveryState();
+const pendingRecoveryActions = new Set<RecoverySource | 'skill-refresh'>();
+let lastRunRecovery: RecoverySource | 'none' = 'none';
 let combatClears = 0;
 let interactionState: InteractionState = createInteractionState();
 let firstClearState: FirstClearState = { claimedMapIds: [...save.firstClearMapIds] };
@@ -154,7 +171,9 @@ function renderCombat(): string {
     <div class="run-heading"><div><span class="eyebrow">RUN ${runId}</span><h1>${node?.type === 'event' ? '潮汐事件' : '漂流带遭遇'}</h1><p>自动战斗会推进列车，点击技能可以改变本局构筑节奏。</p></div><span class="risk">危险度 ${Math.round((node?.risk ?? 0.2) * 100)}%</span></div>
     <div class="combat-board"><div class="water-lines"></div><div class="enemy ${combatHp <= 0 ? 'defeated' : ''}"><div class="enemy-eye"></div><div class="enemy-mouth"></div><span>潮兽</span></div><div class="train small"><div class="train-window"></div><div class="train-light">潮</div></div><div class="lane-row"><button data-action="lane" data-lane="0">左航道</button><button class="active" data-action="lane" data-lane="1">中航道</button><button data-action="lane" data-lane="2">右航道</button></div></div>
     <div class="hp-line"><div><span>潮兽护甲</span><b>${Math.max(0, combatHp)} / 100</b></div><div class="progress"><i style="width:${damagePercent}%"></i></div></div>
-    <div class="action-row"><button class="primary" data-action="attack">自动开炮 · -25</button><button class="secondary" data-action="skill">释放「汽笛共鸣」 · -40</button></div>
+    <div class="hp-line player-hp"><div><span>列车生命</span><b>${Math.max(0, playerHp)} / 100</b></div><div class="progress"><i style="width:${playerHp}%"></i></div></div>
+    <div class="skill-meter"><span>技能充能 ${recoveryState.skillCharges}/1</span>${canRefreshSkill(recoveryState) ? `<button class="chip" data-action="skill-refresh" ${pendingRecoveryActions.has('skill-refresh') ? 'disabled' : ''}>看广告刷新技能</button>` : '<small>下一战斗节点自动补充</small>'}</div>
+    <div class="action-row"><button class="primary" data-action="attack">自动开炮 · -25</button><button class="secondary" data-action="skill" ${recoveryState.skillCharges <= 0 ? 'disabled' : ''}>释放「汽笛共鸣」 · -40</button><button class="debug-hit" data-action="damage">模拟受击 · -35</button></div>
     <div class="section-title"><h2>同局互动奖励</h2><span>点击越多，路线资源越厚</span></div><div class="interaction-list">${renderInteractionCards()}</div>
   </section>`;
 }
@@ -171,7 +190,17 @@ function renderRoute(): string {
 
 function renderBoss(): string {
   const percent = Math.max(0, Math.round((bossHp / 120) * 100));
-  return `<section class="run scene boss-scene"><div class="run-heading"><div><span class="eyebrow">FINAL BOSS</span><h1>潮汐巨兽 · 深海回响</h1><p>击败它，首次通关奖励将以地图为单位结算一次。</p></div><span class="risk danger">高风险</span></div><div class="boss-board"><div class="boss-orb">${bossHp > 0 ? '◉' : '✦'}</div><div class="boss-name">${bossHp > 0 ? '潮汐巨兽' : '潮位已平息'}</div></div><div class="hp-line"><div><span>Boss 生命</span><b>${Math.max(0, bossHp)} / 120</b></div><div class="progress danger"><i style="width:${percent}%"></i></div></div><div class="action-row"><button class="primary" data-action="boss-attack" ${bossHp <= 0 ? 'disabled' : ''}>集中火力 · -40</button><button class="secondary" data-action="revive">模拟看广告复活</button></div><div class="first-clear-callout">首次通关：+400 齿轮 · +10 航线徽记 · +3 星票</div></section>`;
+  return `<section class="run scene boss-scene"><div class="run-heading"><div><span class="eyebrow">FINAL BOSS</span><h1>潮汐巨兽 · 深海回响</h1><p>击败它，首次通关奖励将以地图为单位结算一次。</p></div><span class="risk danger">高风险</span></div><div class="boss-board"><div class="boss-orb">${bossHp > 0 ? '◉' : '✦'}</div><div class="boss-name">${bossHp > 0 ? '潮汐巨兽' : '潮位已平息'}</div></div><div class="hp-line"><div><span>Boss 生命</span><b>${Math.max(0, bossHp)} / 120</b></div><div class="progress danger"><i style="width:${percent}%"></i></div></div><div class="hp-line player-hp"><div><span>列车生命</span><b>${Math.max(0, playerHp)} / 100</b></div><div class="progress"><i style="width:${playerHp}%"></i></div></div><div class="skill-meter"><span>技能充能 ${recoveryState.skillCharges}/1</span>${canRefreshSkill(recoveryState) ? `<button class="chip" data-action="skill-refresh" ${pendingRecoveryActions.has('skill-refresh') ? 'disabled' : ''}>看广告刷新技能</button>` : '<small>下一战斗节点自动补充</small>'}</div><div class="action-row"><button class="primary" data-action="boss-attack" ${bossHp <= 0 ? 'disabled' : ''}>集中火力 · -40</button><button class="secondary" data-action="skill" ${recoveryState.skillCharges <= 0 || bossHp <= 0 ? 'disabled' : ''}>释放「汽笛共鸣」 · -40</button><button class="debug-hit" data-action="damage" ${bossHp <= 0 ? 'disabled' : ''}>模拟受击 · -35</button></div><div class="first-clear-callout">首次通关：+400 齿轮 · +10 航线徽记 · +3 星票</div></section>`;
+}
+
+function renderFailure(): string {
+  const isBoss = failureEncounter === 'boss';
+  const adAvailable = canRevive(recoveryState, 'ad');
+  const shareAvailable = canRevive(recoveryState, 'share');
+  const adPending = pendingRecoveryActions.has('ad');
+  const sharePending = pendingRecoveryActions.has('share');
+  const encounterLabel = isBoss ? '潮汐巨兽战' : '普通战斗';
+  return `<section class="failure-panel scene"><span class="eyebrow">RUN FAILED / ${encounterLabel}</span><div class="settlement-symbol failure-symbol">!</div><h1>列车失守</h1><p>本局构筑、互动奖励和路线进度仍然保留。选择一次救场机会，继续挑战当前敌人。</p><div class="failure-stats"><span>列车生命 <b>0 / 100</b></span><span>广告复活 <b>${adAvailable ? '可用' : '已用'}</b></span><span>分享复活 <b>${shareAvailable ? '可用' : '已用'}</b></span></div><div class="recovery-actions"><button class="primary recovery-button" data-action="ad-revive" ${!adAvailable || adPending ? 'disabled' : ''}>${adPending ? '广告加载中…' : adAvailable ? `看广告复活 · +${isBoss ? 50 : 60} 生命` : '广告复活已使用'}</button><button class="secondary recovery-button" data-action="share-revive" ${!shareAvailable || sharePending ? 'disabled' : ''}>${sharePending ? '正在生成分享卡…' : shareAvailable ? `分享战绩复活 · +${isBoss ? 40 : 50} 生命` : '分享复活已使用'}</button><button class="text-button give-up-button" data-action="give-up">放弃本局，结算并回车站</button></div><div class="note">广告和分享各自每局限一次；取消或平台失败不会消耗次数。Boss 复活后保留当前 Boss 生命。</div></section>`;
 }
 
 function renderSettlement(): string {
@@ -180,7 +209,7 @@ function renderSettlement(): string {
 }
 
 function render(): void {
-  const scene = phase === 'station' ? renderStation() : phase === 'combat' ? renderCombat() : phase === 'reward' ? renderReward() : phase === 'route' ? renderRoute() : phase === 'boss' ? renderBoss() : renderSettlement();
+  const scene = phase === 'station' ? renderStation() : phase === 'combat' ? renderCombat() : phase === 'reward' ? renderReward() : phase === 'route' ? renderRoute() : phase === 'boss' ? renderBoss() : phase === 'failure' ? renderFailure() : renderSettlement();
   app.innerHTML = `${renderHeader()}<main>${scene}<div class="notice">${escapeHtml(notice)}</div></main><footer><span>Prototype Web Preview</span><button class="text-button" data-action="reset-save">清空本地存档</button></footer>`;
 }
 
@@ -189,12 +218,20 @@ function persistInteractionState(): void {
 }
 
 function startRun(): void {
+  if (runId) {
+    track('run_restart', { afterAdRevive: lastRunRecovery === 'ad', afterShareRevive: lastRunRecovery === 'share' });
+  }
   seed = Math.floor(Math.random() * 1000000) + 1;
   runId = `run-${Date.now()}`;
   route = createRoute(seed);
   currentNodeId = 'node-0';
   combatHp = 100;
   bossHp = 120;
+  playerHp = 100;
+  failureEncounter = 'combat';
+  recoveryState = createRecoveryState();
+  pendingRecoveryActions.clear();
+  lastRunRecovery = 'none';
   combatClears = 0;
   interactionAttempts = {};
   interactionState = { claimedClaimIds: [...save.claimedInteractionIds] };
@@ -275,11 +312,15 @@ function chooseRoute(nodeId: string): void {
   track('route_choice', { nodeId, type: node.type });
   if (node.type === 'boss') {
     phase = 'boss';
+    recoveryState = startCombatNode(recoveryState);
+    playerHp = 100;
     track('boss_enter', { nodeId });
     notice = '潮汐巨兽出现了，先观察它的护甲节奏。';
   } else {
     combatClears += 1;
     combatHp = 100;
+    recoveryState = startCombatNode(recoveryState);
+    playerHp = 100;
     phase = 'combat';
     notice = `${node.type} 节点已进入，点击互动奖励可以增加本局资源。`;
   }
@@ -303,6 +344,139 @@ function upgradeStationAtStation(): void {
   render();
 }
 
+function handleIncomingDamage(amount: number): void {
+  if (phase !== 'combat' && phase !== 'boss') return;
+  if (recoveryState.reviveProtectionUntilMs > Date.now()) {
+    notice = '潮位迟滞生效，列车暂时避开了这次冲击。';
+    render();
+    return;
+  }
+  playerHp = Math.max(0, playerHp - amount);
+  track('first_action', { actionId: 'debug-hit', amount });
+  if (playerHp === 0) {
+    failureEncounter = phase;
+    phase = 'failure';
+    notice = failureEncounter === 'boss' ? '潮汐巨兽击穿了列车，仍可选择一次广告和一次分享救场。' : '潮兽击穿了列车，别急着结算。';
+  }
+  render();
+}
+
+function createSharePayload(): SharePayload {
+  return {
+    mapId: currentMapId,
+    depth: route.find((node) => node.id === currentNodeId)?.depth ?? 0,
+    passengers: save.unlockedPassengerIds.slice(-3),
+    modules: save.unlockedModuleIds.slice(-3),
+    failureReason: failureEncounter === 'boss' ? '潮汐巨兽击穿列车' : '潮兽击穿列车',
+    cta: '救回列车',
+  };
+}
+
+function recoveryResultName(result: 'completed' | 'closed' | 'failed'): 'completed' | 'cancelled' | 'failed' {
+  return result === 'completed' ? 'completed' : result === 'closed' ? 'cancelled' : 'failed';
+}
+
+async function handleAdRevive(): Promise<void> {
+  if (phase !== 'failure' || pendingRecoveryActions.has('ad')) return;
+  const available = canRevive(recoveryState, 'ad');
+  track('revive_clicked', { type: 'ad', available, usedBefore: recoveryState.adReviveUsed });
+  if (!available) {
+    notice = '本局广告复活已经使用过。';
+    render();
+    return;
+  }
+  pendingRecoveryActions.add('ad');
+  render();
+  const encounter = failureEncounter;
+  const result = await ads.showRewardedAd('revive');
+  pendingRecoveryActions.delete('ad');
+  const resultName = recoveryResultName(result);
+  if (resultName !== 'completed') {
+    notice = resultName === 'cancelled' ? '你取消了广告，复活次数没有消耗。' : '广告播放失败，复活次数没有消耗。';
+    track('revive_result', { type: 'ad', result: resultName, hpRestored: 0 });
+    render();
+    return;
+  }
+  const revived = applyRevive({ state: recoveryState, source: 'ad', encounter, playerHp, maxPlayerHp: 100, nowMs: Date.now() });
+  if (revived.result === 'completed') {
+    recoveryState = revived.state;
+    playerHp = revived.playerHp;
+    lastRunRecovery = 'ad';
+    phase = encounter;
+    notice = `广告完成，列车恢复 ${revived.hpRestored} 点生命，继续当前战斗。`;
+  } else {
+    notice = '这次复活请求已经结算过，生命不会重复恢复。';
+  }
+  track('revive_result', { type: 'ad', result: revived.result, hpRestored: revived.hpRestored });
+  render();
+}
+
+async function handleShareRevive(): Promise<void> {
+  if (phase !== 'failure' || pendingRecoveryActions.has('share')) return;
+  const available = canRevive(recoveryState, 'share');
+  track('revive_clicked', { type: 'share', available, usedBefore: recoveryState.shareReviveUsed });
+  if (!available) {
+    notice = '本局分享复活已经使用过。';
+    render();
+    return;
+  }
+  const payload = createSharePayload();
+  track('share_card_created', { mapId: payload.mapId, depth: payload.depth, passengers: payload.passengers.join(','), modules: payload.modules.join(',') });
+  pendingRecoveryActions.add('share');
+  render();
+  const encounter = failureEncounter;
+  const result = await share.share(payload);
+  pendingRecoveryActions.delete('share');
+  if (result !== 'completed') {
+    notice = result === 'cancelled' ? '你取消了分享，复活次数没有消耗。' : '分享回调无效，复活次数没有消耗。';
+    track('revive_result', { type: 'share', result, hpRestored: 0 });
+    render();
+    return;
+  }
+  const revived = applyRevive({ state: recoveryState, source: 'share', encounter, playerHp, maxPlayerHp: 100, nowMs: Date.now() });
+  if (revived.result === 'completed') {
+    recoveryState = revived.state;
+    playerHp = revived.playerHp;
+    lastRunRecovery = 'share';
+    phase = encounter;
+    notice = `分享卡已生成，列车恢复 ${revived.hpRestored} 点生命，继续当前战斗。`;
+  } else {
+    notice = '这次分享复活请求已经结算过，生命不会重复恢复。';
+  }
+  track('revive_result', { type: 'share', result: revived.result, hpRestored: revived.hpRestored });
+  render();
+}
+
+async function handleSkillRefresh(): Promise<void> {
+  if ((phase !== 'combat' && phase !== 'boss') || pendingRecoveryActions.has('skill-refresh')) return;
+  const available = canRefreshSkill(recoveryState);
+  track('skill_refresh_clicked', { available, usedBefore: recoveryState.skillRefreshUsed });
+  if (!available) {
+    notice = recoveryState.skillRefreshUsed ? '本局技能刷新已经使用过。' : '当前技能仍有充能，不需要刷新。';
+    render();
+    return;
+  }
+  pendingRecoveryActions.add('skill-refresh');
+  render();
+  const result = await ads.showRewardedAd('skill-refresh');
+  pendingRecoveryActions.delete('skill-refresh');
+  if (result !== 'completed') {
+    notice = result === 'closed' ? '你取消了广告，技能刷新次数没有消耗。' : '广告播放失败，技能刷新次数没有消耗。';
+    track('skill_refresh_result', { result: result === 'closed' ? 'cancelled' : 'failed', chargesGranted: 0 });
+    render();
+    return;
+  }
+  const refreshed = applySkillRefresh(recoveryState);
+  if (refreshed.result === 'completed') {
+    recoveryState = refreshed.state;
+    notice = '广告完成，汽笛共鸣恢复 1 次充能。';
+  } else {
+    notice = '技能刷新请求已经结算过。';
+  }
+  track('skill_refresh_result', { result: refreshed.result, chargesGranted: refreshed.chargesGranted });
+  render();
+}
+
 app.addEventListener('click', async (event) => {
   const target = event.target as HTMLElement;
   const button = target.closest<HTMLButtonElement>('[data-action]');
@@ -312,12 +486,16 @@ app.addEventListener('click', async (event) => {
   if (action === 'back-station') { phase = 'station'; render(); }
   if (action === 'interaction' && button.dataset.interactionId) handleInteraction(button.dataset.interactionId);
   if (action === 'attack') { combatHp = Math.max(0, combatHp - 25); notice = combatHp === 0 ? '敌人已击破，选择一张潮汐卡。' : '列车自动开炮，敌人护甲下降。'; if (combatHp === 0) phase = 'reward'; track('first_action', { actionId: 'auto-attack' }); render(); }
-  if (action === 'skill') { combatHp = Math.max(0, combatHp - 40); notice = combatHp === 0 ? '汽笛共鸣撕开潮雾，奖励已经出现。' : '汽笛共鸣触发，下一次普通攻击更安全。'; if (combatHp === 0) phase = 'reward'; track('synergy_activated', { synergyId: 'sound-copy' }); render(); }
+  if (action === 'skill') { const used = useSkill(recoveryState); if (!used.accepted) { notice = '技能充能不足，请等待下一节点或看广告刷新。'; render(); } else { recoveryState = used.state; combatHp = Math.max(0, combatHp - 40); notice = combatHp === 0 ? '汽笛共鸣撕开潮雾，奖励已经出现。' : '汽笛共鸣触发，技能充能归零。'; if (combatHp === 0) phase = 'reward'; track('synergy_activated', { synergyId: 'sound-copy' }); render(); } }
   if (action === 'lane') { notice = `已切换至${button.dataset.lane === '0' ? '左' : button.dataset.lane === '2' ? '右' : '中'}航道。`; render(); }
   if (action === 'reward' && button.dataset.optionId) chooseReward(button.dataset.optionId);
   if (action === 'route' && button.dataset.nodeId) chooseRoute(button.dataset.nodeId);
   if (action === 'boss-attack') { bossHp = Math.max(0, bossHp - 40); notice = bossHp === 0 ? 'Boss 已击破，正在发放首通判定。' : '炮火命中潮汐巨兽。'; if (bossHp === 0) settleRun(true); else render(); }
-  if (action === 'revive') { const result = await ads.showRewardedAd('revive'); notice = result === 'completed' ? '模拟广告完成，列车获得一次复活机会。' : '广告未完成。'; render(); }
+  if (action === 'damage') handleIncomingDamage(35);
+  if (action === 'skill-refresh') await handleSkillRefresh();
+  if (action === 'ad-revive') await handleAdRevive();
+  if (action === 'share-revive') await handleShareRevive();
+  if (action === 'give-up') settleRun(false);
   if (action === 'select-map' && button.dataset.mapId) { currentMapId = button.dataset.mapId as MapId; notice = `已切换路线：${formatMap(currentMapId)}。`; render(); }
   if (action === 'unlock-map' && button.dataset.mapId) { commit(unlockMap(save, button.dataset.mapId as MapId)); currentMapId = button.dataset.mapId as MapId; notice = `新地图 ${formatMap(currentMapId)} 已开放。`; render(); }
   if (action === 'upgrade-station') upgradeStationAtStation();
