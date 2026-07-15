@@ -16,6 +16,9 @@ export type PrototypeEventName =
   | 'squad_invite_shared'
   | 'expedition_contributed'
   | 'expedition_reward_claimed'
+  | 'beta_application_result'
+  | 'campaign_reward_claimed'
+  | 'gift_code_redeem_result'
   | 'run_restart';
 
 export interface PrototypeEvent {

@@ -792,6 +792,9 @@ function campaignFailureMessage(reason: CampaignFailureReason | undefined): stri
 
 function handleBetaApplication(): void {
   const result = applyForBeta(campaignState);
+  track('beta_application_result', {
+    result: result.accepted ? 'qualified' : result.reason ?? 'failed',
+  });
   if (!result.accepted) {
     notice = campaignFailureMessage(result.reason);
     render();
@@ -811,6 +814,12 @@ function handleBetaGiftClaim(): void {
   }
   commitCampaign(result.state);
   applyCampaignReward(result.reward);
+  track('campaign_reward_claimed', {
+    campaignReward: 'beta',
+    gears: result.reward.gears,
+    routeMarks: result.reward.routeMarks,
+    starTickets: result.reward.starTickets,
+  });
   notice = `先行者补给已领取：${formatExpeditionReward(result.reward)}。`;
   render();
 }
@@ -824,12 +833,22 @@ function handleLaunchGiftClaim(): void {
   }
   commitCampaign(result.state);
   applyCampaignReward(result.reward);
+  track('campaign_reward_claimed', {
+    campaignReward: 'launch',
+    gears: result.reward.gears,
+    routeMarks: result.reward.routeMarks,
+    starTickets: result.reward.starTickets,
+  });
   notice = `开服列车长礼已领取：${formatExpeditionReward(result.reward)}。`;
   render();
 }
 
 function handleGiftCodeRedeem(rawCode: string): void {
   const result = redeemGiftCode(campaignState, rawCode, Date.now());
+  track('gift_code_redeem_result', {
+    result: result.accepted ? 'completed' : result.reason ?? 'failed',
+    codeId: result.codeId ?? 'unknown',
+  });
   if (!result.accepted) {
     notice = campaignFailureMessage(result.reason);
     render();

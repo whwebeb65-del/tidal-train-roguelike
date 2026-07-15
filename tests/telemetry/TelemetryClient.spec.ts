@@ -35,4 +35,19 @@ describe('TelemetryClient', () => {
       'share_card_created',
     ]);
   });
+
+  it('records launch campaign events without raw gift-code input', () => {
+    const telemetry = createMemoryTelemetry();
+    telemetry.track({ name: 'beta_application_result', runId: 'station', timestampMs: 7, payload: { result: 'qualified' } });
+    telemetry.track({ name: 'campaign_reward_claimed', runId: 'station', timestampMs: 8, payload: { campaignReward: 'launch', gears: 188 } });
+    telemetry.track({ name: 'gift_code_redeem_result', runId: 'station', timestampMs: 9, payload: { result: 'unknown-code', codeId: 'unknown' } });
+
+    const events = telemetry.flush();
+    expect(events.map((event) => event.name)).toEqual([
+      'beta_application_result',
+      'campaign_reward_claimed',
+      'gift_code_redeem_result',
+    ]);
+    expect(events[2]?.payload).toEqual({ result: 'unknown-code', codeId: 'unknown' });
+  });
 });
