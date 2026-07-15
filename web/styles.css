@@ -62,6 +62,30 @@ main { width: min(1060px, 100%); margin: 0 auto; padding: 40px 18px 24px; }
 .station-footer { background: #0b202a; border: 1px solid #193f4d; } .station-footer b, .station-footer span { display: block; } .station-footer span { color: #77969e; font-size: 12px; margin-top: 4px; }
 .monetize-strip { background: linear-gradient(90deg, #19203c, #18233b); border: 1px solid #3f416d; } .monetize-strip b, .monetize-strip small { display: block; } .monetize-strip b { margin: 5px 0; color: #e4d9ff; } .monetize-strip small { color: #9d99bd; font-size: 11px; }
 
+.daily-check-in { margin-top: 20px; padding: 20px; border-radius: 20px; background: linear-gradient(145deg, #282133, #122d36 58%, #0c202c); border: 1px solid #79664b; contain: layout paint; }
+.daily-check-in-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; }
+.daily-check-in-heading h2 { margin: 6px 0; font-size: 20px; }
+.daily-check-in-heading p { max-width: 580px; margin: 0; color: #91a4a7; font-size: 12px; }
+.daily-check-in-status { flex: 0 0 auto; padding: 8px 11px; border-radius: 99px; background: #342d2d; border: 1px solid #836d49; color: #f0cc87; font-size: 10px; }
+.daily-check-in-progress { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 16px 0 10px; color: #82a0a5; font-size: 10px; }
+.daily-check-in-progress b { color: #dec48f; font-weight: 600; }
+.daily-check-in-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; }
+.daily-check-in-cell { position: relative; min-width: 0; min-height: 104px; padding: 12px 10px; border-radius: 14px; background: #0c202a; border: 1px solid #2c4b52; overflow: hidden; }
+.daily-check-in-cell::after { content: ""; position: absolute; right: -18px; bottom: -24px; width: 58px; height: 58px; border-radius: 50%; background: #5fd8cd0b; }
+.daily-check-in-cell span, .daily-check-in-cell b, .daily-check-in-cell small { position: relative; z-index: 1; display: block; overflow-wrap: anywhere; }
+.daily-check-in-cell span { color: #6ebeb7; font-size: 9px; }
+.daily-check-in-cell b { margin: 15px 0 8px; color: #e9d8b3; font-size: 11px; line-height: 1.45; }
+.daily-check-in-cell small { color: #667f84; font-size: 9px; }
+.daily-check-in-cell.current { border-color: #e1b867; background: linear-gradient(150deg, #3d332a, #142d35); box-shadow: inset 0 0 24px #ffcb6d12, 0 0 20px #ffc25d0d; }
+.daily-check-in-cell.current small { color: #ffd98e; }
+.daily-check-in-cell.claimed { background: #142c2f; border-color: #397067; }
+.daily-check-in-cell.claimed::before { content: "✓"; position: absolute; top: 8px; right: 9px; color: #6bddc8; font-size: 13px; }
+.daily-check-in-cell.claimed b { color: #9fc6b9; }
+.daily-check-in-cell.grand { background-image: linear-gradient(150deg, #30243d, #132c35); border-color: #715b7f; }
+.daily-check-in-action { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-top: 14px; padding-top: 14px; border-top: 1px solid #ffffff10; }
+.daily-check-in-action small { color: #748d92; font-size: 9px; }
+.daily-check-in-action button { flex: 0 0 auto; }
+
 .daily-trial-hub { margin-top: 20px; padding: 20px; border-radius: 20px; background: linear-gradient(145deg, #102b34, #11233b 60%, #1b2039); border: 1px solid #3f7180; contain: layout paint; }
 .daily-trial-hub.locked { filter: saturate(.7); }
 .daily-trial-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; }
@@ -225,6 +249,10 @@ main { width: min(1060px, 100%); margin: 0 auto; padding: 40px 18px 24px; }
   .map-grid { grid-template-columns: repeat(2, 1fr); } .interaction-list, .choice-grid { grid-template-columns: 1fr; }
   .train { left: 15%; width: 65%; } .train-platform { height: 190px; }
   .station-footer, .monetize-strip { align-items: flex-start; flex-direction: column; } .station-footer button, .monetize-strip button { width: 100%; }
+  .daily-check-in-heading, .daily-check-in-progress, .daily-check-in-action { align-items: flex-start; flex-direction: column; }
+  .daily-check-in-status, .daily-check-in-action button { width: 100%; text-align: center; }
+  .daily-check-in-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .daily-check-in-cell.grand { grid-column: span 2; }
   .daily-trial-heading, .daily-trial-banner { align-items: flex-start; flex-direction: column; }
   .daily-trial-heading .primary, .daily-settlement-actions, .daily-settlement-actions button { width: 100%; }
   .daily-trial-milestones { grid-template-columns: 1fr; }

@@ -64,6 +64,12 @@ import {
   type DailyTrialSubmissionResult,
 } from '../src/domain/challenge/DailyTrialSystem';
 import {
+  claimDailyCheckIn,
+  createDailyCheckInState,
+  normalizeDailyCheckInState,
+  type DailyCheckInState,
+} from '../src/domain/retention/DailyCheckInSystem';
+import {
   claimExpeditionMilestone,
   contributeToExpedition,
   createSocialExpeditionState,
@@ -93,12 +99,14 @@ import {
   renderDailyTrialRunBanner,
   renderDailyTrialSettlement,
 } from './views/DailyTrialView';
+import { renderDailyCheckIn } from './views/DailyCheckInView';
 import './styles.css';
 
 const SAVE_KEY = 'tidal-train-prototype-save-v1';
 const SOCIAL_SAVE_KEY = 'tidal-train-social-v1';
 const CAMPAIGN_SAVE_KEY = 'tidal-train-launch-campaign-v1';
 const DAILY_TRIAL_SAVE_KEY = 'tidal-train-daily-trial-v1';
+const DAILY_CHECK_IN_SAVE_KEY = 'tidal-train-daily-checkin-v1';
 const app = document.querySelector<HTMLDivElement>('#app');
 if (!app) {
   throw new Error('App root is missing');
@@ -145,6 +153,15 @@ function readDailyTrialState(): DailyTrialState {
   }
 }
 
+function readDailyCheckInState(): DailyCheckInState {
+  try {
+    const raw = window.localStorage.getItem(DAILY_CHECK_IN_SAVE_KEY);
+    return normalizeDailyCheckInState(raw ? JSON.parse(raw) : null);
+  } catch {
+    return createDailyCheckInState();
+  }
+}
+
 const repository = createMemorySaveRepository(readSave());
 const telemetry = createMemoryTelemetry();
 const ads = new MockAds('completed');
@@ -154,6 +171,7 @@ let save = repository.load();
 let socialState = readSocialState();
 let campaignState = readCampaignState();
 let dailyTrialState = readDailyTrialState();
+let dailyCheckInState = readDailyCheckInState();
 let phase: 'station' | 'combat' | 'reward' | 'route' | 'boss' | 'failure' | 'settlement' = 'station';
 let runMode: 'normal' | 'daily-trial' = 'normal';
 let currentMapId: MapId = 'drift-suburb';
@@ -196,6 +214,11 @@ function commitCampaign(next: LaunchCampaignState): void {
 function commitDailyTrial(next: DailyTrialState): void {
   dailyTrialState = normalizeDailyTrialState(next, next.dayId);
   window.localStorage.setItem(DAILY_TRIAL_SAVE_KEY, JSON.stringify(dailyTrialState));
+}
+
+function commitDailyCheckIn(next: DailyCheckInState): void {
+  dailyCheckInState = normalizeDailyCheckInState(next);
+  window.localStorage.setItem(DAILY_CHECK_IN_SAVE_KEY, JSON.stringify(dailyCheckInState));
 }
 
 function syncDailyTrialDay(): DailyTrialDefinition {
@@ -398,6 +421,7 @@ function renderSocialHub(): string {
 
 function renderStation(): string {
   const nextLevelCost = save.stationLevel * 80;
+  const currentDayId = getChinaDayId(Date.now());
   const dailyDefinition = syncDailyTrialDay();
   const mapCards = MAP_PROGRESSION.map((map) => {
     const unlocked = isMapUnlocked(save, map.id);
@@ -419,6 +443,7 @@ function renderStation(): string {
     <div class="section-title"><h2>航线逐步开放</h2><span>已开放 ${save.unlockedMapIds.length}/${MAP_PROGRESSION.length}</span></div>
     <div class="map-grid">${mapCards}</div>
     <div class="station-footer"><div><b>车站升级</b><span>当前 Lv.${save.stationLevel} · 下一次需要 ${nextLevelCost} 齿轮</span></div><button class="secondary" data-action="upgrade-station" ${save.gears < nextLevelCost ? 'disabled' : ''}>升级车站</button></div>
+    ${renderDailyCheckIn({ state: dailyCheckInState, currentDayId })}
     ${renderDailyTrialHub({ stationLevel: save.stationLevel, state: dailyTrialState, definition: dailyDefinition })}
     ${renderLaunchCampaignCenter()}
     ${renderSocialHub()}
@@ -998,6 +1023,27 @@ function handleGiftCodeRedeem(rawCode: string): void {
   render();
 }
 
+function handleDailyCheckInClaim(): void {
+  const result = claimDailyCheckIn(dailyCheckInState, getChinaDayId(Date.now()));
+  if (!result.accepted) {
+    notice = result.reason === 'already-claimed'
+      ? '今日值班奖励已经领取，明天再来。'
+      : '设备日期早于上次签到日期，请校准时间后重试。';
+    render();
+    return;
+  }
+
+  commitDailyCheckIn(result.state);
+  commit({
+    ...save,
+    gears: save.gears + result.reward.gears,
+    routeMarks: save.routeMarks + result.reward.routeMarks,
+    starTickets: save.starTickets + result.reward.starTickets,
+  });
+  notice = `第 ${result.rewardDay} 格值班奖励已领取：${formatExpeditionReward(result.reward)}。${result.completedCycle ? ' 本轮七日值班簿已完成。' : ''}`;
+  render();
+}
+
 function handleClaimDailyTrial(milestoneId: DailyTrialMilestoneId): void {
   const result = claimDailyTrialMilestone(dailyTrialState, milestoneId);
   if (!result.accepted) {
@@ -1170,6 +1216,7 @@ app.addEventListener('click', async (event) => {
   if (action === 'apply-beta') handleBetaApplication();
   if (action === 'claim-beta-gift') handleBetaGiftClaim();
   if (action === 'claim-launch-gift') handleLaunchGiftClaim();
+  if (action === 'claim-daily-check-in') handleDailyCheckInClaim();
   if (action === 'claim-daily-trial' && button.dataset.milestoneId) handleClaimDailyTrial(button.dataset.milestoneId as DailyTrialMilestoneId);
   if (action === 'share-daily-trial') await handleShareDailyTrial();
   if (action === 'join-legion') handleJoinLegion();
@@ -1177,7 +1224,7 @@ app.addEventListener('click', async (event) => {
   if (action === 'claim-expedition' && button.dataset.milestoneId) handleClaimExpedition(button.dataset.milestoneId as ExpeditionMilestoneId);
   if (action === 'share-squad') await handleShareSquad();
   if (action === 'buy-pack') { const result = await store.purchase('starter-star-ticket-pack'); if (result === 'success') { commit({ ...save, starTickets: save.starTickets + 60 }); notice = '模拟购买成功：固定获得 60 星票。'; render(); } }
-  if (action === 'reset-save') { window.localStorage.removeItem(SAVE_KEY); window.localStorage.removeItem(SOCIAL_SAVE_KEY); window.localStorage.removeItem(CAMPAIGN_SAVE_KEY); window.localStorage.removeItem(DAILY_TRIAL_SAVE_KEY); window.location.reload(); }
+  if (action === 'reset-save') { window.localStorage.removeItem(SAVE_KEY); window.localStorage.removeItem(SOCIAL_SAVE_KEY); window.localStorage.removeItem(CAMPAIGN_SAVE_KEY); window.localStorage.removeItem(DAILY_TRIAL_SAVE_KEY); window.localStorage.removeItem(DAILY_CHECK_IN_SAVE_KEY); window.location.reload(); }
 });
 
 app.addEventListener('submit', (event) => {
