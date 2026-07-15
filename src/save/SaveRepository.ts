@@ -1,5 +1,5 @@
 export interface PlayerSave {
-  readonly version: 1;
+  readonly version: 2;
   readonly gears: number;
   readonly routeMarks: number;
   readonly starTickets: number;
@@ -9,6 +9,9 @@ export interface PlayerSave {
   readonly unlockedMapIds: readonly string[];
   readonly firstClearMapIds: readonly string[];
   readonly claimedInteractionIds: readonly string[];
+  readonly purchasedProductIds: readonly string[];
+  readonly processedTransactionIds: readonly string[];
+  readonly ownedCosmeticIds: readonly string[];
 }
 
 export interface SaveRepository {
@@ -18,7 +21,7 @@ export interface SaveRepository {
 
 export function defaultSave(): PlayerSave {
   return {
-    version: 1,
+    version: 2,
     gears: 0,
     routeMarks: 0,
     starTickets: 0,
@@ -28,12 +31,15 @@ export function defaultSave(): PlayerSave {
     unlockedMapIds: ['drift-suburb'],
     firstClearMapIds: [],
     claimedInteractionIds: [],
+    purchasedProductIds: [],
+    processedTransactionIds: [],
+    ownedCosmeticIds: [],
   };
 }
 
 function cloneSave(save: PlayerSave): PlayerSave {
   return {
-    version: 1,
+    version: 2,
     gears: save.gears,
     routeMarks: save.routeMarks,
     starTickets: save.starTickets,
@@ -43,11 +49,14 @@ function cloneSave(save: PlayerSave): PlayerSave {
     unlockedMapIds: [...save.unlockedMapIds],
     firstClearMapIds: [...save.firstClearMapIds],
     claimedInteractionIds: [...save.claimedInteractionIds],
+    purchasedProductIds: [...save.purchasedProductIds],
+    processedTransactionIds: [...save.processedTransactionIds],
+    ownedCosmeticIds: [...save.ownedCosmeticIds],
   };
 }
 
 function validateSave(save: PlayerSave): void {
-  if (save.version !== 1) {
+  if (save.version !== 2) {
     throw new Error('Unsupported save version');
   }
   if (!Number.isFinite(save.gears) || save.gears < 0) {
@@ -77,11 +86,40 @@ function validateSave(save: PlayerSave): void {
   if (!save.claimedInteractionIds.every((id) => typeof id === 'string')) {
     throw new Error('Interaction claim IDs must be strings');
   }
+  if (!save.purchasedProductIds.every((id) => typeof id === 'string')) {
+    throw new Error('Purchased product IDs must be strings');
+  }
+  if (!save.processedTransactionIds.every((id) => typeof id === 'string')) {
+    throw new Error('Processed transaction IDs must be strings');
+  }
+  if (!save.ownedCosmeticIds.every((id) => typeof id === 'string')) {
+    throw new Error('Owned cosmetic IDs must be strings');
+  }
 }
 
-export function createMemorySaveRepository(initial: PlayerSave = defaultSave()): SaveRepository {
-  validateSave(initial);
-  let current = cloneSave(initial);
+export function normalizePlayerSave(candidate: unknown): PlayerSave {
+  if (!candidate || typeof candidate !== 'object') {
+    throw new Error('Save must be an object');
+  }
+
+  const raw = candidate as Record<string, unknown>;
+  if (raw.version !== 1 && raw.version !== 2) {
+    throw new Error('Unsupported save version');
+  }
+
+  const normalized = {
+    ...raw,
+    version: 2 as const,
+    purchasedProductIds: raw.version === 2 ? raw.purchasedProductIds : [],
+    processedTransactionIds: raw.version === 2 ? raw.processedTransactionIds : [],
+    ownedCosmeticIds: raw.version === 2 ? raw.ownedCosmeticIds : [],
+  } as unknown as PlayerSave;
+  validateSave(normalized);
+  return cloneSave(normalized);
+}
+
+export function createMemorySaveRepository(initial: unknown = defaultSave()): SaveRepository {
+  let current = normalizePlayerSave(initial);
   return {
     load(): PlayerSave {
       return cloneSave(current);

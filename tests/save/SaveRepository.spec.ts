@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createMemorySaveRepository, defaultSave } from '../../src/save/SaveRepository';
+import { createMemorySaveRepository, defaultSave, normalizePlayerSave } from '../../src/save/SaveRepository';
 
 describe('SaveRepository', () => {
   it('returns a safe default save when no data exists', () => {
@@ -41,5 +41,47 @@ describe('SaveRepository', () => {
     expect(repository.load().unlockedMapIds).toEqual(['drift-suburb', 'old-port']);
     expect(repository.load().firstClearMapIds).toEqual(['drift-suburb']);
     expect(repository.load().claimedInteractionIds).toEqual(['run-1:salvage-a:0']);
+  });
+
+  it('migrates a version 1 save without losing progress', () => {
+    const migrated = normalizePlayerSave({
+      version: 1,
+      gears: 90,
+      routeMarks: 3,
+      starTickets: 2,
+      stationLevel: 2,
+      unlockedPassengerIds: ['mechanic'],
+      unlockedModuleIds: ['sound-mirror'],
+      unlockedMapIds: ['drift-suburb', 'old-port'],
+      firstClearMapIds: ['drift-suburb'],
+      claimedInteractionIds: ['run-1:salvage-a:0'],
+    });
+
+    expect(migrated).toMatchObject({
+      version: 2,
+      gears: 90,
+      stationLevel: 2,
+      purchasedProductIds: [],
+      processedTransactionIds: [],
+      ownedCosmeticIds: [],
+    });
+  });
+
+  it('deep copies commerce ownership arrays', () => {
+    const repository = createMemorySaveRepository();
+    const save = {
+      ...defaultSave(),
+      purchasedProductIds: ['starter-star-ticket-pack'],
+      processedTransactionIds: ['tx-1'],
+      ownedCosmeticIds: ['deep-sea-engine'],
+    };
+    repository.save(save);
+    save.purchasedProductIds.push('mutated');
+    save.processedTransactionIds.push('tx-2');
+    save.ownedCosmeticIds.push('mutated-cosmetic');
+
+    expect(repository.load().purchasedProductIds).toEqual(['starter-star-ticket-pack']);
+    expect(repository.load().processedTransactionIds).toEqual(['tx-1']);
+    expect(repository.load().ownedCosmeticIds).toEqual(['deep-sea-engine']);
   });
 });

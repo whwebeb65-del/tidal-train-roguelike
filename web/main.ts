@@ -90,6 +90,7 @@ import type { SharePayload } from '../src/platform/PlatformContracts';
 import {
   createMemorySaveRepository,
   defaultSave,
+  normalizePlayerSave,
   type PlayerSave,
 } from '../src/save/SaveRepository';
 import { createMemoryTelemetry } from '../src/telemetry/TelemetryClient';
@@ -116,8 +117,7 @@ function readSave(): PlayerSave {
   try {
     const raw = window.localStorage.getItem(SAVE_KEY);
     if (!raw) return defaultSave();
-    const candidate = JSON.parse(raw) as PlayerSave;
-    return createMemorySaveRepository(candidate).load();
+    return normalizePlayerSave(JSON.parse(raw) as unknown);
   } catch {
     return defaultSave();
   }
