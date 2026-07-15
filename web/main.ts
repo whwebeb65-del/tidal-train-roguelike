@@ -40,6 +40,18 @@ import {
   type TideModifier,
 } from '../src/domain/combat/CombatLoopSystem';
 import {
+  applyForBeta,
+  claimBetaGift,
+  claimLaunchGift,
+  createLaunchCampaignState,
+  GIFT_CODE_CATALOG,
+  normalizeLaunchCampaignState,
+  redeemGiftCode,
+  type CampaignFailureReason,
+  type CampaignReward,
+  type LaunchCampaignState,
+} from '../src/domain/campaign/LaunchCampaignSystem';
+import {
   claimExpeditionMilestone,
   contributeToExpedition,
   createSocialExpeditionState,
@@ -68,6 +80,7 @@ import './styles.css';
 
 const SAVE_KEY = 'tidal-train-prototype-save-v1';
 const SOCIAL_SAVE_KEY = 'tidal-train-social-v1';
+const CAMPAIGN_SAVE_KEY = 'tidal-train-launch-campaign-v1';
 const app = document.querySelector<HTMLDivElement>('#app');
 if (!app) {
   throw new Error('App root is missing');
@@ -95,6 +108,15 @@ function readSocialState(): SocialExpeditionState {
   }
 }
 
+function readCampaignState(): LaunchCampaignState {
+  try {
+    const raw = window.localStorage.getItem(CAMPAIGN_SAVE_KEY);
+    return normalizeLaunchCampaignState(raw ? JSON.parse(raw) : null);
+  } catch {
+    return createLaunchCampaignState();
+  }
+}
+
 const repository = createMemorySaveRepository(readSave());
 const telemetry = createMemoryTelemetry();
 const ads = new MockAds('completed');
@@ -102,6 +124,7 @@ const share = new MockShare('completed');
 const store = new MockStore('success');
 let save = repository.load();
 let socialState = readSocialState();
+let campaignState = readCampaignState();
 let phase: 'station' | 'combat' | 'reward' | 'route' | 'boss' | 'failure' | 'settlement' = 'station';
 let currentMapId: MapId = 'drift-suburb';
 let runId = '';
@@ -131,6 +154,20 @@ function commit(next: PlayerSave): void {
 function commitSocial(next: SocialExpeditionState): void {
   socialState = normalizeSocialExpeditionState(next, expeditionCycleId);
   window.localStorage.setItem(SOCIAL_SAVE_KEY, JSON.stringify(socialState));
+}
+
+function commitCampaign(next: LaunchCampaignState): void {
+  campaignState = normalizeLaunchCampaignState(next);
+  window.localStorage.setItem(CAMPAIGN_SAVE_KEY, JSON.stringify(campaignState));
+}
+
+function applyCampaignReward(reward: CampaignReward): void {
+  commit({
+    ...save,
+    gears: save.gears + reward.gears,
+    routeMarks: save.routeMarks + reward.routeMarks,
+    starTickets: save.starTickets + reward.starTickets,
+  });
 }
 
 function track(name: PrototypeEventName, payload: Record<string, string | number | boolean> = {}): void {
@@ -221,6 +258,48 @@ function formatExpeditionReward(reward: { readonly gears: number; readonly route
   ].filter(Boolean).join(' · ');
 }
 
+function renderLaunchCampaignCenter(): string {
+  const betaAction = !campaignState.betaQualified
+    ? '<button class="primary" data-action="apply-beta">申请内测资格</button>'
+    : !campaignState.betaGiftClaimed
+      ? '<button class="primary" data-action="claim-beta-gift">领取先行者补给</button>'
+      : '<button class="primary" disabled>先行者补给已领取</button>';
+  const launchAction = campaignState.launchGiftClaimed
+    ? '<button class="primary" disabled>开服礼已领取</button>'
+    : '<button class="primary" data-action="claim-launch-gift">领取开服列车长礼</button>';
+  const badgeNames = campaignState.cosmeticBadgeIds.map((badgeId) => (
+    badgeId === 'beta-pioneer' ? '潮汐先行者' : '开服列车长'
+  ));
+  const badges = badgeNames.length > 0
+    ? badgeNames.map((name) => `<span>✦ ${name}</span>`).join('')
+    : '<small>尚未获得开服纪念徽章</small>';
+
+  return `<section class="launch-campaign">
+    <div class="campaign-heading">
+      <div><span class="eyebrow">FOUNDERS / 3,000</span><h2>首班预约中心</h2><p>原型活动开放中：申请限量内测资格，领取开服礼，并核验公开礼包码。实时名额与正式资产将由服务端结算。</p></div>
+      <span class="campaign-status">${campaignState.betaQualified ? '内测资格已锁定' : '内测申请开放'}</span>
+    </div>
+    <div class="campaign-grid">
+      <article class="campaign-card beta-card">
+        <span class="campaign-card-mark">BETA</span><small>限量 3,000 席 · 单账号资格</small><h3>${campaignState.betaQualified ? '你已登上先行名单' : '潮汐先行者招募'}</h3>
+        <p>资格不提供永久战力，只开放一次先行者补给与身份徽章。</p>
+        <div class="campaign-rewards"><span>60 齿轮</span><span>2 航线徽记</span><span>1 星票</span></div>${betaAction}
+      </article>
+      <article class="campaign-card launch-card">
+        <span class="campaign-card-mark">LAUNCH</span><small>开服活动期 · 全体玩家一次</small><h3>开服列车长礼</h3>
+        <p>一次性高价值启航资源，帮助新玩家更快解锁车站和下一段航线。</p>
+        <div class="campaign-rewards"><span>188 齿轮</span><span>6 航线徽记</span><span>3 星票</span></div>${launchAction}
+      </article>
+    </div>
+    <div class="campaign-badges"><b>开服身份</b>${badges}</div>
+    <form id="gift-code-form" class="gift-code-form" autocomplete="off">
+      <label><span>礼包码兑换</span><input name="giftCode" maxlength="24" placeholder="输入礼包码" aria-label="礼包码"></label>
+      <button class="secondary" type="submit">兑换礼包码</button>
+      <small>公开测试码：<b>TIDE2026</b> · 已兑换 ${campaignState.redeemedCodeIds.length}/${GIFT_CODE_CATALOG.length}</small>
+    </form>
+  </section>`;
+}
+
 function renderSocialHub(): string {
   if (!socialState.legionId) {
     return `<section class="social-hub social-intro">
@@ -284,6 +363,7 @@ function renderStation(): string {
     <div class="section-title"><h2>航线逐步开放</h2><span>已开放 ${save.unlockedMapIds.length}/${MAP_PROGRESSION.length}</span></div>
     <div class="map-grid">${mapCards}</div>
     <div class="station-footer"><div><b>车站升级</b><span>当前 Lv.${save.stationLevel} · 下一次需要 ${nextLevelCost} 齿轮</span></div><button class="secondary" data-action="upgrade-station" ${save.gears < nextLevelCost ? 'disabled' : ''}>升级车站</button></div>
+    ${renderLaunchCampaignCenter()}
     ${renderSocialHub()}
     <div class="monetize-strip"><div><span class="eyebrow">航线补给</span><b>确定性内容，不卖随机胜率</b><small>星票可换外观、通行证与固定礼包；齿轮和徽记来自玩法。</small></div><button class="chip" data-action="buy-pack">模拟购买 60 星票</button></div>
   </section>`;
@@ -696,6 +776,72 @@ async function handleSkillRefresh(): Promise<void> {
   render();
 }
 
+function campaignFailureMessage(reason: CampaignFailureReason | undefined): string {
+  const messages: Record<CampaignFailureReason, string> = {
+    'already-qualified': '内测资格已经锁定，不需要重复申请。',
+    'beta-required': '请先申请并锁定内测资格。',
+    'already-claimed': '这份活动奖励已经领取过。',
+    'empty-code': '请输入礼包码。',
+    'unknown-code': '礼包码无效，请检查活动说明。',
+    'not-started': '这个礼包码的活动还没有开始。',
+    expired: '这个礼包码已经过期。',
+    'already-redeemed': '这个礼包码已经兑换过。',
+  };
+  return reason ? messages[reason] : '活动请求未完成，请稍后再试。';
+}
+
+function handleBetaApplication(): void {
+  const result = applyForBeta(campaignState);
+  if (!result.accepted) {
+    notice = campaignFailureMessage(result.reason);
+    render();
+    return;
+  }
+  commitCampaign(result.state);
+  notice = '内测资格已锁定：你可以领取潮汐先行者补给。';
+  render();
+}
+
+function handleBetaGiftClaim(): void {
+  const result = claimBetaGift(campaignState);
+  if (!result.accepted) {
+    notice = campaignFailureMessage(result.reason);
+    render();
+    return;
+  }
+  commitCampaign(result.state);
+  applyCampaignReward(result.reward);
+  notice = `先行者补给已领取：${formatExpeditionReward(result.reward)}。`;
+  render();
+}
+
+function handleLaunchGiftClaim(): void {
+  const result = claimLaunchGift(campaignState);
+  if (!result.accepted) {
+    notice = campaignFailureMessage(result.reason);
+    render();
+    return;
+  }
+  commitCampaign(result.state);
+  applyCampaignReward(result.reward);
+  notice = `开服列车长礼已领取：${formatExpeditionReward(result.reward)}。`;
+  render();
+}
+
+function handleGiftCodeRedeem(rawCode: string): void {
+  const result = redeemGiftCode(campaignState, rawCode, Date.now());
+  if (!result.accepted) {
+    notice = campaignFailureMessage(result.reason);
+    render();
+    return;
+  }
+  commitCampaign(result.state);
+  applyCampaignReward(result.reward);
+  const definition = GIFT_CODE_CATALOG.find((item) => item.id === result.codeId);
+  notice = `${definition?.label ?? '活动'}礼包兑换成功：${formatExpeditionReward(result.reward)}。`;
+  render();
+}
+
 function handleJoinLegion(): void {
   if (socialState.legionId) {
     notice = '你已经加入潮汐灯塔团。';
@@ -807,12 +953,23 @@ app.addEventListener('click', async (event) => {
   if (action === 'select-map' && button.dataset.mapId) { currentMapId = button.dataset.mapId as MapId; notice = `已切换路线：${formatMap(currentMapId)}。`; render(); }
   if (action === 'unlock-map' && button.dataset.mapId) { commit(unlockMap(save, button.dataset.mapId as MapId)); currentMapId = button.dataset.mapId as MapId; notice = `新地图 ${formatMap(currentMapId)} 已开放。`; render(); }
   if (action === 'upgrade-station') upgradeStationAtStation();
+  if (action === 'apply-beta') handleBetaApplication();
+  if (action === 'claim-beta-gift') handleBetaGiftClaim();
+  if (action === 'claim-launch-gift') handleLaunchGiftClaim();
   if (action === 'join-legion') handleJoinLegion();
   if (action === 'toggle-support' && button.dataset.supportId) handleToggleSupport(button.dataset.supportId as SupportId);
   if (action === 'claim-expedition' && button.dataset.milestoneId) handleClaimExpedition(button.dataset.milestoneId as ExpeditionMilestoneId);
   if (action === 'share-squad') await handleShareSquad();
   if (action === 'buy-pack') { const result = await store.purchase('starter-star-ticket-pack'); if (result === 'success') { commit({ ...save, starTickets: save.starTickets + 60 }); notice = '模拟购买成功：固定获得 60 星票。'; render(); } }
-  if (action === 'reset-save') { window.localStorage.removeItem(SAVE_KEY); window.localStorage.removeItem(SOCIAL_SAVE_KEY); window.location.reload(); }
+  if (action === 'reset-save') { window.localStorage.removeItem(SAVE_KEY); window.localStorage.removeItem(SOCIAL_SAVE_KEY); window.localStorage.removeItem(CAMPAIGN_SAVE_KEY); window.location.reload(); }
+});
+
+app.addEventListener('submit', (event) => {
+  const form = event.target as HTMLFormElement;
+  if (form.id !== 'gift-code-form') return;
+  event.preventDefault();
+  const rawCode = new FormData(form).get('giftCode');
+  handleGiftCodeRedeem(typeof rawCode === 'string' ? rawCode : '');
 });
 
 render();
