@@ -4,3 +4,4 @@ temp/
 library/
 local/
 .worktrees/
+*.vite-preview*.log

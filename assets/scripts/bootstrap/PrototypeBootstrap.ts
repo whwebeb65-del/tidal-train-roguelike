@@ -1,4 +1,4 @@
-import { _decorator, Component } from 'cc';
+import { _decorator, Component, director } from 'cc';
 
 const { ccclass } = _decorator;
 
@@ -6,5 +6,6 @@ const { ccclass } = _decorator;
 export class PrototypeBootstrap extends Component {
   start(): void {
     this.node.name = 'PrototypeRoot';
+    director.addPersistRootNode(this.node);
   }
 }
