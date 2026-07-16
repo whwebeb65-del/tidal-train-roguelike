@@ -149,6 +149,8 @@ import {
   PROTOTYPE_REROLL,
   renderEquipment,
 } from './views/EquipmentView';
+import { renderLaunchCampaignView } from './views/LaunchCampaignView';
+import { renderSocialHubView } from './views/SocialHubView';
 import './styles.css';
 
 const SAVE_KEY = 'tidal-train-prototype-save-v1';
@@ -501,86 +503,39 @@ function formatCommerceReward(reward: ProductReward): string {
 }
 
 function renderLaunchCampaignCenter(): string {
-  const betaAction = !campaignState.betaQualified
-    ? '<button class="primary" data-action="apply-beta">申请内测资格</button>'
-    : !campaignState.betaGiftClaimed
-      ? '<button class="primary" data-action="claim-beta-gift">领取先行者补给</button>'
-      : '<button class="primary" disabled>先行者补给已领取</button>';
-  const launchAction = campaignState.launchGiftClaimed
-    ? '<button class="primary" disabled>开服礼已领取</button>'
-    : '<button class="primary" data-action="claim-launch-gift">领取开服列车长礼</button>';
-  const badgeNames = campaignState.cosmeticBadgeIds.map((badgeId) => (
-    badgeId === 'beta-pioneer' ? '潮汐先行者' : '开服列车长'
-  ));
-  const badges = badgeNames.length > 0
-    ? badgeNames.map((name) => `<span>✦ ${name}</span>`).join('')
-    : '<small>尚未获得开服纪念徽章</small>';
-
-  return `<section class="launch-campaign">
-    <div class="campaign-heading">
-      <div><span class="eyebrow">FOUNDERS / 3,000</span><h2>首班预约中心</h2><p>原型活动开放中：申请限量内测资格，领取开服礼，并核验公开礼包码。实时名额与正式资产将由服务端结算。</p></div>
-      <span class="campaign-status">${campaignState.betaQualified ? '内测资格已锁定' : '内测申请开放'}</span>
-    </div>
-    <div class="campaign-grid">
-      <article class="campaign-card beta-card">
-        <span class="campaign-card-mark">BETA</span><small>限量 3,000 席 · 单账号资格</small><h3>${campaignState.betaQualified ? '你已登上先行名单' : '潮汐先行者招募'}</h3>
-        <p>资格不提供永久战力，只开放一次先行者补给与身份徽章。</p>
-        <div class="campaign-rewards"><span>60 齿轮</span><span>2 航线徽记</span><span>1 星票</span></div>${betaAction}
-      </article>
-      <article class="campaign-card launch-card">
-        <span class="campaign-card-mark">LAUNCH</span><small>开服活动期 · 全体玩家一次</small><h3>开服列车长礼</h3>
-        <p>一次性高价值启航资源，帮助新玩家更快解锁车站和下一段航线。</p>
-        <div class="campaign-rewards"><span>188 齿轮</span><span>6 航线徽记</span><span>3 星票</span></div>${launchAction}
-      </article>
-    </div>
-    <div class="campaign-badges"><b>开服身份</b>${badges}</div>
-    <form id="gift-code-form" class="gift-code-form" autocomplete="off">
-      <label><span>礼包码兑换</span><input name="giftCode" maxlength="24" placeholder="输入礼包码" aria-label="礼包码"></label>
-      <button class="secondary" type="submit">兑换礼包码</button>
-      <small>公开测试码：<b>TIDE2026</b> · 已兑换 ${campaignState.redeemedCodeIds.length}/${GIFT_CODE_CATALOG.length}</small>
-    </form>
-  </section>`;
+  return renderLaunchCampaignView({
+    betaApplied: campaignState.betaQualified,
+    betaGiftClaimed: campaignState.betaGiftClaimed,
+    launchGiftClaimed: campaignState.launchGiftClaimed,
+    badges: campaignState.cosmeticBadgeIds.map((badgeId) => (
+      badgeId === 'beta-pioneer' ? '潮汐先行者' : '开服列车长'
+    )),
+    giftCodeHint: GIFT_CODE_CATALOG[0]?.code ?? '',
+  });
 }
 
 function renderSocialHub(): string {
-  if (!socialState.legionId) {
-    return `<section id="legion-center" class="social-hub social-intro">
-      <div><span class="eyebrow">CO-OP / ${socialState.cycleId}</span><h2>联合作战中心</h2><p>加入异步军团，选择两名队友支援单局，并用每次结算推进共同远征。</p></div>
-      <button class="primary" data-action="join-legion">加入「潮汐灯塔团」</button>
-    </section>`;
-  }
-
-  const supportCards = SUPPORT_ROSTER.map((support) => {
-    const selected = socialState.squadMemberIds.includes(support.id);
-    return `<button class="support-card ${selected ? 'selected' : ''}" data-action="toggle-support" data-support-id="${support.id}">
-      <span class="support-avatar">${support.id === 'navigator' ? '航' : support.id === 'gunner' ? '炮' : '修'}</span>
-      <span class="support-copy"><small>${support.role}</small><b>${support.displayName}</b><em>${support.description}</em></span>
-      <strong>${selected ? '已上车' : '选择'}</strong>
-    </button>`;
-  }).join('');
-  const milestones = EXPEDITION_MILESTONES.map((milestone) => {
-    const claimed = socialState.claimedMilestoneIds.includes(milestone.id);
-    const reached = socialState.contribution >= milestone.threshold;
-    const progress = Math.min(socialState.contribution, milestone.threshold);
-    return `<article class="expedition-milestone ${reached ? 'reached' : ''}">
-      <span><small>${progress}/${milestone.threshold}</small><b>${milestone.label}</b><em>${formatExpeditionReward(milestone.reward)}</em></span>
-      <button class="chip" data-action="claim-expedition" data-milestone-id="${milestone.id}" ${claimed || !reached ? 'disabled' : ''}>${claimed ? '已领取' : reached ? '领取' : '未达成'}</button>
-    </article>`;
-  }).join('');
-  const bonuses = getSquadBonuses(socialState);
-  const supportSummary = [
-    bonuses.initialMomentum ? `开场动能 +${bonuses.initialMomentum}` : '',
-    bonuses.damageBonus ? `行动伤害 +${bonuses.damageBonus}` : '',
-    bonuses.maxPlayerHpBonus ? `最大生命 +${bonuses.maxPlayerHpBonus}` : '',
-  ].filter(Boolean).join(' · ') || '尚未选择支援';
-
-  return `<section id="legion-center" class="social-hub">
-    <div class="social-heading"><div><span class="eyebrow">LEGION / ${socialState.cycleId}</span><h2>潮汐灯塔团</h2><p>异步远征不要求队友同时在线；正式服贡献和奖励由服务端校验。</p></div><button class="chip" data-action="share-squad" ${squadSharePending ? 'disabled' : ''}>${squadSharePending ? '生成招募卡中…' : '分享列车队招募卡'}</button></div>
-    <div class="expedition-progress"><div><span>本周远征贡献</span><b>${socialState.contribution} / 100</b></div><div class="progress"><i style="width:${Math.min(100, socialState.contribution)}%"></i></div></div>
-    <div class="expedition-milestones">${milestones}</div>
-    <div class="section-title"><h2>异步列车队</h2><span>${socialState.squadMemberIds.length}/2 名支援 · ${supportSummary}</span></div>
-    <div class="support-grid">${supportCards}</div>
-  </section>`;
+  return renderSocialHubView({
+    cycleId: socialState.cycleId,
+    legionId: socialState.legionId,
+    contribution: socialState.contribution,
+    milestones: EXPEDITION_MILESTONES.map((milestone) => ({
+      id: milestone.id,
+      label: milestone.label,
+      threshold: milestone.threshold,
+      progress: Math.min(socialState.contribution, milestone.threshold),
+      claimed: socialState.claimedMilestoneIds.includes(milestone.id),
+      rewardLabel: formatExpeditionReward(milestone.reward),
+    })),
+    supports: SUPPORT_ROSTER.map((support) => ({
+      id: support.id,
+      name: support.displayName,
+      role: support.role,
+      effect: support.description,
+      selected: socialState.squadMemberIds.includes(support.id),
+    })),
+    sharePending: squadSharePending,
+  });
 }
 
 function renderStation(): string {

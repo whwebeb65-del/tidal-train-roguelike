@@ -21,6 +21,8 @@
   .equipment-layout { grid-template-columns: 1fr; }
 
   .wardrobe-preview { position: static; }
+  .system-card__grid { grid-template-columns: 1fr; }
+  .system-card__heading { flex-direction: column; }
 }
 
 @media (max-width: 430px) {

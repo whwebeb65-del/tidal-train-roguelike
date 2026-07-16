@@ -30,7 +30,7 @@ export function renderCommerceStore(model: CommerceStoreModel): string {
     const owned = model.purchasedProductIds.includes(product.id);
     const pending = model.pendingProductId === product.id;
     const label = owned ? '已拥有' : pending ? '验单中…' : `模拟购买 · ${product.displayPrice}`;
-    return `<article class="commerce-card ${owned ? 'owned' : ''}">
+    return `<article class="system-card__item commerce-card ${owned ? 'owned' : ''}">
       <div class="commerce-card-heading"><span class="commerce-price">${product.displayPrice}</span><small>${product.oneTime ? '一次性商品' : '可重复购买'}</small></div>
       <h3>${product.name}</h3>
       <p>${product.description}</p>
@@ -39,9 +39,9 @@ export function renderCommerceStore(model: CommerceStoreModel): string {
     </article>`;
   }).join('');
 
-  return `<section class="commerce-store">
-    <div class="commerce-heading"><div><span class="eyebrow">SUPPLY / VERIFIED</span><h2>航线补给站</h2><p>内容与价格购买前完整展示；当前为 Mock 验单，不发生真实扣款。</p></div><span>确定性内容 · 属性购买前完整展示</span></div>
-    <div class="commerce-grid">${cards}</div>
+  return `<section class="system-card system-card--commerce deferred-section commerce-store">
+    <div class="system-card__heading commerce-heading"><div><span class="eyebrow">SUPPLY / VERIFIED</span><h2>航线补给站</h2><p>内容与价格购买前完整展示；当前为 Mock 验单，不发生真实扣款。</p></div><span class="system-card__badge">确定性内容 · 属性购买前完整展示</span></div>
+    <div class="system-card__grid commerce-grid">${cards}</div>
     <div class="note">正式服只在平台服务端验单成功后发货，客户端回调不能直接修改资产。</div>
   </section>`;
 }
