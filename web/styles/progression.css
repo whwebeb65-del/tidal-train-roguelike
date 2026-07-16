@@ -1,0 +1,91 @@
+.captain-choice-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: clamp(14px, 3vw, 26px);
+  width: min(920px, 100%);
+  margin: 28px auto 0;
+}
+
+.captain-choice-card {
+  position: relative;
+  display: grid;
+  grid-template-rows: minmax(320px, 1fr) auto;
+  overflow: hidden;
+  min-height: 510px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  color: var(--pearl-100);
+  background: linear-gradient(180deg, #174356, #0a222f);
+  box-shadow: var(--shadow-soft);
+  text-align: left;
+}
+
+.captain-choice-card img {
+  align-self: end;
+  width: 100%;
+  height: 390px;
+  object-fit: contain;
+  object-position: center bottom;
+  transition: transform .22s ease;
+}
+
+.captain-choice-card:hover img { transform: translateY(-4px); }
+
+.captain-choice-card > span {
+  display: grid;
+  gap: 3px;
+  padding: 18px 20px 20px;
+  border-top: 1px solid var(--line);
+  background: rgb(7 29 43 / 92%);
+}
+
+.captain-choice-card small { color: var(--seafoam-300); }
+.captain-choice-card b { font-size: 22px; }
+.captain-choice-card em { color: #a9c0c7; font-style: normal; }
+
+.wardrobe-layout,
+.equipment-layout {
+  display: grid;
+  grid-template-columns: minmax(240px, .72fr) minmax(0, 1.28fr);
+  gap: 20px;
+}
+
+.skin-card,
+.equipment-card,
+.equipment-slot,
+.collection-stats,
+.set-bonus {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--panel);
+}
+
+.skin-card,
+.equipment-card { padding: 14px; }
+
+.skin-card.is-owned,
+.equipment-card.is-equipped { border-color: var(--seafoam-500); }
+
+.skin-card img {
+  width: 100%;
+  height: 240px;
+  object-fit: contain;
+}
+
+.collection-stats,
+.set-bonus { padding: 18px; }
+
+.equipment-slot {
+  display: grid;
+  place-items: center;
+  min-height: 110px;
+  padding: 12px;
+  border-style: dashed;
+}
+
+.equipment-card h3,
+.skin-card h3 { margin: 8px 0 4px; }
+
+.equipment-card p,
+.skin-card p { color: #a9c0c7; }
