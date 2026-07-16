@@ -58,7 +58,7 @@ describe('SaveRepository', () => {
     });
 
     expect(migrated).toMatchObject({
-      version: 2,
+      version: 3,
       gears: 90,
       stationLevel: 2,
       purchasedProductIds: [],
@@ -83,5 +83,47 @@ describe('SaveRepository', () => {
     expect(repository.load().purchasedProductIds).toEqual(['starter-star-ticket-pack']);
     expect(repository.load().processedTransactionIds).toEqual(['tx-1']);
     expect(repository.load().ownedCosmeticIds).toEqual(['deep-sea-engine']);
+  });
+
+  it('migrates a version 2 save into captain, skin, and equipment progress', () => {
+    const migrated = normalizePlayerSave({
+      version: 2,
+      gears: 250,
+      routeMarks: 12,
+      starTickets: 3,
+      stationLevel: 2,
+      unlockedPassengerIds: ['otter-mechanic'],
+      unlockedModuleIds: ['pressure-cannon'],
+      unlockedMapIds: ['drift-suburb', 'coral-furnace'],
+      firstClearMapIds: ['drift-suburb'],
+      claimedInteractionIds: ['run-1:salvage-a:0'],
+      purchasedProductIds: ['starter-star-ticket-pack'],
+      processedTransactionIds: ['tx-old-1'],
+      ownedCosmeticIds: ['deep-sea-engine'],
+    });
+
+    expect(migrated.version).toBe(3);
+    expect(migrated.selectedCaptainId).toBeNull();
+    expect(migrated.ownedSkinIds).toEqual(['skin-tide-base']);
+    expect(migrated.equipmentInventory).toHaveLength(4);
+    expect(Object.values(migrated.equippedEquipmentIds).filter(Boolean)).toHaveLength(0);
+    expect(migrated.equipmentFragments).toEqual({});
+    expect(migrated.ownedCosmeticIds).toEqual(['deep-sea-engine']);
+  });
+
+  it('deep copies progression collections', () => {
+    const repository = createMemorySaveRepository();
+    const save = repository.load();
+    save.ownedSkinIds.push('skin-aurora-whale-song');
+    save.equipmentFragments['tide-cannon'] = 10;
+    repository.save(save);
+    save.ownedSkinIds.push('mutation');
+    save.equipmentFragments['tide-cannon'] = 999;
+
+    expect(repository.load().ownedSkinIds).toEqual([
+      'skin-tide-base',
+      'skin-aurora-whale-song',
+    ]);
+    expect(repository.load().equipmentFragments['tide-cannon']).toBe(10);
   });
 });
