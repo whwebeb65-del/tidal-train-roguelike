@@ -6,6 +6,7 @@ export type SceneDirection = 'forward' | 'back' | 'replace';
 export interface SceneRouterOptions {
   readonly transitionMs: number;
   readonly reducedMotion: boolean;
+  readonly onSceneChanged?: (sceneId: SceneId) => void;
 }
 
 export class SceneRouter {
@@ -36,6 +37,8 @@ export class SceneRouter {
     this.host.dataset.sceneDirection = direction;
     this.host.classList.add('scene-host--entering');
     await next.mount(this.host);
+    if (token !== this.transitionToken) return;
+    this.options.onSceneChanged?.(sceneId);
 
     if (!this.options.reducedMotion && this.options.transitionMs > 0) {
       await new Promise<void>((resolve) => {

@@ -95,4 +95,23 @@ describe('SceneRouter', () => {
 
     expect(calls).toEqual(['mount', 'mount']);
   });
+
+  it('reports a completed scene change once and ignores refreshes', async () => {
+    const changes: string[] = [];
+    const scene: GameScene = {
+      id: 'station',
+      mount() {},
+      unmount() {},
+    };
+    const router = new SceneRouter(createHost(), () => scene, {
+      transitionMs: 0,
+      reducedMotion: true,
+      onSceneChanged: (sceneId) => changes.push(sceneId),
+    });
+
+    await router.go('station', 'replace');
+    await router.refresh();
+
+    expect(changes).toEqual(['station']);
+  });
 });

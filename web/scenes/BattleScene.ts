@@ -354,6 +354,7 @@ export class BattleScene implements GameScene {
 
   private renderBattle(): void {
     if (!this.host || !this.canvas || !this.renderer || !this.hud) return;
+    this.sound.update?.(this.lastFrameTimeMs);
     this.refreshViewport();
     const viewport = this.viewport;
     if (!viewport) return;

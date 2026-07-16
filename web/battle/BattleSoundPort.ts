@@ -10,6 +10,7 @@ export type BattleSoundPhase =
   | 'defeat';
 
 export interface BattleSoundPort {
+  update?(nowMs: number): void;
   consume(
     events: readonly BattleEvent[],
     frame: BattleFrameView,
@@ -21,6 +22,7 @@ export interface BattleSoundPort {
 }
 
 export const SILENT_BATTLE_SOUND: BattleSoundPort = {
+  update() {},
   consume() {},
   setBattlePhase() {},
   pause() {},

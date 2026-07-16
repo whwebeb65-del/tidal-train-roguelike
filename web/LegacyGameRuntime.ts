@@ -140,6 +140,7 @@ import { EffectSystem } from './battle/EffectSystem';
 import { BattleHUD } from './battle/BattleHUD';
 import { BattleRenderer } from './battle/BattleRenderer';
 import type { BattleOutcome } from './battle/BattleTypes';
+import type { AudioManager } from './audio/AudioManager';
 import { renderLaunchCampaignView } from './views/LaunchCampaignView';
 import { renderSocialHubView } from './views/SocialHubView';
 import { mountAppShell } from './app/AppShell';
@@ -161,6 +162,7 @@ export function createLegacyGameRuntime(
   app: HTMLElement,
   storage: Storage,
   reducedMotion: boolean,
+  audio: AudioManager,
 ): LegacyGameRuntime {
 const appStateRepository = createBrowserAppStateRepository(storage);
 const initialState = appStateRepository.load();
@@ -252,14 +254,49 @@ const sceneFactory: SceneFactory = (sceneId) => {
     createHud: (callbacks) => new BattleHUD(callbacks),
     captainArtId: getActiveCaptainArtId(),
     reducedMotion,
+    sound: audio,
   });
 };
 const router = new SceneRouter(shell.sceneHost, sceneFactory, {
   transitionMs: 220,
   reducedMotion,
+  onSceneChanged: (sceneId) => {
+    audio.playSound('scene-open');
+    if (sceneId === 'battle') {
+      stopStationAudioLoop();
+      return;
+    }
+    audio.setMusicCue('station');
+    startStationAudioLoop();
+  },
 });
 let renderQueue = Promise.resolve();
 let started = false;
+let stationAudioFrameId: number | null = null;
+
+function stationAudioFrame(nowMs: number): void {
+  stationAudioFrameId = null;
+  if (!started || router.currentSceneId === 'battle') return;
+  audio.update(nowMs);
+  startStationAudioLoop();
+}
+
+function startStationAudioLoop(): void {
+  if (
+    stationAudioFrameId !== null
+    || !started
+    || router.currentSceneId === 'battle'
+  ) {
+    return;
+  }
+  stationAudioFrameId = window.requestAnimationFrame(stationAudioFrame);
+}
+
+function stopStationAudioLoop(): void {
+  if (stationAudioFrameId === null) return;
+  window.cancelAnimationFrame(stationAudioFrameId);
+  stationAudioFrameId = null;
+}
 
 function commit(next: PlayerSave): void {
   save = next;
@@ -695,9 +732,13 @@ async function startRun(
   }
 
   battleStartPending = true;
-  notice = '正在装载列车、潮兽与战斗特效……';
-  render();
   try {
+    const audioReady = await audio.unlockFromGesture();
+    if (audioReady) audio.playSound('ui-tap');
+    notice = audioReady
+      ? '正在装载列车、潮兽与战斗特效……'
+      : '当前浏览器未启用声音，游戏仍可正常游玩。正在装载战斗……';
+    render();
     if (!battleAssets) battleAssets = await battleAssetLoader.loadAll();
     if (runId) {
       track('run_restart', { afterAdRevive: lastRunRecovery === 'ad' });
@@ -1530,6 +1571,7 @@ const onClick = async (event: Event): Promise<void> => {
   const target = event.target as HTMLElement;
   const navigation = target.closest<HTMLButtonElement>('[data-nav-scene]');
   if (navigation?.dataset.navScene && phase === 'station') {
+    audio.playSound('ui-tap');
     hubView = navigation.dataset.navScene as HubView;
     render();
     return;
@@ -1537,6 +1579,9 @@ const onClick = async (event: Event): Promise<void> => {
   const button = target.closest<HTMLButtonElement>('[data-action]');
   if (!button) return;
   const action = button.dataset.action;
+  if (action !== 'start-run' && action !== 'start-daily-trial') {
+    audio.playSound('ui-tap');
+  }
   if (action === 'select-captain' && button.dataset.captainId) {
     const profile = selectCaptain(save, button.dataset.captainId as CaptainId);
     commit({ ...save, ...profile });
@@ -1627,6 +1672,7 @@ return {
   destroy(): void {
     if (!started) return;
     started = false;
+    stopStationAudioLoop();
     app.removeEventListener('click', onClick);
     app.removeEventListener('submit', onSubmit);
     router.destroy();
