@@ -32,6 +32,16 @@ import type {
   PauseReason,
 } from '../battle/BattleTypes';
 import { requireElement } from '../app/dom';
+import type {
+  QualityPreference,
+} from '../app/SettingsRepository';
+import {
+  getRenderBudget,
+  QualityMonitor,
+  type QualityChange,
+  type QualityLevel,
+  type RenderBudget,
+} from '../battle/QualityMonitor';
 import type { GameScene } from './Scene';
 
 export interface FrameScheduler {
@@ -64,6 +74,7 @@ export interface BattleEffectPort {
   update(deltaMs: number): void;
   reset(): void;
   setReducedMotion?(reducedMotion: boolean): void;
+  setRenderBudget?(budget: RenderBudget): void;
 }
 
 export interface BattleRendererPort {
@@ -90,6 +101,7 @@ export interface BattleSceneCallbacks {
   ): Promise<BattleSettlementPresentation | null>;
   onGiveUp(outcome: BattleOutcome): BattleSettlementPresentation;
   onExit(): void;
+  onQualityChanged?(change: QualityChange): void;
 }
 
 export interface BattleSceneDependencies {
@@ -104,6 +116,7 @@ export interface BattleSceneDependencies {
   readonly createHud: (callbacks: BattleHudCallbacks) => BattleHudPort;
   readonly captainArtId: BattleArtId;
   readonly reducedMotion: boolean;
+  readonly qualityPreference?: QualityPreference;
   readonly sound?: BattleSoundPort;
   readonly scheduler?: FrameScheduler;
   readonly timerScheduler?: TimerScheduler;
@@ -152,6 +165,7 @@ export class BattleScene implements GameScene {
   private frameLoopPaused = false;
   private upgradeTimerId: ReturnType<typeof setTimeout> | null = null;
   private lastFrameTimeMs = 0;
+  private lastQualityFrameTimeMs: number | null = null;
   private lifecycleVersion = 0;
   private visibilityPaused = false;
   private queuedSkillRefresh = false;
@@ -160,10 +174,23 @@ export class BattleScene implements GameScene {
   private settlement: BattleSettlementPresentation | null = null;
   private interactionNotice = '';
   private reducedMotion: boolean;
+  private readonly qualityMonitor: QualityMonitor;
+  private renderBudget: RenderBudget;
 
   private readonly frameCallback: FrameRequestCallback = (timeMs): void => {
     if (!this.host || !this.loop) return;
     this.frameRequestId = null;
+    const previousQualityFrameTimeMs = this.lastQualityFrameTimeMs;
+    this.lastQualityFrameTimeMs = timeMs;
+    if (previousQualityFrameTimeMs !== null) {
+      const change = this.qualityMonitor.recordFrame(
+        timeMs - previousQualityFrameTimeMs,
+      );
+      if (change) {
+        this.applyRenderBudget(change.to);
+        this.dependencies.callbacks.onQualityChanged?.(change);
+      }
+    }
     this.lastFrameTimeMs = timeMs;
     this.loop.frame(timeMs);
     if (this.host && !this.frameLoopPaused) {
@@ -179,6 +206,11 @@ export class BattleScene implements GameScene {
     private readonly dependencies: BattleSceneDependencies,
   ) {
     this.reducedMotion = dependencies.reducedMotion;
+    this.qualityMonitor = new QualityMonitor(
+      dependencies.qualityPreference ?? 'auto',
+    );
+    this.renderBudget = getRenderBudget(this.qualityMonitor.level);
+    dependencies.effects.setRenderBudget?.(this.renderBudget);
     this.sound = dependencies.sound ?? SILENT_BATTLE_SOUND;
     this.scheduler = dependencies.scheduler ?? BROWSER_FRAME_SCHEDULER;
     this.timerScheduler =
@@ -252,6 +284,12 @@ export class BattleScene implements GameScene {
   public setReducedMotion(reducedMotion: boolean): void {
     this.reducedMotion = reducedMotion;
     this.dependencies.effects.setReducedMotion?.(reducedMotion);
+  }
+
+  public setQualityPreference(preference: QualityPreference): void {
+    const level = this.qualityMonitor.setPreference(preference);
+    this.applyRenderBudget(level);
+    this.renderBattle();
   }
 
   public pauseForVisibility(): void {
@@ -345,6 +383,7 @@ export class BattleScene implements GameScene {
       captainArtId: this.dependencies.captainArtId,
       timeMs: this.lastFrameTimeMs,
       reducedMotion: this.reducedMotion,
+      renderBudget: this.renderBudget,
     });
     this.hud.update(createBattleHudModel(
       this.dependencies.engine.frame,
@@ -375,6 +414,7 @@ export class BattleScene implements GameScene {
     this.frameLoopPaused = false;
     this.loop.start();
     this.lastFrameTimeMs = 0;
+    this.lastQualityFrameTimeMs = null;
     this.frameRequestId = this.scheduler.request(this.frameCallback);
   }
 
@@ -385,6 +425,15 @@ export class BattleScene implements GameScene {
       this.frameRequestId = null;
     }
     this.loop?.stop();
+    this.lastQualityFrameTimeMs = null;
+  }
+
+  private applyRenderBudget(level: QualityLevel): void {
+    const next = getRenderBudget(level);
+    if (next === this.renderBudget) return;
+    this.renderBudget = next;
+    this.dependencies.effects.setRenderBudget?.(next);
+    this.viewport = null;
   }
 
   private refreshViewport(): void {
@@ -396,7 +445,10 @@ export class BattleScene implements GameScene {
       cssWidth,
       cssHeight,
       devicePixelRatio: Math.max(1, this.getDevicePixelRatio()),
-      maxDevicePixelRatio: this.maxDevicePixelRatio,
+      maxDevicePixelRatio: Math.min(
+        this.maxDevicePixelRatio,
+        this.renderBudget.dprCap,
+      ),
     });
     resizeCanvas(this.canvas, this.viewport);
   }

@@ -20,6 +20,9 @@ import {
 import type {
   BattleFrameView,
 } from '../../../../web/battle/BattleTypes';
+import {
+  getRenderBudget,
+} from '../../../../web/battle/QualityMonitor';
 
 export function createFrameFixture(
   patch: Partial<BattleFrameView> = {},
@@ -155,6 +158,7 @@ export function createPresentationFixture(input: {
     timeMs: 42_000,
     reducedMotion: input.reducedMotion ?? false,
     effects: input.effects ?? EMPTY_EFFECT_FRAME_VIEW,
+    renderBudget: getRenderBudget('high'),
   };
 }
 

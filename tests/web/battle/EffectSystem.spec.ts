@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { EffectSystem } from '../../../web/battle/EffectSystem';
+import { getRenderBudget } from '../../../web/battle/QualityMonitor';
 import { createFrameFixture } from './helpers/BattleFixtures';
 
 describe('EffectSystem', () => {
@@ -92,5 +93,19 @@ describe('EffectSystem', () => {
     expect(effects.view.particles).toHaveLength(0);
     expect(effects.view.damageNumbers).toHaveLength(0);
     expect(effects.view.rings).toHaveLength(0);
+  });
+
+  it('reduces effect acquisition immediately when the render budget drops', () => {
+    const effects = new EffectSystem({
+      particleLimit: 200,
+      damageNumberLimit: 18,
+      reducedMotion: false,
+    });
+    effects.setRenderBudget(getRenderBudget('low'));
+
+    effects.consume([{ type: 'battle-won' }], createFrameFixture());
+
+    expect(effects.view.particles.length).toBeLessThanOrEqual(8);
+    expect(effects.poolStats.particles.created).toBeLessThanOrEqual(8);
   });
 });

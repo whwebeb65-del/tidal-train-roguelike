@@ -7,6 +7,7 @@ import {
   EntityPool,
   type EntityPoolStats,
 } from './EntityPool';
+import type { RenderBudget } from './QualityMonitor';
 
 export type EffectParticleKind =
   | 'muzzle'
@@ -159,26 +160,33 @@ export class EffectSystem {
   private lastEventX = 195;
   private lastEventY = 360;
   private reducedMotion: boolean;
+  private particleLimit: number;
+  private damageNumberLimit: number;
+  private impactLimit: number;
+  private particleSpawnScale = 1;
 
-  public constructor(private readonly options: EffectSystemOptions) {
+  public constructor(options: EffectSystemOptions) {
     assertLimit(options.particleLimit, 'Particle limit');
     assertLimit(options.damageNumberLimit, 'Damage number limit');
     assertLimit(options.impactLimit ?? 24, 'Impact limit');
     this.reducedMotion = options.reducedMotion;
+    this.particleLimit = options.particleLimit;
+    this.damageNumberLimit = options.damageNumberLimit;
+    this.impactLimit = options.impactLimit ?? 24;
     this.particlePool = new EntityPool(
       createParticle,
       resetParticle,
-      options.particleLimit,
+      Math.max(200, options.particleLimit),
     );
     this.damageNumberPool = new EntityPool(
       createDamageNumber,
       resetDamageNumber,
-      options.damageNumberLimit,
+      Math.max(18, options.damageNumberLimit),
     );
     this.ringPool = new EntityPool(
       createImpactRing,
       resetImpactRing,
-      options.impactLimit ?? 24,
+      Math.max(24, options.impactLimit ?? 24),
     );
   }
 
@@ -196,6 +204,17 @@ export class EffectSystem {
       this.cameraAmplitude = 0;
       this.cameraRemainingMs = 0;
     }
+  }
+
+  public setRenderBudget(budget: RenderBudget): void {
+    assertLimit(budget.particles, 'Particle budget');
+    assertLimit(budget.damageNumbers, 'Damage number budget');
+    assertLimit(budget.impactRings, 'Impact ring budget');
+    this.particleLimit = budget.particles;
+    this.damageNumberLimit = budget.damageNumbers;
+    this.impactLimit = budget.impactRings;
+    this.particleSpawnScale = Math.min(1, budget.particles / 200);
+    this.trim();
   }
 
   public get view(): EffectFrameView {
@@ -493,7 +512,10 @@ export class EffectSystem {
     priority: number,
     layer: EffectParticleView['layer'],
   ): void {
-    for (let index = 0; index < count; index += 1) {
+    const scaledCount = this.particleLimit <= 0
+      ? 0
+      : Math.max(1, Math.floor(count * this.particleSpawnScale));
+    for (let index = 0; index < scaledCount; index += 1) {
       const id = this.nextId++;
       const angle = id * 2.399963 + index * 0.31;
       const speed = 34 + id % 5 * 13;
@@ -537,6 +559,7 @@ export class EffectSystem {
     value: number,
     critical: boolean,
   ): void {
+    if (this.damageNumberLimit <= 0) return;
     const number = this.damageNumberPool.acquire();
     number.id = this.nextId++;
     number.x = x;
@@ -556,6 +579,7 @@ export class EffectSystem {
     color = '#cfffff',
     priority = 1,
   ): void {
+    if (this.impactLimit <= 0) return;
     const ring = this.ringPool.acquire();
     ring.id = this.nextId++;
     ring.x = x;
@@ -592,16 +616,16 @@ export class EffectSystem {
   private trim(): void {
     trimByPriority(
       this.particles,
-      this.options.particleLimit,
+      this.particleLimit,
       this.particlePool,
     );
-    while (this.damageNumbers.length > this.options.damageNumberLimit) {
+    while (this.damageNumbers.length > this.damageNumberLimit) {
       const removed = this.damageNumbers.shift();
       if (removed) this.damageNumberPool.release(removed);
     }
     trimByPriority(
       this.rings,
-      this.options.impactLimit ?? 24,
+      this.impactLimit,
       this.ringPool,
     );
   }

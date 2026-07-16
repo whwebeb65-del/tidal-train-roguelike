@@ -410,4 +410,62 @@ describe('BattleScene', () => {
     expect(engine.updateCalls).toBe(2);
     scene.unmount();
   });
+
+  it('applies an adaptive visual budget without changing battle commands', () => {
+    const scheduler = new ManualFrameScheduler();
+    const engine = createEngine();
+    const qualityChanges = vi.fn();
+    const effects = {
+      view: EMPTY_EFFECT_FRAME_VIEW,
+      consume: vi.fn(),
+      update: vi.fn(),
+      reset: vi.fn(),
+      setRenderBudget: vi.fn(),
+    };
+    const renderer = { render: vi.fn() };
+    const { host } = createHost();
+    const scene = new BattleScene({
+      engine,
+      effects,
+      assets: { failedIds: [], get: () => null },
+      callbacks: {
+        ...createCallbacks(),
+        onQualityChanged: qualityChanges,
+      },
+      createRenderer: () => renderer,
+      createHud: () => ({
+        mount: vi.fn(),
+        update: vi.fn(),
+        dispose: vi.fn(),
+      }),
+      scheduler,
+      captainArtId: 'captainFemaleBase',
+      reducedMotion: true,
+      qualityPreference: 'auto',
+      eventTarget: new EventTarget(),
+      getDevicePixelRatio: () => 3,
+    });
+
+    scene.mount(host);
+    scheduler.fire(0);
+    for (let frame = 1; frame <= 240; frame += 1) {
+      scheduler.fire(frame * 24);
+    }
+
+    expect(qualityChanges).toHaveBeenCalledTimes(1);
+    expect(qualityChanges).toHaveBeenCalledWith(
+      expect.objectContaining({ from: 'high', to: 'medium' }),
+    );
+    expect(effects.setRenderBudget).toHaveBeenLastCalledWith(
+      expect.objectContaining({ particles: 130, dprCap: 1.75 }),
+    );
+    expect(renderer.render).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        renderBudget: expect.objectContaining({ dprCap: 1.75 }),
+        viewport: expect.objectContaining({ pixelRatio: 1.75 }),
+      }),
+    );
+    expect(engine.frame.status).toBe('running');
+    scene.unmount();
+  });
 });

@@ -19,6 +19,7 @@ import type {
   EnemyKind,
   EnemyState,
 } from './BattleTypes';
+import type { RenderBudget } from './QualityMonitor';
 
 export interface BattleRenderInput {
   readonly frame: BattleFrameView;
@@ -28,6 +29,7 @@ export interface BattleRenderInput {
   readonly timeMs: number;
   readonly reducedMotion: boolean;
   readonly effects: EffectFrameView;
+  readonly renderBudget: RenderBudget;
 }
 
 const ENEMY_ART: Readonly<Record<EnemyKind, BattleArtId>> = {
@@ -66,6 +68,7 @@ export class BattleRenderer {
     try {
       this.painter.clear('#8edbe7');
       this.drawBackground(input);
+      this.drawBackgroundParticles(input);
       this.drawWaterLanes(input);
       this.drawLoot(input);
       this.drawEnemies(input);
@@ -80,6 +83,29 @@ export class BattleRenderer {
       this.drawCinematicOverlay(input);
     } finally {
       this.painter.end();
+    }
+  }
+
+  private drawBackgroundParticles(input: BattleRenderInput): void {
+    const count = input.renderBudget.backgroundParticles;
+    for (let index = 0; index < count; index += 1) {
+      const timeOffset = input.reducedMotion ? 0 : input.timeMs * 0.018;
+      const y = 844 - ((index * 137 + timeOffset) % 920);
+      const x = (
+        index * 83
+        + Math.sin((input.timeMs + index * 211) / 1300) * 12
+      ) % 390;
+      const radius = 1.4 + index % 4 * 0.55;
+      this.painter.ellipse({
+        kind: 'background-particle',
+        layer: 'water-lanes',
+        x: x < 0 ? x + 390 : x,
+        y,
+        radiusX: radius,
+        radiusY: radius * 1.35,
+        fill: 'rgba(228, 255, 255, 0.72)',
+        alpha: 0.22 + index % 5 * 0.07,
+      });
     }
   }
 
@@ -275,6 +301,7 @@ export class BattleRenderer {
   }
 
   private drawProjectiles(input: BattleRenderInput): void {
+    let visibleTrails = 0;
     for (const projectile of input.frame.projectiles) {
       if (!projectile.active) continue;
       const color = projectile.source === 'volley'
@@ -282,17 +309,22 @@ export class BattleRenderer {
         : projectile.source === 'chain'
           ? '#9aebff'
           : '#efffff';
-      this.painter.line({
-        kind: 'projectile-trail',
-        layer: 'projectiles',
-        points: [
-          { x: projectile.x, y: projectile.y + 14 },
-          { x: projectile.x, y: projectile.y },
-        ],
-        stroke: color,
-        lineWidth: projectile.critical ? 5 : 3,
-        alpha: 0.62,
-      });
+      if (
+        visibleTrails < input.renderBudget.visibleProjectileTrails
+      ) {
+        this.painter.line({
+          kind: 'projectile-trail',
+          layer: 'projectiles',
+          points: [
+            { x: projectile.x, y: projectile.y + 14 },
+            { x: projectile.x, y: projectile.y },
+          ],
+          stroke: color,
+          lineWidth: projectile.critical ? 5 : 3,
+          alpha: 0.62,
+        });
+        visibleTrails += 1;
+      }
       this.painter.ellipse({
         kind: 'projectile',
         layer: 'projectiles',

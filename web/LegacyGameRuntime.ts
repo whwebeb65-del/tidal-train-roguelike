@@ -227,6 +227,7 @@ let activeBattleSettlement: BattleSettlementPresentation | null = null;
 let activeBattleScene: BattleScene | null = null;
 let battleStartPending = false;
 let effectiveReducedMotion = reducedMotion;
+let qualityPreference = settingsBridge.getSettings().qualityPreference;
 let notice = '欢迎登车，先选择一条可以活着回来的路线。';
 const shell = mountAppShell(app, {
   gears: save.gears,
@@ -267,6 +268,14 @@ const sceneFactory: SceneFactory = (sceneId) => {
       onRequestDoubleSettlement: requestBattleDoubleSettlement,
       onGiveUp: settleBattleOutcome,
       onExit: exitBattle,
+      onQualityChanged: (change) => {
+        track('battle_performance_changed', {
+          from: change.from,
+          to: change.to,
+          averageFrameMs:
+            Math.round(change.averageFrameMs * 10) / 10,
+        });
+      },
     },
     createRenderer: (context) => (
       new BattleRenderer(new CanvasPainter(context))
@@ -274,6 +283,7 @@ const sceneFactory: SceneFactory = (sceneId) => {
     createHud: (callbacks) => new BattleHUD(callbacks),
     captainArtId: getActiveCaptainArtId(),
     reducedMotion: effectiveReducedMotion,
+    qualityPreference,
     sound: audio,
   });
   activeBattleScene = scene;
@@ -355,8 +365,10 @@ function applyRuntimeSettings(
   nextReducedMotion: boolean,
 ): void {
   effectiveReducedMotion = nextReducedMotion;
+  qualityPreference = settings.qualityPreference;
   router.setReducedMotion(nextReducedMotion);
   activeBattleScene?.setReducedMotion(nextReducedMotion);
+  activeBattleScene?.setQualityPreference(qualityPreference);
   if (shell.isSettingsOpen()) {
     shell.openSettings({
       settings,

@@ -5,6 +5,7 @@ import {
   createPresentationFixture,
 } from './helpers/BattleFixtures';
 import { createRecordingPainter } from './helpers/RecordingPainter';
+import { getRenderBudget } from '../../../web/battle/QualityMonitor';
 
 describe('BattleRenderer', () => {
   it('draws stable layers and falls back for failed art', () => {
@@ -46,5 +47,36 @@ describe('BattleRenderer', () => {
     );
     expect(trainIndex).toBeGreaterThan(-1);
     expect(captainIndex).toBeGreaterThan(trainIndex);
+  });
+
+  it('scales only decorative particles and trails with visual quality', () => {
+    const painter = createRecordingPainter();
+    const renderer = new BattleRenderer(painter);
+    const budget = {
+      ...getRenderBudget('low'),
+      backgroundParticles: 3,
+      visibleProjectileTrails: 0,
+    };
+
+    renderer.render({
+      ...createPresentationFixture(),
+      renderBudget: budget,
+    });
+
+    expect(
+      painter.commands.filter(
+        (command) => command.kind === 'background-particle',
+      ),
+    ).toHaveLength(3);
+    expect(
+      painter.commands.filter(
+        (command) => command.kind === 'projectile-trail',
+      ),
+    ).toHaveLength(0);
+    expect(
+      painter.commands.filter(
+        (command) => command.kind === 'projectile',
+      ),
+    ).toHaveLength(1);
   });
 });
