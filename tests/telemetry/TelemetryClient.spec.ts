@@ -83,6 +83,35 @@ describe('TelemetryClient', () => {
     expect(telemetry.flush().map((event) => event.name)).toEqual(['daily_check_in_claimed']);
   });
 
+  it('records skin and equipment progression without retaining caller mutations', () => {
+    const telemetry = createMemoryTelemetry();
+    const skinPayload: Record<string, string | number | boolean> = {
+      skinId: 'skin-aurora-whale-song',
+      result: 'verified',
+    };
+    telemetry.track({
+      name: 'skin_purchase_result',
+      runId: 'station',
+      timestampMs: 15,
+      payload: skinPayload,
+    });
+    telemetry.track({
+      name: 'equipment_upgraded',
+      runId: 'station',
+      timestampMs: 16,
+      payload: { definitionId: 'tide-cannon', level: 2 },
+    });
+    skinPayload.result = 'mutated';
+
+    const events = telemetry.flush();
+    expect(events.map((event) => event.name)).toEqual([
+      'skin_purchase_result',
+      'equipment_upgraded',
+    ]);
+    expect(events[0]?.payload.result).toBe('verified');
+    expect(JSON.stringify(events)).not.toContain('secret');
+  });
+
   it('records the commerce and rewarded-ad funnel without sensitive payment data', () => {
     const telemetry = createMemoryTelemetry();
     telemetry.track({ name: 'store_viewed', runId: 'station', timestampMs: 20, payload: { productCount: 2 } });

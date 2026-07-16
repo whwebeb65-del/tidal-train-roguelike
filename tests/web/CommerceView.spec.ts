@@ -14,6 +14,11 @@ describe('CommerceView', () => {
     expect(html).toContain('¥6');
     expect(html).toContain('固定获得 60 星票');
     expect(html).toContain('深海引擎涂装');
+    expect(html).toContain('极光鲸歌列车长套装');
+    expect(html).toContain('男女列车长皮肤');
+    expect(html).toContain('确定性装备 × 4');
+    expect(html).toContain('确定性内容 · 属性购买前完整展示');
+    expect(html).not.toContain('不卖随机胜率');
     expect(html).not.toContain('概率');
   });
 

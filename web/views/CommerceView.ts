@@ -7,11 +7,21 @@ export interface CommerceStoreModel {
 }
 
 function formatReward(product: ProductDefinition): string {
+  const equipmentFragmentCount = Object.values(
+    product.reward.equipmentFragments,
+  ).reduce((total, amount) => total + amount, 0);
   return [
     product.reward.gears > 0 ? `${product.reward.gears} 齿轮` : '',
     product.reward.routeMarks > 0 ? `${product.reward.routeMarks} 航线徽记` : '',
     product.reward.starTickets > 0 ? `${product.reward.starTickets} 星票` : '',
     ...product.reward.cosmeticIds.map(() => '非战力外观'),
+    product.reward.skinIds.length > 0 ? '男女列车长皮肤' : '',
+    product.reward.equipmentDefinitionIds.length > 0
+      ? `确定性装备 × ${product.reward.equipmentDefinitionIds.length}`
+      : '',
+    equipmentFragmentCount > 0
+      ? `装备碎片 × ${equipmentFragmentCount}`
+      : '',
   ].filter(Boolean).join(' · ');
 }
 
@@ -30,7 +40,7 @@ export function renderCommerceStore(model: CommerceStoreModel): string {
   }).join('');
 
   return `<section class="commerce-store">
-    <div class="commerce-heading"><div><span class="eyebrow">SUPPLY / VERIFIED</span><h2>航线补给站</h2><p>内容与价格购买前完整展示；当前为 Mock 验单，不发生真实扣款。</p></div><span>确定性商品 · 不卖随机胜率</span></div>
+    <div class="commerce-heading"><div><span class="eyebrow">SUPPLY / VERIFIED</span><h2>航线补给站</h2><p>内容与价格购买前完整展示；当前为 Mock 验单，不发生真实扣款。</p></div><span>确定性内容 · 属性购买前完整展示</span></div>
     <div class="commerce-grid">${cards}</div>
     <div class="note">正式服只在平台服务端验单成功后发货，客户端回调不能直接修改资产。</div>
   </section>`;

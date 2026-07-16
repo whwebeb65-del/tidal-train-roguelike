@@ -1,5 +1,8 @@
 import type { PurchaseResult } from '../../platform/PlatformContracts';
 import { createMemorySaveRepository, type PlayerSave } from '../../save/SaveRepository';
+import { getEquipmentDefinition } from '../equipment/EquipmentCatalog';
+import type { EquipmentInstance } from '../equipment/EquipmentSystem';
+import { normalizeOwnedSkinIds } from '../skin/SkinCollectionSystem';
 import { getProductDefinition, type ProductReward } from './ProductCatalog';
 
 export type PurchaseFailureReason =
@@ -21,6 +24,9 @@ const EMPTY_REWARD: ProductReward = {
   routeMarks: 0,
   starTickets: 0,
   cosmeticIds: [],
+  skinIds: [],
+  equipmentDefinitionIds: [],
+  equipmentFragments: {},
 };
 
 function cloneSave(save: PlayerSave): PlayerSave {
@@ -32,7 +38,17 @@ function reject(save: PlayerSave, reason: PurchaseFailureReason): PurchaseSettle
     accepted: false,
     reason,
     save: cloneSave(save),
-    reward: { ...EMPTY_REWARD, cosmeticIds: [] },
+    reward: cloneReward(EMPTY_REWARD),
+  };
+}
+
+function cloneReward(reward: ProductReward): ProductReward {
+  return {
+    ...reward,
+    cosmeticIds: [...reward.cosmeticIds],
+    skinIds: [...reward.skinIds],
+    equipmentDefinitionIds: [...reward.equipmentDefinitionIds],
+    equipmentFragments: { ...reward.equipmentFragments },
   };
 }
 
@@ -60,7 +76,33 @@ export function settlePurchase(save: PlayerSave, input: {
     return reject(save, 'already-owned');
   }
 
-  const ownedCosmeticIds = [...new Set([...save.ownedCosmeticIds, ...product.reward.cosmeticIds])];
+  const ownedCosmeticIds = [
+    ...new Set([...save.ownedCosmeticIds, ...product.reward.cosmeticIds]),
+  ];
+  const ownedSkinIds = [
+    ...normalizeOwnedSkinIds([...save.ownedSkinIds, ...product.reward.skinIds]),
+  ];
+  const equipmentDefinitionIds = [...new Set(product.reward.equipmentDefinitionIds)];
+  const grantedEquipment: EquipmentInstance[] = equipmentDefinitionIds.map(
+    (definitionId) => {
+      getEquipmentDefinition(definitionId);
+      return {
+        instanceId: `${transactionId}:${definitionId}`,
+        definitionId,
+        level: 1,
+        stars: 0,
+        affixes: [],
+      };
+    },
+  );
+  const equipmentFragments = { ...save.equipmentFragments };
+  for (const [definitionId, amount] of Object.entries(
+    product.reward.equipmentFragments,
+  )) {
+    getEquipmentDefinition(definitionId);
+    equipmentFragments[definitionId] =
+      (equipmentFragments[definitionId] ?? 0) + amount;
+  }
   const nextSave: PlayerSave = {
     ...save,
     gears: save.gears + product.reward.gears,
@@ -69,11 +111,17 @@ export function settlePurchase(save: PlayerSave, input: {
     purchasedProductIds: [...save.purchasedProductIds, product.id],
     processedTransactionIds: [...save.processedTransactionIds, transactionId],
     ownedCosmeticIds,
+    ownedSkinIds,
+    equipmentInventory: [
+      ...save.equipmentInventory,
+      ...grantedEquipment,
+    ],
+    equipmentFragments,
   };
 
   return {
     accepted: true,
     save: cloneSave(nextSave),
-    reward: { ...product.reward, cosmeticIds: [...product.reward.cosmeticIds] },
+    reward: cloneReward(product.reward),
   };
 }

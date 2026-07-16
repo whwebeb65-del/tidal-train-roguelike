@@ -76,6 +76,7 @@ import {
 import {
   getProductDefinition,
   PRODUCT_CATALOG,
+  type ProductReward,
 } from '../src/domain/commerce/ProductCatalog';
 import { settlePurchase } from '../src/domain/commerce/PurchaseService';
 import {
@@ -404,15 +405,17 @@ function formatExpeditionReward(reward: { readonly gears: number; readonly route
   ].filter(Boolean).join(' · ');
 }
 
-function formatCommerceReward(reward: {
-  readonly gears: number;
-  readonly routeMarks: number;
-  readonly starTickets: number;
-  readonly cosmeticIds: readonly string[];
-}): string {
+function formatCommerceReward(reward: ProductReward): string {
+  const equipmentFragments = Object.values(reward.equipmentFragments)
+    .reduce((total, amount) => total + amount, 0);
   return [
     formatExpeditionReward(reward),
     reward.cosmeticIds.length > 0 ? `${reward.cosmeticIds.length} 件非战力外观` : '',
+    reward.skinIds.length > 0 ? `${reward.skinIds.length} 套列车长皮肤` : '',
+    reward.equipmentDefinitionIds.length > 0
+      ? `${reward.equipmentDefinitionIds.length} 件确定性装备`
+      : '',
+    equipmentFragments > 0 ? `${equipmentFragments} 个装备碎片` : '',
   ].filter(Boolean).join(' · ');
 }
 
@@ -1152,6 +1155,8 @@ async function handlePurchase(productId: string): Promise<void> {
     routeMarks: settlement.reward.routeMarks,
     starTickets: settlement.reward.starTickets,
     cosmetics: settlement.reward.cosmeticIds.length,
+    skins: settlement.reward.skinIds.length,
+    equipment: settlement.reward.equipmentDefinitionIds.length,
   });
   notice = `模拟验单完成：${product.name}，固定获得 ${formatCommerceReward(settlement.reward)}。`;
   render();

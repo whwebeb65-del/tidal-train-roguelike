@@ -27,6 +27,45 @@ describe('PurchaseService', () => {
     expect(result.save.routeMarks).toBe(0);
   });
 
+  it('grants both captain variants through one unique skin ID', () => {
+    const result = settlePurchase(defaultSave(), {
+      productId: 'aurora-whale-song-skin',
+      result: { status: 'verified', transactionId: 'tx-skin' },
+    });
+
+    expect(result.accepted).toBe(true);
+    expect(result.save.ownedSkinIds).toContain('skin-aurora-whale-song');
+    expect(result.reward.skinIds).toEqual(['skin-aurora-whale-song']);
+  });
+
+  it('does not duplicate skin ownership after a duplicate callback', () => {
+    const first = settlePurchase(defaultSave(), {
+      productId: 'aurora-whale-song-skin',
+      result: { status: 'verified', transactionId: 'tx-skin' },
+    });
+    const duplicate = settlePurchase(first.save, {
+      productId: 'aurora-whale-song-skin',
+      result: { status: 'verified', transactionId: 'tx-skin' },
+    });
+
+    expect(duplicate.accepted).toBe(false);
+    expect(duplicate.save.ownedSkinIds.filter(
+      (id) => id === 'skin-aurora-whale-song',
+    )).toHaveLength(1);
+  });
+
+  it('grants deterministic equipment instances with stable transaction IDs', () => {
+    const result = settlePurchase(defaultSave(), {
+      productId: 'coral-assault-equipment-pack',
+      result: { status: 'verified', transactionId: 'tx-equipment' },
+    });
+
+    expect(result.accepted).toBe(true);
+    expect(result.save.equipmentInventory.filter(
+      (item) => item.instanceId.startsWith('tx-equipment:'),
+    )).toHaveLength(4);
+  });
+
   it.each(['cancelled', 'failed'] as const)('does not grant a %s purchase', (status) => {
     const result = settlePurchase(defaultSave(), {
       productId: 'starter-star-ticket-pack',

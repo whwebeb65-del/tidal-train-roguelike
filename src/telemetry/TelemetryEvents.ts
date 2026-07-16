@@ -32,7 +32,22 @@ export type PrototypeEventName =
   | 'rewarded_ad_clicked'
   | 'rewarded_ad_result'
   | 'economy_reward_granted'
-  | 'run_restart';
+  | 'run_restart'
+  | 'captain_selection_viewed'
+  | 'captain_selected'
+  | 'captain_switched'
+  | 'wardrobe_viewed'
+  | 'skin_clicked'
+  | 'skin_purchase_started'
+  | 'skin_purchase_result'
+  | 'skin_equipped'
+  | 'skin_collection_bonus_viewed'
+  | 'equipment_viewed'
+  | 'equipment_equipped'
+  | 'equipment_upgraded'
+  | 'equipment_starred'
+  | 'equipment_rerolled'
+  | 'equipment_set_activated';
 
 export interface PrototypeEvent {
   readonly name: PrototypeEventName;
