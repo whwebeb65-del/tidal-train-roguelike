@@ -1,4 +1,10 @@
-import type { RunMode } from '../app/AppTypes';
+import type {
+  BattleSettlementPresentation,
+  RunMode,
+} from '../app/AppTypes';
+export type {
+  BattleSettlementPresentation,
+} from '../app/AppTypes';
 import {
   getAvailableBattleInteractions,
   type AvailableBattleInteraction,
@@ -10,20 +16,6 @@ import type {
   BattleUpgradeId,
   EnemyKind,
 } from './BattleTypes';
-
-export interface BattleSettlementPresentation {
-  readonly title: string;
-  readonly description: string;
-  readonly rewards: {
-    readonly gears: number;
-    readonly routeMarks: number;
-    readonly starTickets: number;
-  };
-  readonly expeditionPoints: number;
-  readonly dailyTrialScore: number | null;
-  readonly doubleSettlementAvailable: boolean;
-  readonly doubled: boolean;
-}
 
 export interface BattleUpgradeCardModel {
   readonly id: BattleUpgradeId;

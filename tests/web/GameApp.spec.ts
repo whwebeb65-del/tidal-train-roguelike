@@ -10,6 +10,8 @@ describe('GameApp navigation', () => {
     expect(appSceneForAction('store')).toBe('store');
     expect(appSceneForAction('start-run')).toBe('battle');
     expect(appSceneForAction('start-daily-trial')).toBe('battle');
+    expect(appSceneForAction('combat-action')).toBeNull();
+    expect(appSceneForAction('damage')).toBeNull();
     expect(appSceneForAction('unknown')).toBeNull();
   });
 });

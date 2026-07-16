@@ -28,3 +28,17 @@ export interface StartBattleRequest {
   readonly mode: RunMode;
   readonly mapId: MapId;
 }
+
+export interface BattleSettlementPresentation {
+  readonly title: string;
+  readonly description: string;
+  readonly rewards: {
+    readonly gears: number;
+    readonly routeMarks: number;
+    readonly starTickets: number;
+  };
+  readonly expeditionPoints: number;
+  readonly dailyTrialScore: number | null;
+  readonly doubleSettlementAvailable: boolean;
+  readonly doubled: boolean;
+}

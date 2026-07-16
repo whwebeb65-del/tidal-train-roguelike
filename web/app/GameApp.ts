@@ -4,21 +4,6 @@ import {
   type LegacyGameRuntime,
 } from '../LegacyGameRuntime';
 
-interface HubRuntimeState {
-  sceneId: Exclude<SceneId, 'battle'>;
-  notice: string;
-  pendingProductId: string | null;
-  squadSharePending: boolean;
-  dailyTrialSharePending: boolean;
-}
-
-interface LegacyRunRuntimeState {
-  mode: 'normal' | 'daily-trial';
-  runId: string;
-  seed: number;
-  phase: 'combat' | 'reward' | 'route' | 'boss' | 'failure' | 'settlement';
-}
-
 export function appSceneForAction(action: string): SceneId | null {
   if (action === 'start-run' || action === 'start-daily-trial') {
     return 'battle';
