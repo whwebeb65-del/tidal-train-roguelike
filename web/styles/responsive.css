@@ -22,6 +22,8 @@
 
   .wardrobe-layout,
   .equipment-layout { grid-template-columns: 1fr; }
+
+  .wardrobe-preview { position: static; }
 }
 
 @media (max-width: 430px) {
@@ -80,6 +82,13 @@
   }
 
   .hub-nav__item { min-width: 0; }
+
+  .skin-grid,
+  .equipment-grid { grid-template-columns: 1fr; }
+
+  .wardrobe-preview > img { height: 390px; }
+  .skin-card img { height: 190px; }
+  .equipment-actions { grid-template-columns: 1fr; }
 
   .combat-stage { min-height: 540px; }
   .combat-stage__party,

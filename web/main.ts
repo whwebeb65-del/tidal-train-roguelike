@@ -38,15 +38,31 @@ import {
   type CombatLoopState,
   type TideModifier,
 } from '../src/domain/combat/CombatLoopSystem';
-import type { EquipmentState } from '../src/domain/equipment/EquipmentSystem';
 import {
+  equipEquipment,
+  rerollEquipment,
+  starEquipment,
+  upgradeEquipment,
+  type EquipmentMutationResult,
+  type EquipmentState,
+} from '../src/domain/equipment/EquipmentSystem';
+import {
+  getEquipmentDefinition,
+} from '../src/domain/equipment/EquipmentCatalog';
+import {
+  equipCaptainSkin,
   selectCaptain,
 } from '../src/domain/captain/CaptainProfileSystem';
 import type { CaptainId } from '../src/domain/captain/CaptainCatalog';
 import {
   getSkinDefinition,
+  SKIN_CATALOG,
   type SkinId,
 } from '../src/domain/skin/SkinCatalog';
+import {
+  canCaptainWearSkin,
+  getSkinCollectionModifiers,
+} from '../src/domain/skin/SkinCollectionSystem';
 import {
   createProgressionSnapshot,
   type ProgressionSnapshot,
@@ -128,6 +144,11 @@ import {
   renderRouteCards,
   renderSettlementCard,
 } from './views/RunSceneView';
+import { renderWardrobe } from './views/WardrobeView';
+import {
+  PROTOTYPE_REROLL,
+  renderEquipment,
+} from './views/EquipmentView';
 import './styles.css';
 
 const SAVE_KEY = 'tidal-train-prototype-save-v1';
@@ -203,6 +224,8 @@ let phase: 'station' | 'combat' | 'reward' | 'route' | 'boss' | 'failure' | 'set
 type HubView = 'station' | 'wardrobe' | 'equipment';
 let hubView: HubView = 'station';
 let captainSelectionTracked = false;
+let wardrobeViewTracked = false;
+let equipmentViewTracked = false;
 let runMode: 'normal' | 'daily-trial' = 'normal';
 let currentMapId: MapId = 'drift-suburb';
 let runId = '';
@@ -610,25 +633,168 @@ function renderStation(): string {
 function renderHubNavigation(): string {
   return `<nav class="hub-nav" aria-label="车站功能">
     <button class="hub-nav__item ${hubView === 'station' ? 'is-active' : ''}" data-action="open-hub" data-hub-view="station" ${hubView === 'station' ? 'aria-current="page"' : ''}>车站</button>
-    <button class="hub-nav__item ${hubView === 'wardrobe' ? 'is-active' : ''}" data-action="open-hub" data-hub-view="wardrobe" ${hubView === 'wardrobe' ? 'aria-current="page"' : ''}>衣柜</button>
+    <button class="hub-nav__item ${hubView !== 'station' ? 'is-active' : ''}" data-action="open-hub" data-hub-view="wardrobe" ${hubView !== 'station' ? 'aria-current="page"' : ''}>衣柜</button>
     <button class="hub-nav__item" data-action="start-run">出发</button>
     <button class="hub-nav__item" data-action="open-hub-anchor" data-anchor-id="legion-center">军团</button>
     <button class="hub-nav__item" data-action="open-hub-anchor" data-anchor-id="shop-center">商店</button>
   </nav>`;
 }
 
-function renderProgressionPlaceholder(): string {
-  const isWardrobe = hubView === 'wardrobe';
-  return `<section class="scene progression-placeholder">
-    <span class="eyebrow">${isWardrobe ? 'CAPTAIN WARDROBE' : 'TRAIN EQUIPMENT'}</span>
-    <h1>${isWardrobe ? '列车长衣柜' : '列车装备舱'}</h1>
-    <p>${isWardrobe ? '正在整理两位列车长的皮肤收藏、穿戴和叠加属性。' : '正在整理四槽装备、套装和强化操作。'}</p>
-    <div class="notice">界面正在本轮更新中，已有皮肤和装备数据不会丢失。</div>
-    <div class="button-row">
-      <button class="secondary" data-action="open-hub" data-hub-view="${isWardrobe ? 'equipment' : 'wardrobe'}">${isWardrobe ? '先看装备舱' : '返回衣柜'}</button>
-      <button class="primary" data-action="open-hub" data-hub-view="station">返回车站</button>
-    </div>
-  </section>`;
+function renderWardrobeScreen(): string {
+  if (!wardrobeViewTracked) {
+    track('wardrobe_viewed', { ownedSkins: save.ownedSkinIds.length });
+    wardrobeViewTracked = true;
+  }
+  const auroraProduct = getProductDefinition('aurora-whale-song-skin');
+  return renderWardrobe({
+    selectedCaptainId: getActiveCaptainId(),
+    ownedSkinIds: save.ownedSkinIds,
+    equippedSkinIds: save.equippedSkinIds,
+    skins: SKIN_CATALOG,
+    collectionModifiers: getSkinCollectionModifiers(save.ownedSkinIds),
+    pendingProductId,
+    productBySkinId: auroraProduct
+      ? { 'skin-aurora-whale-song': auroraProduct }
+      : {},
+  });
+}
+
+function renderEquipmentScreen(): string {
+  if (!equipmentViewTracked) {
+    track('equipment_viewed', { inventorySize: save.equipmentInventory.length });
+    equipmentViewTracked = true;
+  }
+  return renderEquipment({ state: getEquipmentStateFromSave() });
+}
+
+function handleCaptainSwitch(captainId: CaptainId): void {
+  const profile = selectCaptain(save, captainId);
+  commit({ ...save, ...profile });
+  track('captain_switched', { captainId });
+  notice = `已切换为${captainId === 'captain-tide-female' ? '女列车长' : '男列车长'}，基础能力保持一致。`;
+  render();
+}
+
+function handleSkinEquip(skinId: SkinId): void {
+  const captainId = getActiveCaptainId();
+  track('skin_clicked', { skinId, captainId });
+  if (!save.ownedSkinIds.includes(skinId)) {
+    notice = '该皮肤尚未解锁，不能直接穿戴。';
+    render();
+    return;
+  }
+  if (!canCaptainWearSkin(captainId, skinId)) {
+    notice = '当前列车长无法穿戴该皮肤。';
+    render();
+    return;
+  }
+  const profile = equipCaptainSkin(save, captainId, skinId);
+  commit({ ...save, ...profile });
+  track('skin_equipped', { skinId, captainId });
+  notice = `已穿戴「${getSkinDefinition(skinId)?.name ?? skinId}」，收藏属性继续永久叠加。`;
+  render();
+}
+
+function commitEquipmentState(state: EquipmentState): void {
+  commit({
+    ...save,
+    gears: state.gears,
+    equipmentInventory: state.inventory.map((instance) => ({
+      ...instance,
+      affixes: instance.affixes.map((affix) => ({ ...affix })),
+    })),
+    equippedEquipmentIds: { ...state.equippedEquipmentIds },
+    equipmentFragments: { ...state.fragments },
+  });
+}
+
+function equipmentFailureNotice(result: EquipmentMutationResult): string {
+  const messages: Record<NonNullable<EquipmentMutationResult['reason']>, string> = {
+    'not-found': '装备不存在，请刷新后重试。',
+    'max-level': '该装备已经达到最高等级。',
+    'max-stars': '该装备已经达到五星。',
+    'insufficient-gears': '齿轮不足，完成航线或购买固定补给后再试。',
+    'insufficient-fragments': '对应装备碎片不足，暂时无法升星。',
+    'invalid-affixes': '定向词条配置无效，未消耗齿轮。',
+  };
+  return result.reason ? messages[result.reason] : '装备操作未完成。';
+}
+
+function trackEquipmentSet(instanceId: string, state: EquipmentState): void {
+  const instance = state.inventory.find((item) => item.instanceId === instanceId);
+  if (!instance) return;
+  const definition = getEquipmentDefinition(instance.definitionId);
+  const count = Object.values(state.equippedEquipmentIds)
+    .filter((equippedId): equippedId is string => Boolean(equippedId))
+    .map((equippedId) => state.inventory.find((item) => item.instanceId === equippedId))
+    .filter((item): item is NonNullable<typeof item> => Boolean(item))
+    .filter((item) => getEquipmentDefinition(item.definitionId).setId === definition.setId)
+    .length;
+  if (count === 2 || count === 4) {
+    track('equipment_set_activated', { setId: definition.setId, pieces: count });
+  }
+}
+
+function handleEquipmentEquip(instanceId: string): void {
+  try {
+    const next = equipEquipment(getEquipmentStateFromSave(), instanceId);
+    commitEquipmentState(next);
+    const instance = next.inventory.find((item) => item.instanceId === instanceId);
+    const name = instance ? getEquipmentDefinition(instance.definitionId).name : instanceId;
+    track('equipment_equipped', { instanceId });
+    trackEquipmentSet(instanceId, next);
+    notice = `已装备「${name}」，属性立即生效。`;
+  } catch {
+    notice = '装备不存在，请刷新后重试。';
+  }
+  render();
+}
+
+function handleEquipmentUpgrade(instanceId: string): void {
+  const result = upgradeEquipment(getEquipmentStateFromSave(), instanceId);
+  if (!result.accepted) {
+    notice = equipmentFailureNotice(result);
+    render();
+    return;
+  }
+  commitEquipmentState(result.state);
+  track('equipment_upgraded', { instanceId });
+  notice = '装备强化成功，主属性已提高。';
+  render();
+}
+
+function handleEquipmentStar(instanceId: string): void {
+  const result = starEquipment(getEquipmentStateFromSave(), instanceId);
+  if (!result.accepted) {
+    notice = equipmentFailureNotice(result);
+    render();
+    return;
+  }
+  commitEquipmentState(result.state);
+  track('equipment_starred', { instanceId });
+  notice = '装备升星成功，成长倍率已提高。';
+  render();
+}
+
+function handleEquipmentReroll(instanceId: string): void {
+  const state = getEquipmentStateFromSave();
+  const instance = state.inventory.find((item) => item.instanceId === instanceId);
+  if (!instance) {
+    notice = '装备不存在，请刷新后重试。';
+    render();
+    return;
+  }
+  const slot = getEquipmentDefinition(instance.definitionId).slot;
+  const result = rerollEquipment(state, instanceId, PROTOTYPE_REROLL[slot]);
+  if (!result.accepted) {
+    notice = equipmentFailureNotice(result);
+    render();
+    return;
+  }
+  commitEquipmentState(result.state);
+  track('equipment_rerolled', { instanceId, slot });
+  notice = '定向重铸完成，预览词条已固定写入装备。';
+  render();
 }
 
 function renderInteractionCards(): string {
@@ -846,7 +1012,11 @@ function render(): void {
     return;
   }
 
-  const stationScene = hubView === 'station' ? renderStation() : renderProgressionPlaceholder();
+  const stationScene = hubView === 'station'
+    ? renderStation()
+    : hubView === 'wardrobe'
+      ? renderWardrobeScreen()
+      : renderEquipmentScreen();
   const scene = phase === 'station' ? stationScene : phase === 'combat' ? renderCombat() : phase === 'reward' ? renderReward() : phase === 'route' ? renderRoute() : phase === 'boss' ? renderBoss() : phase === 'failure' ? renderFailure() : renderSettlement();
   const hubNavigation = phase === 'station' ? renderHubNavigation() : '';
   app.innerHTML = `<div class="app-shell">${renderHeader()}<main>${scene}<div class="notice">${escapeHtml(notice)}</div></main>${hubNavigation}<footer><span>Prototype Web Preview</span><button class="text-button" data-action="reset-save">清空本地存档</button></footer></div>`;
@@ -1595,6 +1765,34 @@ app.addEventListener('click', async (event) => {
     document.getElementById(button.dataset.anchorId)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     return;
   }
+  if (action === 'switch-captain' && button.dataset.captainId) {
+    handleCaptainSwitch(button.dataset.captainId as CaptainId);
+    return;
+  }
+  if (action === 'equip-skin' && button.dataset.skinId) {
+    handleSkinEquip(button.dataset.skinId as SkinId);
+    return;
+  }
+  if (action === 'equip-equipment' && button.dataset.instanceId) {
+    handleEquipmentEquip(button.dataset.instanceId);
+    return;
+  }
+  if (action === 'upgrade-equipment' && button.dataset.instanceId) {
+    handleEquipmentUpgrade(button.dataset.instanceId);
+    return;
+  }
+  if (action === 'star-equipment' && button.dataset.instanceId) {
+    handleEquipmentStar(button.dataset.instanceId);
+    return;
+  }
+  if (action === 'reroll-equipment' && button.dataset.instanceId) {
+    handleEquipmentReroll(button.dataset.instanceId);
+    return;
+  }
+  if (action === 'purchase-product' && button.dataset.skinId) {
+    track('skin_clicked', { skinId: button.dataset.skinId, source: 'wardrobe' });
+    track('skin_purchase_started', { skinId: button.dataset.skinId });
+  }
   if (action === 'start-run') startRun('normal');
   if (action === 'start-daily-trial') startRun('daily-trial');
   if (action === 'back-station') { phase = 'station'; render(); }
@@ -1622,7 +1820,15 @@ app.addEventListener('click', async (event) => {
   if (action === 'toggle-support' && button.dataset.supportId) handleToggleSupport(button.dataset.supportId as SupportId);
   if (action === 'claim-expedition' && button.dataset.milestoneId) handleClaimExpedition(button.dataset.milestoneId as ExpeditionMilestoneId);
   if (action === 'share-squad') await handleShareSquad();
-  if (action === 'purchase-product' && button.dataset.productId) await handlePurchase(button.dataset.productId);
+  if (action === 'purchase-product' && button.dataset.productId) {
+    await handlePurchase(button.dataset.productId);
+    if (button.dataset.skinId) {
+      track('skin_purchase_result', {
+        skinId: button.dataset.skinId,
+        owned: save.ownedSkinIds.includes(button.dataset.skinId),
+      });
+    }
+  }
   if (action === 'reset-save') { window.localStorage.removeItem(SAVE_KEY); window.localStorage.removeItem(SOCIAL_SAVE_KEY); window.localStorage.removeItem(CAMPAIGN_SAVE_KEY); window.localStorage.removeItem(DAILY_TRIAL_SAVE_KEY); window.localStorage.removeItem(DAILY_CHECK_IN_SAVE_KEY); window.location.reload(); }
 });
 
