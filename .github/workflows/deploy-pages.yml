@@ -40,6 +40,9 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+      - name: Check asset budget
+        run: npm run check:assets
+
       - name: Build
         run: npm run build
 

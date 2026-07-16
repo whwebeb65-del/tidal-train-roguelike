@@ -64,8 +64,8 @@ export function renderWardrobe(model: WardrobeModel): string {
 
     return `<article class="skin-card ${owned ? 'is-owned' : ''}" data-skin-id="${skin.id}">
       <div class="skin-card__variants" aria-label="${skin.name} 男女款式">
-        <img src="${CHIBI_ART.captains['captain-tide-female'][skin.id]}" alt="${skin.name}女款" />
-        <img src="${CHIBI_ART.captains['captain-tide-male'][skin.id]}" alt="${skin.name}男款" />
+        <img src="${CHIBI_ART.captains['captain-tide-female'][skin.id]}" alt="${skin.name}女款" loading="lazy" decoding="async" />
+        <img src="${CHIBI_ART.captains['captain-tide-male'][skin.id]}" alt="${skin.name}男款" loading="lazy" decoding="async" />
       </div>
       <small>${RARITY_LABELS[skin.rarity]} · 男女款式</small>
       <h3>${skin.name}</h3>
