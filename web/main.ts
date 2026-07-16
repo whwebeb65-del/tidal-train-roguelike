@@ -40,6 +40,10 @@ import {
 } from '../src/domain/combat/CombatLoopSystem';
 import type { EquipmentState } from '../src/domain/equipment/EquipmentSystem';
 import {
+  selectCaptain,
+} from '../src/domain/captain/CaptainProfileSystem';
+import type { CaptainId } from '../src/domain/captain/CaptainCatalog';
+import {
   createProgressionSnapshot,
   type ProgressionSnapshot,
 } from '../src/domain/progression/ProgressionStatService';
@@ -112,6 +116,7 @@ import {
 } from './views/DailyTrialView';
 import { renderDailyCheckIn } from './views/DailyCheckInView';
 import { renderCommerceStore } from './views/CommerceView';
+import { renderCaptainSelection } from './views/CaptainSelectionView';
 import './styles.css';
 
 const SAVE_KEY = 'tidal-train-prototype-save-v1';
@@ -184,6 +189,9 @@ let campaignState = readCampaignState();
 let dailyTrialState = readDailyTrialState();
 let dailyCheckInState = readDailyCheckInState();
 let phase: 'station' | 'combat' | 'reward' | 'route' | 'boss' | 'failure' | 'settlement' = 'station';
+type HubView = 'station' | 'wardrobe' | 'equipment';
+let hubView: HubView = 'station';
+let captainSelectionTracked = false;
 let runMode: 'normal' | 'daily-trial' = 'normal';
 let currentMapId: MapId = 'drift-suburb';
 let runId = '';
@@ -463,7 +471,7 @@ function renderLaunchCampaignCenter(): string {
 
 function renderSocialHub(): string {
   if (!socialState.legionId) {
-    return `<section class="social-hub social-intro">
+    return `<section id="legion-center" class="social-hub social-intro">
       <div><span class="eyebrow">CO-OP / ${socialState.cycleId}</span><h2>联合作战中心</h2><p>加入异步军团，选择两名队友支援单局，并用每次结算推进共同远征。</p></div>
       <button class="primary" data-action="join-legion">加入「潮汐灯塔团」</button>
     </section>`;
@@ -493,7 +501,7 @@ function renderSocialHub(): string {
     bonuses.maxPlayerHpBonus ? `最大生命 +${bonuses.maxPlayerHpBonus}` : '',
   ].filter(Boolean).join(' · ') || '尚未选择支援';
 
-  return `<section class="social-hub">
+  return `<section id="legion-center" class="social-hub">
     <div class="social-heading"><div><span class="eyebrow">LEGION / ${socialState.cycleId}</span><h2>潮汐灯塔团</h2><p>异步远征不要求队友同时在线；正式服贡献和奖励由服务端校验。</p></div><button class="chip" data-action="share-squad" ${squadSharePending ? 'disabled' : ''}>${squadSharePending ? '生成招募卡中…' : '分享列车队招募卡'}</button></div>
     <div class="expedition-progress"><div><span>本周远征贡献</span><b>${socialState.contribution} / 100</b></div><div class="progress"><i style="width:${Math.min(100, socialState.contribution)}%"></i></div></div>
     <div class="expedition-milestones">${milestones}</div>
@@ -534,11 +542,35 @@ function renderStation(): string {
     ${renderDailyTrialHub({ stationLevel: save.stationLevel, state: dailyTrialState, definition: dailyDefinition })}
     ${renderLaunchCampaignCenter()}
     ${renderSocialHub()}
-    ${renderCommerceStore({
+    <div id="shop-center">${renderCommerceStore({
       products: PRODUCT_CATALOG,
       purchasedProductIds: save.purchasedProductIds,
       pendingProductId,
-    })}
+    })}</div>
+  </section>`;
+}
+
+function renderHubNavigation(): string {
+  return `<nav class="hub-nav" aria-label="车站功能">
+    <button class="hub-nav__item ${hubView === 'station' ? 'is-active' : ''}" data-action="open-hub" data-hub-view="station" ${hubView === 'station' ? 'aria-current="page"' : ''}>车站</button>
+    <button class="hub-nav__item ${hubView === 'wardrobe' ? 'is-active' : ''}" data-action="open-hub" data-hub-view="wardrobe" ${hubView === 'wardrobe' ? 'aria-current="page"' : ''}>衣柜</button>
+    <button class="hub-nav__item" data-action="start-run">出发</button>
+    <button class="hub-nav__item" data-action="open-hub-anchor" data-anchor-id="legion-center">军团</button>
+    <button class="hub-nav__item" data-action="open-hub-anchor" data-anchor-id="shop-center">商店</button>
+  </nav>`;
+}
+
+function renderProgressionPlaceholder(): string {
+  const isWardrobe = hubView === 'wardrobe';
+  return `<section class="scene progression-placeholder">
+    <span class="eyebrow">${isWardrobe ? 'CAPTAIN WARDROBE' : 'TRAIN EQUIPMENT'}</span>
+    <h1>${isWardrobe ? '列车长衣柜' : '列车装备舱'}</h1>
+    <p>${isWardrobe ? '正在整理两位列车长的皮肤收藏、穿戴和叠加属性。' : '正在整理四槽装备、套装和强化操作。'}</p>
+    <div class="notice">界面正在本轮更新中，已有皮肤和装备数据不会丢失。</div>
+    <div class="button-row">
+      <button class="secondary" data-action="open-hub" data-hub-view="${isWardrobe ? 'equipment' : 'wardrobe'}">${isWardrobe ? '先看装备舱' : '返回衣柜'}</button>
+      <button class="primary" data-action="open-hub" data-hub-view="station">返回车站</button>
+    </div>
   </section>`;
 }
 
@@ -704,8 +736,19 @@ function renderSettlement(): string {
 }
 
 function render(): void {
-  const scene = phase === 'station' ? renderStation() : phase === 'combat' ? renderCombat() : phase === 'reward' ? renderReward() : phase === 'route' ? renderRoute() : phase === 'boss' ? renderBoss() : phase === 'failure' ? renderFailure() : renderSettlement();
-  app.innerHTML = `${renderHeader()}<main>${scene}<div class="notice">${escapeHtml(notice)}</div></main><footer><span>Prototype Web Preview</span><button class="text-button" data-action="reset-save">清空本地存档</button></footer>`;
+  if (!save.selectedCaptainId) {
+    app.innerHTML = `<div class="app-shell">${renderHeader()}<main>${renderCaptainSelection()}</main></div>`;
+    if (!captainSelectionTracked) {
+      track('captain_selection_viewed', {});
+      captainSelectionTracked = true;
+    }
+    return;
+  }
+
+  const stationScene = hubView === 'station' ? renderStation() : renderProgressionPlaceholder();
+  const scene = phase === 'station' ? stationScene : phase === 'combat' ? renderCombat() : phase === 'reward' ? renderReward() : phase === 'route' ? renderRoute() : phase === 'boss' ? renderBoss() : phase === 'failure' ? renderFailure() : renderSettlement();
+  const hubNavigation = phase === 'station' ? renderHubNavigation() : '';
+  app.innerHTML = `<div class="app-shell">${renderHeader()}<main>${scene}<div class="notice">${escapeHtml(notice)}</div></main>${hubNavigation}<footer><span>Prototype Web Preview</span><button class="text-button" data-action="reset-save">清空本地存档</button></footer></div>`;
 }
 
 function persistInteractionState(): void {
@@ -1430,6 +1473,27 @@ app.addEventListener('click', async (event) => {
   const button = target.closest<HTMLButtonElement>('[data-action]');
   if (!button) return;
   const action = button.dataset.action;
+  if (action === 'select-captain' && button.dataset.captainId) {
+    const profile = selectCaptain(save, button.dataset.captainId as CaptainId);
+    commit({ ...save, ...profile });
+    track('captain_selected', { captainId: button.dataset.captainId });
+    captainSelectionTracked = false;
+    hubView = 'station';
+    notice = '列车长已就位，潮汐列车准备出发。';
+    render();
+    return;
+  }
+  if (action === 'open-hub' && button.dataset.hubView) {
+    hubView = button.dataset.hubView as HubView;
+    render();
+    return;
+  }
+  if (action === 'open-hub-anchor' && button.dataset.anchorId) {
+    hubView = 'station';
+    render();
+    document.getElementById(button.dataset.anchorId)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    return;
+  }
   if (action === 'start-run') startRun('normal');
   if (action === 'start-daily-trial') startRun('daily-trial');
   if (action === 'back-station') { phase = 'station'; render(); }
