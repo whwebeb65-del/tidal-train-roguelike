@@ -47,7 +47,14 @@ export type PrototypeEventName =
   | 'equipment_upgraded'
   | 'equipment_starred'
   | 'equipment_rerolled'
-  | 'equipment_set_activated';
+  | 'equipment_set_activated'
+  | 'battle_wave_started'
+  | 'battle_skill_used'
+  | 'battle_upgrade_offered'
+  | 'battle_upgrade_selected'
+  | 'battle_elite_entered'
+  | 'battle_boss_intro'
+  | 'battle_performance_changed';
 
 export interface PrototypeEvent {
   readonly name: PrototypeEventName;
