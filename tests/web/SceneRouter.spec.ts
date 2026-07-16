@@ -73,4 +73,26 @@ describe('SceneRouter', () => {
     expect(router.currentSceneId).toBe('captain');
     expect(removed).toEqual(['scene-host--entering']);
   });
+
+  it('refreshes the mounted scene without replacing its lifecycle owner', async () => {
+    const calls: string[] = [];
+    const scene: GameScene = {
+      id: 'station',
+      mount() {
+        calls.push('mount');
+      },
+      unmount() {
+        calls.push('unmount');
+      },
+    };
+    const router = new SceneRouter(createHost(), () => scene, {
+      transitionMs: 0,
+      reducedMotion: true,
+    });
+
+    await router.go('station', 'replace');
+    await router.refresh();
+
+    expect(calls).toEqual(['mount', 'mount']);
+  });
 });

@@ -54,6 +54,7 @@ export function renderAppShell(snapshot: CurrencySnapshot): string {
         ${currency('gears', '⚙', '齿轮', snapshot.gears)}
         ${currency('routeMarks', '◇', '航线徽记', snapshot.routeMarks)}
         ${currency('starTickets', '☆', '星票', snapshot.starTickets)}
+        <button class="app-shell__reset" type="button" data-action="reset-save" aria-label="清空本地存档">重置</button>
       </div>
     </header>
     <main class="scene-viewport">
@@ -78,6 +79,7 @@ export function mountAppShell(
   const sceneHost = requireElement<HTMLElement>(root, '#scene-host');
   const noticeHost = requireElement<HTMLElement>(root, '#app-notice');
   const navigation = requireElement<HTMLElement>(root, '.hub-nav');
+  let noticeTimer: ReturnType<typeof globalThis.setTimeout> | null = null;
 
   return {
     sceneHost,
@@ -106,8 +108,18 @@ export function mountAppShell(
     },
 
     setNotice(message): void {
+      if (noticeTimer !== null) {
+        globalThis.clearTimeout(noticeTimer);
+        noticeTimer = null;
+      }
       noticeHost.textContent = message;
       noticeHost.classList.toggle('is-visible', message.length > 0);
+      if (message.length > 0) {
+        noticeTimer = globalThis.setTimeout(() => {
+          noticeHost.classList.remove('is-visible');
+          noticeTimer = null;
+        }, 4200);
+      }
     },
 
     setNavigationHidden(hidden): void {

@@ -47,6 +47,11 @@ export class SceneRouter {
     this.host.classList.remove('scene-host--entering');
   }
 
+  public async refresh(): Promise<void> {
+    if (!this.current) return;
+    await this.current.mount(this.host);
+  }
+
   public destroy(): void {
     this.transitionToken += 1;
     this.current?.unmount();

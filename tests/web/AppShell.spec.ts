@@ -16,6 +16,7 @@ describe('AppShell', () => {
     expect(html).toContain('data-nav-scene="legion"');
     expect(html).toContain('data-nav-scene="store"');
     expect(html).toContain('id="scene-host"');
+    expect(html).toContain('data-action="reset-save"');
     expect(html).not.toContain('open-hub-anchor');
   });
 });

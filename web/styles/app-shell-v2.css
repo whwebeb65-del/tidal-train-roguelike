@@ -37,15 +37,38 @@
   font-weight: 900;
 }
 
+.app-currency > .app-currency__symbol {
+  display: grid;
+}
+
 .app-currency__copy {
   display: grid;
   line-height: 1.05;
+}
+
+.app-currency > .app-currency__copy {
+  display: grid;
 }
 
 .app-currency__copy > span {
   color: #89aab3;
   font-size: 8px;
   letter-spacing: .04em;
+}
+
+.app-shell__reset {
+  min-height: 32px;
+  padding: 5px 9px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: #89aab3;
+  background: transparent;
+  font-size: 10px;
+}
+
+.app-shell__reset:hover {
+  color: var(--pearl-100);
+  border-color: rgb(207 228 232 / 42%);
 }
 
 .app-notice {
