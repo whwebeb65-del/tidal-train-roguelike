@@ -9,13 +9,10 @@
   .station-hero,
   .combat-stage { min-height: 520px; }
 
-  .combat-stage {
-    grid-template-columns: 1fr;
-    padding: 16px;
-  }
+  .combat-stage { padding: 16px; }
 
   .combat-stage__party,
-  .combat-stage__enemy { min-height: 230px; }
+  .combat-stage__enemy { min-height: 280px; }
 
   .combat-vitals { grid-template-columns: 1fr; }
   .combat-scene .action-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -27,8 +24,21 @@
 }
 
 @media (max-width: 430px) {
+  .topbar {
+    align-items: center;
+    flex-direction: row;
+    justify-content: space-between;
+    min-height: 68px;
+  }
+
   .brand small { display: none; }
   .brand strong { max-width: 108px; }
+  .currencies {
+    justify-content: flex-end;
+    max-width: none;
+    flex-wrap: nowrap;
+    gap: 4px;
+  }
   .currency { padding-inline: 8px; }
   .currency span { display: none; }
 
@@ -90,9 +100,18 @@
   .skin-card img { height: 190px; }
   .equipment-actions { grid-template-columns: 1fr; }
 
-  .combat-stage { min-height: 540px; }
+  .combat-stage {
+    grid-template-columns: minmax(0, .95fr) minmax(0, 1.05fr);
+    min-height: 350px;
+    padding: 10px;
+  }
   .combat-stage__party,
-  .combat-stage__enemy { min-height: 250px; }
+  .combat-stage__enemy { min-height: 320px; }
+  .combat-train { right: -18%; width: 125%; }
+  .combat-captain { left: -4%; width: 48%; }
+  .combat-companion { top: 18%; left: 18%; width: 24%; }
+  .combat-stage__enemy img { width: 100%; }
+  .combat-minion { width: 38% !important; }
   .combat-scene .action-row { grid-template-columns: 1fr; }
   .combat-scene .debug-hit { justify-self: stretch; }
 }

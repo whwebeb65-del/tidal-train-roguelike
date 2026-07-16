@@ -41,6 +41,7 @@ button,
 input { font: inherit; }
 
 button {
+  min-height: 44px;
   color: inherit;
   border: 0;
   cursor: pointer;
