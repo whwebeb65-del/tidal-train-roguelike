@@ -199,9 +199,6 @@ describe('BattleScene', () => {
       captainArtId: 'captainFemaleBase',
       reducedMotion: true,
       eventTarget: new EventTarget(),
-      visibilityTarget: Object.assign(new EventTarget(), {
-        hidden: false,
-      }),
       getDevicePixelRatio: () => 2,
     });
 
@@ -267,9 +264,6 @@ describe('BattleScene', () => {
       captainArtId: 'captainFemaleBase',
       reducedMotion: true,
       eventTarget: new EventTarget(),
-      visibilityTarget: Object.assign(new EventTarget(), {
-        hidden: false,
-      }),
       getDevicePixelRatio: () => 1,
     });
 
@@ -320,9 +314,6 @@ describe('BattleScene', () => {
       captainArtId: 'captainFemaleBase',
       reducedMotion: true,
       eventTarget: new EventTarget(),
-      visibilityTarget: Object.assign(new EventTarget(), {
-        hidden: false,
-      }),
       getDevicePixelRatio: () => 1,
     });
 
@@ -340,6 +331,83 @@ describe('BattleScene', () => {
     scheduler.fire(17);
 
     expect(refresh).toHaveBeenCalledTimes(1);
+    scene.unmount();
+  });
+
+  it('stops hidden battles and resumes audio before a fresh frame loop', async () => {
+    const scheduler = new ManualFrameScheduler();
+    const engine = createEngine();
+    const callOrder: string[] = [];
+    const originalResume = engine.resume;
+    engine.resume = () => {
+      callOrder.push('engine-resume');
+      originalResume.call(engine);
+    };
+    const sound = {
+      consume: vi.fn(),
+      setBattlePhase: vi.fn(),
+      pause: vi.fn(),
+      resume: vi.fn(async () => {
+        callOrder.push('sound-resume');
+      }),
+      dispose: vi.fn(),
+    };
+    const hudCallbackRef: { current?: BattleHudCallbacks } = {};
+    const hud = {
+      mount: vi.fn(),
+      update: vi.fn(),
+      dispose: vi.fn(),
+    };
+    const { host } = createHost();
+    const scene = new BattleScene({
+      engine,
+      effects: {
+        view: EMPTY_EFFECT_FRAME_VIEW,
+        consume: vi.fn(),
+        update: vi.fn(),
+        reset: vi.fn(),
+      },
+      assets: { failedIds: [], get: () => null },
+      callbacks: createCallbacks(),
+      createRenderer: () => ({ render: vi.fn() }),
+      createHud: (callbacks) => {
+        hudCallbackRef.current = callbacks;
+        return hud;
+      },
+      sound,
+      scheduler,
+      captainArtId: 'captainFemaleBase',
+      reducedMotion: true,
+      eventTarget: new EventTarget(),
+      getDevicePixelRatio: () => 1,
+    });
+
+    scene.mount(host);
+    scheduler.fire(0);
+    scheduler.fire(17);
+    expect(engine.updateCalls).toBe(1);
+
+    scene.pauseForVisibility();
+    expect(engine.frame.status).toBe('paused');
+    expect(scheduler.activeCount).toBe(0);
+    expect(sound.pause).toHaveBeenCalledTimes(1);
+    const pausedModel = hud.update.mock.calls.at(-1)?.[0];
+    expect(pausedModel?.pauseOverlayVisible).toBe(true);
+
+    const hudCallbacks = hudCallbackRef.current;
+    if (!hudCallbacks) throw new Error('HUD callbacks were not created');
+    hudCallbacks.onResume();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(callOrder).toEqual(['sound-resume', 'engine-resume']);
+    expect(engine.frame.status).toBe('running');
+    expect(scheduler.activeCount).toBe(1);
+
+    scheduler.fire(10_000);
+    expect(engine.updateCalls).toBe(1);
+    scheduler.fire(10_017);
+    expect(engine.updateCalls).toBe(2);
     scene.unmount();
   });
 });

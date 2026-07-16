@@ -10,6 +10,9 @@ import {
   type GameSettings,
   type SettingsRepository,
 } from './SettingsRepository';
+import {
+  PageLifecycleController,
+} from './PageLifecycleController';
 
 export function appSceneForAction(action: string): SceneId | null {
   if (action === 'start-run' || action === 'start-daily-trial') {
@@ -30,6 +33,7 @@ export function appSceneForAction(action: string): SceneId | null {
 export class GameApp {
   private runtime: LegacyGameRuntime | null = null;
   private audio: AudioManager | null = null;
+  private lifecycle: PageLifecycleController | null = null;
   private readonly settingsRepository: SettingsRepository;
   private settings: GameSettings;
   private readonly onMotionPreferenceChange = (): void => {
@@ -73,6 +77,11 @@ export class GameApp {
         updateSettings: (patch) => this.updateSettings(patch),
       },
     );
+    this.lifecycle = new PageLifecycleController(document, {
+      onHidden: () => this.runtime?.handlePageHidden(),
+      onVisible: () => this.runtime?.handlePageVisible(),
+    });
+    this.lifecycle.start();
     await this.runtime.start();
   }
 
@@ -98,6 +107,8 @@ export class GameApp {
       'change',
       this.onMotionPreferenceChange,
     );
+    this.lifecycle?.dispose();
+    this.lifecycle = null;
     this.runtime?.destroy();
     this.runtime = null;
     void this.audio?.close();

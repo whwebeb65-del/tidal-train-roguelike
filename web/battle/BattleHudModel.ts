@@ -79,6 +79,7 @@ export interface BattleHudModelOptions {
   readonly mode: RunMode;
   readonly upgradeRerollAvailable: boolean;
   readonly skillRefreshAvailable: boolean;
+  readonly visibilityResumeRequired?: boolean;
   readonly interactionClaims?: BattleInteractionClaims;
   readonly interactionNotice?: string;
   readonly reviveAvailable?: boolean;
@@ -186,6 +187,8 @@ export function createBattleHudModel(
   const settlement = options.settlement ?? null;
   const pendingActions = options.pendingActions ?? new Set<string>();
   const upgradeCountdownVisible = pendingActions.has('upgrade-resume');
+  const visibilityResumeRequired =
+    options.visibilityResumeRequired ?? false;
 
   return {
     status: frame.status,
@@ -225,15 +228,20 @@ export function createBattleHudModel(
           hpPercent: 0,
           shieldPercent: 0,
         },
-    upgradeVisible: frame.status === 'upgrade' || upgradeCountdownVisible,
-    upgradeCountdownVisible,
+    upgradeVisible:
+      !visibilityResumeRequired
+      && (frame.status === 'upgrade' || upgradeCountdownVisible),
+    upgradeCountdownVisible:
+      !visibilityResumeRequired && upgradeCountdownVisible,
     upgradeCards,
     upgradeRerollVisible:
-      frame.status === 'upgrade'
+      !visibilityResumeRequired
+      && frame.status === 'upgrade'
       && options.mode === 'normal'
       && options.upgradeRerollAvailable,
     skillRefreshVisible:
-      frame.status === 'running'
+      !visibilityResumeRequired
+      && frame.status === 'running'
       && options.skillRefreshAvailable
       && (
         frame.cooldowns['tidal-volley'] > 0
@@ -242,14 +250,19 @@ export function createBattleHudModel(
     interaction,
     interactionNotice: options.interactionNotice ?? '',
     pauseOverlayVisible:
-      frame.status === 'paused' && !upgradeCountdownVisible,
-    failureVisible: frame.status === 'defeat' && settlement === null,
+      visibilityResumeRequired
+      || (frame.status === 'paused' && !upgradeCountdownVisible),
+    failureVisible:
+      !visibilityResumeRequired
+      && frame.status === 'defeat'
+      && settlement === null,
     reviveAvailable: options.reviveAvailable ?? false,
     failureSummary: `坚持到第 ${frame.wave} 波 · 击败 ${frame.kills} 只潮兽`,
     settlement,
-    settlementVisible: settlement !== null,
+    settlementVisible: !visibilityResumeRequired && settlement !== null,
     doubleSettlementVisible:
-      settlement?.doubleSettlementAvailable === true
+      !visibilityResumeRequired
+      && settlement?.doubleSettlementAvailable === true
       && settlement.doubled === false,
     pendingActions,
   };

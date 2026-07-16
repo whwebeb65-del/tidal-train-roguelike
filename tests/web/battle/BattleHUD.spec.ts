@@ -38,4 +38,38 @@ describe('BattleHUD', () => {
     expect(model.upgradeCards).toHaveLength(3);
     expect(model.upgradeRerollVisible).toBe(true);
   });
+
+  it('places an explicit resume overlay above paused battle outcomes', () => {
+    const settlement = {
+      title: 'Run complete',
+      description: 'Rewards secured',
+      rewards: { gears: 80, routeMarks: 2, starTickets: 0 },
+      expeditionPoints: 8,
+      dailyTrialScore: null,
+      doubleSettlementAvailable: true,
+      doubled: false,
+    };
+    const model = createBattleHudModel(createFrameFixture({
+      status: 'upgrade',
+      offeredUpgradeIds: [
+        'rapid-reload',
+        'coral-warhead',
+        'bubble-capacitor',
+      ],
+    }), {
+      mode: 'normal',
+      upgradeRerollAvailable: true,
+      skillRefreshAvailable: true,
+      settlement,
+      visibilityResumeRequired: true,
+    });
+
+    expect(model.pauseOverlayVisible).toBe(true);
+    expect(model.upgradeVisible).toBe(false);
+    expect(model.upgradeRerollVisible).toBe(false);
+    expect(model.skillRefreshVisible).toBe(false);
+    expect(model.failureVisible).toBe(false);
+    expect(model.settlementVisible).toBe(false);
+    expect(model.doubleSettlementVisible).toBe(false);
+  });
 });

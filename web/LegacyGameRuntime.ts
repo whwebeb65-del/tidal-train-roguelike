@@ -163,6 +163,8 @@ export interface LegacyGameRuntime {
     settings: GameSettings,
     effectiveReducedMotion: boolean,
   ): void;
+  handlePageHidden(): void;
+  handlePageVisible(): void;
   destroy(): void;
 }
 
@@ -284,6 +286,7 @@ const router = new SceneRouter(shell.sceneHost, sceneFactory, {
     audio.playSound('scene-open');
     if (sceneId === 'battle') {
       stopStationAudioLoop();
+      if (pageHidden) activeBattleScene?.pauseForVisibility();
       return;
     }
     audio.setMusicCue('station');
@@ -293,6 +296,7 @@ const router = new SceneRouter(shell.sceneHost, sceneFactory, {
 let renderQueue = Promise.resolve();
 let started = false;
 let stationAudioFrameId: number | null = null;
+let pageHidden = false;
 
 function stationAudioFrame(nowMs: number): void {
   stationAudioFrameId = null;
@@ -305,6 +309,7 @@ function startStationAudioLoop(): void {
   if (
     stationAudioFrameId !== null
     || !started
+    || pageHidden
     || router.currentSceneId === 'battle'
   ) {
     return;
@@ -316,6 +321,24 @@ function stopStationAudioLoop(): void {
   if (stationAudioFrameId === null) return;
   window.cancelAnimationFrame(stationAudioFrameId);
   stationAudioFrameId = null;
+}
+
+function handlePageHidden(): void {
+  pageHidden = true;
+  stopStationAudioLoop();
+  if (activeBattleScene) {
+    activeBattleScene.pauseForVisibility();
+    return;
+  }
+  audio.pause();
+}
+
+function handlePageVisible(): void {
+  pageHidden = false;
+  if (activeBattleScene) return;
+  void audio.resume()
+    .catch(() => undefined)
+    .then(() => startStationAudioLoop());
 }
 
 function openSettingsPanel(): void {
@@ -1765,6 +1788,8 @@ return {
   ): void {
     applyRuntimeSettings(settings, nextReducedMotion);
   },
+  handlePageHidden,
+  handlePageVisible,
   destroy(): void {
     if (!started) return;
     started = false;

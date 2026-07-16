@@ -44,10 +44,6 @@ export interface TimerScheduler {
   clear(id: ReturnType<typeof setTimeout>): void;
 }
 
-export interface VisibilityEventTarget extends EventTarget {
-  readonly hidden: boolean;
-}
-
 export interface BattleEnginePort {
   readonly frame: BattleFrameView;
   readonly outcome: BattleOutcome | null;
@@ -112,7 +108,6 @@ export interface BattleSceneDependencies {
   readonly scheduler?: FrameScheduler;
   readonly timerScheduler?: TimerScheduler;
   readonly eventTarget?: EventTarget | null;
-  readonly visibilityTarget?: VisibilityEventTarget | null;
   readonly getDevicePixelRatio?: () => number;
   readonly maxDevicePixelRatio?: number;
 }
@@ -142,7 +137,6 @@ export class BattleScene implements GameScene {
   private readonly scheduler: FrameScheduler;
   private readonly timerScheduler: TimerScheduler;
   private readonly eventTarget: EventTarget | null;
-  private readonly visibilityTarget: VisibilityEventTarget | null;
   private readonly getDevicePixelRatio: () => number;
   private readonly maxDevicePixelRatio: number;
   private readonly pendingActions = new Set<string>();
@@ -155,6 +149,7 @@ export class BattleScene implements GameScene {
   private viewport: CanvasViewport | null = null;
   private loop: FixedStepLoop | null = null;
   private frameRequestId: number | null = null;
+  private frameLoopPaused = false;
   private upgradeTimerId: ReturnType<typeof setTimeout> | null = null;
   private lastFrameTimeMs = 0;
   private lifecycleVersion = 0;
@@ -168,36 +163,16 @@ export class BattleScene implements GameScene {
 
   private readonly frameCallback: FrameRequestCallback = (timeMs): void => {
     if (!this.host || !this.loop) return;
+    this.frameRequestId = null;
     this.lastFrameTimeMs = timeMs;
     this.loop.frame(timeMs);
-    if (this.host) {
+    if (this.host && !this.frameLoopPaused) {
       this.frameRequestId = this.scheduler.request(this.frameCallback);
     }
   };
 
   private readonly onResize = (): void => {
     this.viewport = null;
-  };
-
-  private readonly onVisibilityChange = (): void => {
-    const target = this.visibilityTarget;
-    if (!target) return;
-    if (target.hidden) {
-      if (
-        this.dependencies.engine.frame.status === 'running'
-        || this.dependencies.engine.frame.status === 'boss-intro'
-      ) {
-        this.visibilityPaused = true;
-        this.dependencies.engine.pause('visibility');
-        this.sound.pause();
-      }
-      return;
-    }
-    if (this.visibilityPaused) {
-      this.visibilityPaused = false;
-      this.dependencies.engine.resume();
-      void this.sound.resume();
-    }
   };
 
   public constructor(
@@ -210,12 +185,6 @@ export class BattleScene implements GameScene {
       dependencies.timerScheduler ?? BROWSER_TIMER_SCHEDULER;
     this.eventTarget = dependencies.eventTarget
       ?? (typeof window === 'undefined' ? null : window);
-    this.visibilityTarget = dependencies.visibilityTarget
-      ?? (
-        typeof document === 'undefined'
-          ? null
-          : document as VisibilityEventTarget
-      );
     this.getDevicePixelRatio = dependencies.getDevicePixelRatio
       ?? (() => (
         typeof window === 'undefined' ? 1 : window.devicePixelRatio || 1
@@ -236,6 +205,7 @@ export class BattleScene implements GameScene {
     this.interactionNotice = '';
     this.queuedSkillRefresh = false;
     this.visibilityPaused = false;
+    this.frameLoopPaused = false;
     this.exitRequested = false;
     host.innerHTML = `<section class="game-scene game-scene--battle">
       <div class="battle-canvas-host">
@@ -266,10 +236,6 @@ export class BattleScene implements GameScene {
     this.hud.mount(hudHost);
     this.sound.setBattlePhase('battle');
     this.eventTarget?.addEventListener('resize', this.onResize);
-    this.visibilityTarget?.addEventListener(
-      'visibilitychange',
-      this.onVisibilityChange,
-    );
 
     this.loop = new FixedStepLoop({
       stepMs: FIXED_STEP_MS,
@@ -280,7 +246,7 @@ export class BattleScene implements GameScene {
     });
     this.refreshViewport();
     this.renderBattle();
-    this.frameRequestId = this.scheduler.request(this.frameCallback);
+    this.startAnimationLoop();
   }
 
   public setReducedMotion(reducedMotion: boolean): void {
@@ -288,23 +254,27 @@ export class BattleScene implements GameScene {
     this.dependencies.effects.setReducedMotion?.(reducedMotion);
   }
 
+  public pauseForVisibility(): void {
+    if (!this.host || this.visibilityPaused) return;
+    this.visibilityPaused = true;
+    const status = this.dependencies.engine.frame.status;
+    if (status === 'running' || status === 'boss-intro') {
+      this.dependencies.engine.pause('visibility');
+    }
+    this.sound.pause();
+    this.stopAnimationLoop();
+    this.renderBattle();
+  }
+
   public unmount(): void {
     if (!this.host) return;
     this.lifecycleVersion += 1;
-    if (this.frameRequestId !== null) {
-      this.scheduler.cancel(this.frameRequestId);
-      this.frameRequestId = null;
-    }
+    this.stopAnimationLoop();
     if (this.upgradeTimerId !== null) {
       this.timerScheduler.clear(this.upgradeTimerId);
       this.upgradeTimerId = null;
     }
-    this.loop?.stop();
     this.eventTarget?.removeEventListener('resize', this.onResize);
-    this.visibilityTarget?.removeEventListener(
-      'visibilitychange',
-      this.onVisibilityChange,
-    );
     this.hud?.dispose();
     this.dependencies.effects.reset();
     this.sound.dispose();
@@ -321,6 +291,7 @@ export class BattleScene implements GameScene {
     this.interactionNotice = '';
     this.queuedSkillRefresh = false;
     this.visibilityPaused = false;
+    this.frameLoopPaused = false;
   }
 
   private updateBattle(stepMs: number): void {
@@ -388,8 +359,32 @@ export class BattleScene implements GameScene {
         reviveAvailable: !this.dependencies.engine.frame.adReviveUsed,
         settlement: this.settlement,
         pendingActions: this.pendingActions,
+        visibilityResumeRequired: this.visibilityPaused,
       },
     ));
+  }
+
+  private startAnimationLoop(): void {
+    if (
+      !this.host
+      || !this.loop
+      || this.frameRequestId !== null
+    ) {
+      return;
+    }
+    this.frameLoopPaused = false;
+    this.loop.start();
+    this.lastFrameTimeMs = 0;
+    this.frameRequestId = this.scheduler.request(this.frameCallback);
+  }
+
+  private stopAnimationLoop(): void {
+    this.frameLoopPaused = true;
+    if (this.frameRequestId !== null) {
+      this.scheduler.cancel(this.frameRequestId);
+      this.frameRequestId = null;
+    }
+    this.loop?.stop();
   }
 
   private refreshViewport(): void {
@@ -428,6 +423,10 @@ export class BattleScene implements GameScene {
           if (!this.host) return;
           this.pendingActions.delete('upgrade-choice');
           this.pendingActions.delete('upgrade-resume');
+          if (this.visibilityPaused) {
+            this.renderBattle();
+            return;
+          }
           this.dependencies.engine.resume();
           void this.sound.resume();
         }, 400);
@@ -473,7 +472,7 @@ export class BattleScene implements GameScene {
             accepted =
               await this.dependencies.callbacks.onRequestSkillRefresh();
           } finally {
-            if (this.host) {
+            if (this.host && !this.visibilityPaused) {
               this.dependencies.engine.resume();
               await this.sound.resume();
             }
@@ -485,16 +484,44 @@ export class BattleScene implements GameScene {
         if (this.dependencies.engine.frame.status !== 'running') return;
         this.dependencies.engine.pause('manual');
         this.sound.pause();
+        this.stopAnimationLoop();
+        this.renderBattle();
       },
       onResume: () => {
+        if (this.visibilityPaused) {
+          void this.runPending('visibility-resume', async () => {
+            await this.sound.resume();
+            if (!this.host) return;
+            this.visibilityPaused = false;
+            if (
+              this.dependencies.engine.frame.status === 'paused'
+              && !this.pendingActions.has('upgrade-resume')
+            ) {
+              this.dependencies.engine.resume();
+            }
+            this.startAnimationLoop();
+            this.renderBattle();
+          });
+          return;
+        }
         if (
           this.dependencies.engine.frame.status !== 'paused'
           || this.pendingActions.has('upgrade-resume')
         ) {
           return;
         }
-        this.dependencies.engine.resume();
-        void this.sound.resume();
+        void this.runPending('manual-resume', async () => {
+          await this.sound.resume();
+          if (
+            !this.host
+            || this.dependencies.engine.frame.status !== 'paused'
+          ) {
+            return;
+          }
+          this.dependencies.engine.resume();
+          this.startAnimationLoop();
+          this.renderBattle();
+        });
       },
       onRequestRevive: () => {
         void this.runPending('revive', async () => {
@@ -509,7 +536,7 @@ export class BattleScene implements GameScene {
           }
           if (this.dependencies.engine.revive(result.hpRestored, 3000)) {
             this.sound.setBattlePhase('battle');
-            await this.sound.resume();
+            if (!this.visibilityPaused) await this.sound.resume();
           }
         });
       },
