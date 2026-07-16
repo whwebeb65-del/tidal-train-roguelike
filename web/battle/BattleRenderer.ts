@@ -6,6 +6,10 @@ import type {
   ImageDrawCommand,
 } from './BattleDrawTypes';
 import type { CanvasViewport } from './CanvasViewport';
+import type {
+  EffectFrameView,
+  EffectParticleView,
+} from './EffectSystem';
 import {
   createCaptainRig,
   type SpritePartPose,
@@ -23,6 +27,7 @@ export interface BattleRenderInput {
   readonly captainArtId: BattleArtId;
   readonly timeMs: number;
   readonly reducedMotion: boolean;
+  readonly effects: EffectFrameView;
 }
 
 const ENEMY_ART: Readonly<Record<EnemyKind, BattleArtId>> = {
@@ -52,10 +57,10 @@ export class BattleRenderer {
 
   public render(input: BattleRenderInput): void {
     const camera: CameraPose = {
-      x: 0,
-      y: 0,
-      rotation: 0,
-      amplitude: 0,
+      x: input.effects.camera.x,
+      y: input.effects.camera.y,
+      rotation: input.effects.camera.rotation,
+      amplitude: input.effects.camera.amplitude,
     };
     this.painter.begin(input.viewport, camera);
     try {
@@ -64,10 +69,14 @@ export class BattleRenderer {
       this.drawWaterLanes(input);
       this.drawLoot(input);
       this.drawEnemies(input);
+      this.drawEffectParticles(input, 'enemies');
       this.drawProjectiles(input);
       this.drawTrain(input);
       this.drawCrew(input);
       this.drawFrontEffects(input);
+      this.drawEffectParticles(input, 'front-effects');
+      this.drawImpactRings(input);
+      this.drawDamageNumbers(input);
       this.drawCinematicOverlay(input);
     } finally {
       this.painter.end();
@@ -553,29 +562,126 @@ export class BattleRenderer {
     });
   }
 
+  private drawEffectParticles(
+    input: BattleRenderInput,
+    layer: EffectParticleView['layer'],
+  ): void {
+    for (const particle of input.effects.particles) {
+      if (particle.layer !== layer) continue;
+      const stretched = (
+        particle.kind === 'armour-shard'
+        || particle.kind === 'defeat-shard'
+      );
+      this.painter.ellipse({
+        kind: `effect-${particle.kind}`,
+        layer,
+        x: particle.x,
+        y: particle.y,
+        radiusX: stretched ? particle.size * 1.6 : particle.size,
+        radiusY: stretched ? particle.size * 0.55 : particle.size,
+        rotation: particle.rotation,
+        fill: particle.color,
+        stroke: particle.kind === 'warning'
+          ? 'rgba(255, 255, 255, 0.8)'
+          : undefined,
+        lineWidth: particle.kind === 'warning' ? 1 : undefined,
+        alpha: particle.alpha,
+        blendMode: particle.kind === 'skill'
+          || particle.kind === 'muzzle'
+          ? 'screen'
+          : 'source-over',
+      });
+    }
+  }
+
+  private drawImpactRings(input: BattleRenderInput): void {
+    for (const ring of input.effects.rings) {
+      this.painter.ellipse({
+        kind: 'impact-ring',
+        layer: 'front-effects',
+        x: ring.x,
+        y: ring.y,
+        radiusX: ring.radius,
+        radiusY: ring.radius * 0.72,
+        stroke: ring.color,
+        lineWidth: 2.5,
+        alpha: ring.alpha,
+        blendMode: 'screen',
+      });
+    }
+  }
+
+  private drawDamageNumbers(input: BattleRenderInput): void {
+    for (const number of input.effects.damageNumbers) {
+      this.painter.text({
+        kind: 'damage-number',
+        layer: 'damage-numbers',
+        text: number.critical ? `暴击 ${number.value}` : `${number.value}`,
+        x: number.x,
+        y: number.y,
+        fill: number.critical ? '#fff0a6' : '#efffff',
+        stroke: 'rgba(22, 65, 94, 0.78)',
+        lineWidth: number.critical ? 4 : 3,
+        font: number.critical
+          ? '800 18px system-ui, sans-serif'
+          : '700 14px system-ui, sans-serif',
+        alpha: number.alpha,
+      });
+    }
+  }
+
   private drawCinematicOverlay(input: BattleRenderInput): void {
-    if (input.frame.status !== 'boss-intro') return;
-    const progress = Math.min(1, input.frame.phaseElapsedMs / 6000);
-    this.painter.ellipse({
-      kind: 'boss-intro-dim',
-      layer: 'cinematic-overlay',
-      x: 195,
-      y: 422,
-      radiusX: 310,
-      radiusY: 620,
-      fill: 'rgba(19, 39, 82, 0.48)',
-      alpha: Math.min(1, progress * 2),
-    });
-    this.painter.text({
-      kind: 'boss-intro-title',
-      layer: 'cinematic-overlay',
-      text: '深海回响正在靠近',
-      x: 195,
-      y: 158,
-      fill: '#efffff',
-      stroke: 'rgba(25, 64, 101, 0.8)',
-      lineWidth: 4,
-      font: '700 24px system-ui, sans-serif',
-    });
+    const bossProgress = input.frame.status === 'boss-intro'
+      ? Math.min(1, input.frame.phaseElapsedMs / 6000)
+      : 0;
+    const darken = Math.max(
+      input.effects.cinematic.darken,
+      Math.min(0.48, bossProgress * 0.8),
+    );
+    if (darken > 0) {
+      this.painter.ellipse({
+        kind: 'boss-intro-dim',
+        layer: 'cinematic-overlay',
+        x: 195,
+        y: 422,
+        radiusX: 310,
+        radiusY: 620,
+        fill: 'rgba(19, 39, 82, 0.82)',
+        alpha: darken,
+      });
+    }
+    const title = input.effects.cinematic.title
+      ?? (
+        input.frame.status === 'boss-intro'
+          ? '深海回响正在靠近'
+          : null
+      );
+    if (title) {
+      this.painter.text({
+        kind: 'boss-intro-title',
+        layer: 'cinematic-overlay',
+        text: title,
+        x: 195,
+        y: 158,
+        fill: '#efffff',
+        stroke: 'rgba(25, 64, 101, 0.8)',
+        lineWidth: 4,
+        font: '700 24px system-ui, sans-serif',
+      });
+    }
+    if (input.effects.cinematic.slowMotion > 0) {
+      this.painter.ellipse({
+        kind: 'victory-slow-motion',
+        layer: 'cinematic-overlay',
+        x: 195,
+        y: 380,
+        radiusX: 190,
+        radiusY: 240,
+        stroke: 'rgba(241, 255, 216, 0.85)',
+        lineWidth: 5,
+        alpha: input.effects.cinematic.slowMotion,
+        blendMode: 'screen',
+      });
+    }
   }
 }

@@ -13,6 +13,10 @@ import type {
 import {
   computeCanvasViewport,
 } from '../../../../web/battle/CanvasViewport';
+import {
+  EMPTY_EFFECT_FRAME_VIEW,
+  type EffectFrameView,
+} from '../../../../web/battle/EffectSystem';
 import type {
   BattleFrameView,
 } from '../../../../web/battle/BattleTypes';
@@ -123,6 +127,7 @@ export function createPresentationFixture(input: {
   readonly failedArtIds?: readonly BattleArtId[];
   readonly frame?: Partial<BattleFrameView>;
   readonly reducedMotion?: boolean;
+  readonly effects?: EffectFrameView;
 } = {}): BattleRenderInput {
   const failed = new Set(input.failedArtIds ?? []);
   const sources = new Map<BattleArtId, CanvasImageSource>();
@@ -149,6 +154,7 @@ export function createPresentationFixture(input: {
     captainArtId: 'captainFemaleBase',
     timeMs: 42_000,
     reducedMotion: input.reducedMotion ?? false,
+    effects: input.effects ?? EMPTY_EFFECT_FRAME_VIEW,
   };
 }
 
