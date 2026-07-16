@@ -25,6 +25,10 @@ import type {
   ProjectileState,
 } from './BattleTypes';
 import {
+  applyUpgrade,
+  createUpgradeOffer,
+} from './UpgradeSystem';
+import {
   createWaveSchedule,
   getWaveAtTime,
   type SpawnInstruction,
@@ -70,6 +74,7 @@ export class BattleEngine {
   private reviveProtectionMs = 0;
   private resolvedOutcome: BattleOutcome | null = null;
   private lastStartedWave = 0;
+  private eliteKilled = false;
   private readonly cooldowns: Record<BattleSkillId, number> = {
     'tidal-volley': 0,
     'bubble-barrier': 0,
@@ -218,6 +223,65 @@ export class BattleEngine {
     this.damageTrain(amount);
   }
 
+  public rerollUpgradeOffer(): boolean {
+    if (
+      this.status !== 'upgrade'
+      || this.input.mode !== 'normal'
+      || this.upgradeRerollUsed
+    ) {
+      return false;
+    }
+    const previous = this.offeredUpgradeIds.join('|');
+    let next = this.offeredUpgradeIds;
+    for (
+      let attempt = 0;
+      attempt < 8 && next.join('|') === previous;
+      attempt += 1
+    ) {
+      this.upgradeOfferRoll += 1;
+      next = [...createUpgradeOffer(
+        this.input.seed,
+        this.upgradeCheckpoint + 1,
+        this.upgradeLevels,
+        this.upgradeOfferRoll,
+      )];
+    }
+    if (next.join('|') === previous) return false;
+    this.offeredUpgradeIds = [...next];
+    this.upgradeRerollUsed = true;
+    this.events.push({
+      type: 'upgrade-rerolled',
+      upgradeIds: this.offeredUpgradeIds,
+    });
+    return true;
+  }
+
+  public chooseUpgrade(upgradeId: BattleUpgradeId): boolean {
+    if (
+      this.status !== 'upgrade'
+      || !this.offeredUpgradeIds.includes(upgradeId)
+    ) {
+      return false;
+    }
+    const result = applyUpgrade(
+      this.modifiers,
+      this.upgradeLevels,
+      upgradeId,
+    );
+    if (!result.accepted) return false;
+    Object.assign(this.modifiers, result.modifiers);
+    Object.assign(this.upgradeLevels, result.levels);
+    this.upgradeCheckpoint += 1;
+    this.offeredUpgradeIds = [];
+    this.status = 'running';
+    this.events.push({
+      type: 'upgrade-selected',
+      upgradeId,
+      level: this.upgradeLevels[upgradeId],
+    });
+    return true;
+  }
+
   public update(stepMs: number): void {
     if (!Number.isFinite(stepMs) || stepMs <= 0) {
       throw new Error('Battle step must be positive');
@@ -237,6 +301,7 @@ export class BattleEngine {
     this.updateMainCannon(stepMs);
     this.moveProjectiles(stepMs);
     this.updateLoot(stepMs);
+    this.maybeOfferUpgrade();
   }
 
   private updateTimers(stepMs: number): void {
@@ -428,12 +493,14 @@ export class BattleEngine {
     readonly splashRadius: number;
     readonly chainRemaining: number;
     readonly xOffset?: number;
+    readonly startX?: number;
+    readonly startY?: number;
   }): MutableProjectileState {
     const projectile: MutableProjectileState = {
       id: this.nextEntityId++,
       source: input.source,
-      x: 195 + (input.xOffset ?? 0),
-      y: 690,
+      x: (input.startX ?? 195) + (input.xOffset ?? 0),
+      y: input.startY ?? 690,
       targetId: input.targetId,
       speedPerSecond: MAIN_PROJECTILE_SPEED,
       damage: Math.max(0, input.damage),
@@ -512,6 +579,39 @@ export class BattleEngine {
           continue;
         }
         this.applyDamage(nearby, splashDamage, false, 'splash');
+      }
+    }
+
+    if (projectile.chainRemaining > 0) {
+      const nextTarget = this.enemies
+        .filter((candidate) => candidate.alive && candidate.id !== enemy.id)
+        .sort((left, right) => {
+          const leftDistance = Math.hypot(
+            left.x - enemy.x,
+            left.y - enemy.y,
+          );
+          const rightDistance = Math.hypot(
+            right.x - enemy.x,
+            right.y - enemy.y,
+          );
+          return leftDistance - rightDistance || left.id - right.id;
+        })[0];
+      if (nextTarget) {
+        this.createProjectile({
+          source: 'chain',
+          targetId: nextTarget.id,
+          damage: Math.max(
+            1,
+            Math.floor(
+              projectile.damage * this.modifiers.chainDamageMultiplier,
+            ),
+          ),
+          critical: false,
+          splashRadius: 0,
+          chainRemaining: projectile.chainRemaining - 1,
+          startX: enemy.x,
+          startY: enemy.y,
+        });
       }
     }
   }
@@ -662,6 +762,35 @@ export class BattleEngine {
 
   private nextUpgradeThreshold(): number | null {
     return EXPERIENCE_THRESHOLDS[this.upgradeCheckpoint] ?? null;
+  }
+
+  private maybeOfferUpgrade(): void {
+    const checkpoints = [
+      this.elapsedMs >= 30_000,
+      this.elapsedMs >= 95_000,
+      this.eliteKilled && this.elapsedMs >= 160_000,
+    ];
+    if (
+      this.upgradeCheckpoint >= checkpoints.length
+      || !checkpoints[this.upgradeCheckpoint]
+    ) {
+      return;
+    }
+    const threshold = EXPERIENCE_THRESHOLDS[this.upgradeCheckpoint];
+    if (threshold === undefined) return;
+    this.experience = Math.max(this.experience, threshold);
+    this.upgradeOfferRoll = 0;
+    this.offeredUpgradeIds = [...createUpgradeOffer(
+      this.input.seed,
+      this.upgradeCheckpoint + 1,
+      this.upgradeLevels,
+      this.upgradeOfferRoll,
+    )];
+    this.status = 'upgrade';
+    this.events.push({
+      type: 'upgrade-offered',
+      upgradeIds: this.offeredUpgradeIds,
+    });
   }
 
   private finish(victory: boolean): void {
