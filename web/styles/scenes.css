@@ -33,11 +33,71 @@
 
 .station-hero__train {
   position: absolute;
-  right: -3%;
-  bottom: 7%;
-  width: min(68%, 720px);
+  z-index: 1;
+  right: -7%;
+  bottom: 2%;
+  width: min(64%, 690px);
   filter: drop-shadow(0 24px 22px rgb(0 20 30 / 28%));
 }
+
+.station-hero__copy {
+  position: absolute;
+  z-index: 5;
+  top: clamp(22px, 5vw, 48px);
+  left: clamp(20px, 5vw, 54px);
+  width: min(48%, 470px);
+  padding: 18px;
+  border: 1px solid rgb(247 244 236 / 22%);
+  border-radius: var(--radius-md);
+  background: rgb(7 29 43 / 76%);
+}
+
+.station-hero__copy h1 {
+  max-width: 420px;
+  margin: 8px 0;
+  font-size: clamp(30px, 5vw, 54px);
+  line-height: 1.05;
+  letter-spacing: -.05em;
+}
+
+.station-hero__copy p {
+  max-width: 410px;
+  margin: 0;
+  color: #c2d5da;
+}
+
+.station-hero__chips {
+  display: flex;
+  gap: 7px;
+  flex-wrap: wrap;
+  margin: 16px 0;
+}
+
+.station-hero__captain {
+  position: absolute;
+  z-index: 4;
+  bottom: -2%;
+  left: 4%;
+  width: min(27%, 270px);
+}
+
+.station-hero__otter {
+  position: absolute;
+  z-index: 3;
+  bottom: 1%;
+  left: 29%;
+  width: min(12%, 120px);
+}
+
+.station-hero__jellyfish {
+  position: absolute;
+  z-index: 2;
+  top: 15%;
+  right: 4%;
+  width: min(10%, 100px);
+}
+
+.station-hero__start { min-width: 210px; }
 
 .captain-art {
   display: block;
@@ -72,6 +132,68 @@
   filter: drop-shadow(0 20px 22px rgb(0 13 22 / 38%));
 }
 
+.combat-stage__party,
+.combat-stage__enemy { z-index: 1; }
+
+.combat-train {
+  position: absolute;
+  right: -4%;
+  bottom: 3%;
+  width: min(92%, 520px);
+  filter: drop-shadow(0 20px 18px rgb(0 15 24 / 30%));
+}
+
+.combat-captain {
+  position: absolute;
+  z-index: 2;
+  bottom: 1%;
+  left: 1%;
+  width: min(34%, 190px);
+}
+
+.combat-companion {
+  position: absolute;
+  z-index: 3;
+  top: 9%;
+  left: 28%;
+  width: min(18%, 100px);
+}
+
+.combat-enemy-art {
+  position: relative;
+  z-index: 2;
+}
+
+.combat-minion {
+  position: absolute;
+  z-index: 1;
+  bottom: 2%;
+  width: min(31%, 130px) !important;
+}
+
+.combat-minion--left { left: 0; }
+.combat-minion--right { right: 0; transform: scaleX(-1); }
+.combat-stage__enemy.is-defeated { opacity: .48; filter: saturate(.35); }
+
+.combat-vitals {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.combat-scene .action-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.combat-scene .debug-hit {
+  grid-column: 1 / -1;
+  justify-self: end;
+}
+
 .route-card,
 .reward-card,
 .settlement-card {
@@ -82,6 +204,29 @@
   box-shadow: 0 12px 30px rgb(0 8 15 / 22%);
 }
 
-.route-card { padding: 16px; }
-.reward-card { padding: 18px; }
+.route-card {
+  display: grid;
+  gap: 7px;
+  min-height: 160px;
+  padding: 18px;
+  text-align: left;
+}
+
+.route-card b,
+.reward-card b { font-size: 20px; }
+
+.route-card small,
+.reward-card small { color: var(--seafoam-300); }
+
+.route-card span,
+.reward-card span { color: #a9c0c7; }
+
+.reward-card {
+  display: grid;
+  gap: 7px;
+  min-height: 170px;
+  padding: 18px;
+  text-align: left;
+}
+
 .settlement-card { padding: 22px; }

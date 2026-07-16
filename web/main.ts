@@ -44,6 +44,10 @@ import {
 } from '../src/domain/captain/CaptainProfileSystem';
 import type { CaptainId } from '../src/domain/captain/CaptainCatalog';
 import {
+  getSkinDefinition,
+  type SkinId,
+} from '../src/domain/skin/SkinCatalog';
+import {
   createProgressionSnapshot,
   type ProgressionSnapshot,
 } from '../src/domain/progression/ProgressionStatService';
@@ -117,6 +121,13 @@ import {
 import { renderDailyCheckIn } from './views/DailyCheckInView';
 import { renderCommerceStore } from './views/CommerceView';
 import { renderCaptainSelection } from './views/CaptainSelectionView';
+import { renderStationHero } from './views/StationHeroView';
+import { renderCombatScene } from './views/CombatSceneView';
+import {
+  renderRewardCards,
+  renderRouteCards,
+  renderSettlementCard,
+} from './views/RunSceneView';
 import './styles.css';
 
 const SAVE_KEY = 'tidal-train-prototype-save-v1';
@@ -242,6 +253,15 @@ function getProgressionSnapshot(): ProgressionSnapshot {
     ownedSkinIds: save.ownedSkinIds,
     equipmentState: getEquipmentStateFromSave(),
   });
+}
+
+function getActiveCaptainId(): CaptainId {
+  return save.selectedCaptainId ?? 'captain-tide-female';
+}
+
+function getActiveSkinId(): SkinId {
+  const candidate = save.equippedSkinIds[getActiveCaptainId()];
+  return getSkinDefinition(candidate ?? '')?.id ?? 'skin-tide-base';
 }
 
 function scaleGearReward(baseGears: number): number {
@@ -394,6 +414,36 @@ function renderBattleActions(isBoss: boolean): string {
   </div>`;
 }
 
+function getBattleActionValues(): {
+  readonly attackDamage: number;
+  readonly skillDamage: number;
+  readonly repairAmount: number;
+  readonly burstDamage: number;
+  readonly burstReady: boolean;
+  readonly repairReady: boolean;
+} {
+  const damageBonus = getActionDamageBonus();
+  const progression = getProgressionSnapshot();
+  const totalFlatDamage = damageBonus + progression.damageFlat;
+  return {
+    attackDamage: Math.floor(
+      ((battleState.modifier === 'surge-current' ? 30 : 25) + totalFlatDamage)
+        * progression.damageMultiplier,
+    ),
+    skillDamage: Math.floor(
+      ((battleState.modifier === 'echo-fog' ? 60 : 50) + totalFlatDamage)
+        * progression.damageMultiplier,
+    ),
+    repairAmount: (battleState.modifier === 'calm-water' ? 24 : 18)
+      + progression.repairBonus,
+    burstDamage: Math.floor(
+      (60 + totalFlatDamage) * progression.damageMultiplier,
+    ),
+    burstReady: battleState.momentum >= 100 && !battleState.burstUsed,
+    repairReady: !battleState.repairUsed && battleState.playerHp < battleState.maxPlayerHp,
+  };
+}
+
 function renderHeader(): string {
   return `<header class="topbar">
     <div class="brand"><span class="brand-mark">✦</span><div><strong>最后一班</strong><small>潮汐列车</small></div></div>
@@ -518,6 +568,7 @@ function renderStation(): string {
   const nextLevelCost = save.stationLevel * 80;
   const currentDayId = getChinaDayId(Date.now());
   const dailyDefinition = syncDailyTrialDay();
+  const progression = getProgressionSnapshot();
   const mapCards = MAP_PROGRESSION.map((map) => {
     const unlocked = isMapUnlocked(save, map.id);
     const canUnlock = canUnlockMap(save, map.id);
@@ -533,8 +584,14 @@ function renderStation(): string {
   }).join('');
 
   return `<section class="station scene">
-    <div class="scene-heading"><div><span class="eyebrow">STATION / ${save.stationLevel}</span><h1>潮汐车站</h1><p>每次升级只打开一个新目标：下一张地图、下一项功能，或下一场更危险的挑战。</p></div><button class="primary" data-action="start-run">驶向 ${formatMap(currentMapId)} <span>→</span></button></div>
-    <div class="train-platform"><div class="signal"></div><div class="train"><div class="train-window"></div><div class="train-light">潮</div><div class="train-wake"></div></div><div class="platform-line"></div><div class="platform-label">${formatMap(currentMapId)} · 潮位稳定</div></div>
+    ${renderStationHero({
+      captainId: getActiveCaptainId(),
+      skinId: getActiveSkinId(),
+      mapName: formatMap(currentMapId),
+      stationLevel: save.stationLevel,
+      maxHp: progression.maxPlayerHp,
+      damagePercent: Math.max(0, Math.round((progression.damageMultiplier - 1) * 100)),
+    })}
     <div class="section-title"><h2>航线逐步开放</h2><span>已开放 ${save.unlockedMapIds.length}/${MAP_PROGRESSION.length}</span></div>
     <div class="map-grid">${mapCards}</div>
     <div class="station-footer"><div><b>车站升级</b><span>当前 Lv.${save.stationLevel} · 下一次需要 ${nextLevelCost} 齿轮</span></div><button class="secondary" data-action="upgrade-station" ${save.gears < nextLevelCost ? 'disabled' : ''}>升级车站</button></div>
@@ -649,11 +706,11 @@ function handleCombatAction(action: CombatAction): void {
 }
 
 function renderCombat(): string {
-  const damagePercent = Math.max(0, Math.round((battleState.enemyHp / battleState.enemyMaxHp) * 100));
   const node = route.find((item) => item.id === currentNodeId);
   const dailyDefinition = getActiveDailyTrialDefinition();
   const dailyBanner = dailyDefinition ? renderDailyTrialRunBanner({ definition: dailyDefinition }) : '';
   const skillRefreshAvailable = canRefreshSkill(recoveryState);
+  const actionValues = getBattleActionValues();
   if (skillRefreshAvailable) trackAdOfferOnce('skill-refresh');
   const interactionContent = dailyDefinition
     ? '<div class="note daily-trial-fairness">每日试炼关闭常规互动货币，避免无限重玩刷取资源；战斗、救援和成绩仍会正常记录。</div>'
@@ -661,12 +718,19 @@ function renderCombat(): string {
   return `<section class="run scene">
     <div class="run-heading"><div><span class="eyebrow">RUN ${runId}</span><h1>${node?.type === 'event' ? '潮汐事件' : '漂流带遭遇'}</h1><p>自动战斗会推进列车，点击技能可以改变本局构筑节奏。</p></div><span class="risk">危险度 ${Math.round((node?.risk ?? 0.2) * 100)}%</span></div>
     ${dailyBanner}
-    <div class="combat-board"><div class="water-lines"></div><div class="enemy ${battleState.enemyHp <= 0 ? 'defeated' : ''}"><div class="enemy-eye"></div><div class="enemy-mouth"></div><span>潮兽</span></div><div class="train small"><div class="train-window"></div><div class="train-light">潮</div></div><div class="lane-row"><button data-action="lane" data-lane="0">左航道</button><button class="active" data-action="lane" data-lane="1">中航道</button><button data-action="lane" data-lane="2">右航道</button></div></div>
-    <div class="hp-line"><div><span>潮兽护甲</span><b>${battleState.enemyHp} / ${battleState.enemyMaxHp}</b></div><div class="progress"><i style="width:${damagePercent}%"></i></div></div>
-    <div class="hp-line player-hp"><div><span>列车生命</span><b>${battleState.playerHp} / ${battleState.maxPlayerHp}</b></div><div class="progress"><i style="width:${Math.round((battleState.playerHp / battleState.maxPlayerHp) * 100)}%"></i></div></div>
-    <div class="skill-meter"><span>技能充能 ${recoveryState.skillCharges}/1</span>${skillRefreshAvailable ? `<button class="chip" data-action="skill-refresh" ${pendingRecoveryActions.has('skill-refresh') ? 'disabled' : ''}>看广告刷新技能</button>` : '<small>下一战斗节点自动补充</small>'}</div>
+    ${renderCombatScene({
+      captainId: getActiveCaptainId(),
+      skinId: getActiveSkinId(),
+      boss: false,
+      enemyHp: battleState.enemyHp,
+      enemyMaxHp: battleState.enemyMaxHp,
+      playerHp: battleState.playerHp,
+      playerMaxHp: battleState.maxPlayerHp,
+      skillCharges: recoveryState.skillCharges,
+      ...actionValues,
+    })}
+    ${skillRefreshAvailable ? `<div class="rewarded-actions"><button class="chip" data-action="skill-refresh" ${pendingRecoveryActions.has('skill-refresh') ? 'disabled' : ''}>看广告刷新技能</button><small>广告取消或失败不会消耗机会。</small></div>` : ''}
     ${renderBattleStatus()}
-    ${renderBattleActions(false)}
     ${interactionContent}
   </section>`;
 }
@@ -679,24 +743,50 @@ function renderReward(): string {
   const rerollAction = dailyDefinition
     ? ''
     : `<div class="rewarded-actions"><button class="secondary" data-action="reward-reroll" ${rewardRerollUsed || rerollPending ? 'disabled' : ''}>${rerollPending ? '广告加载中…' : rewardRerollUsed ? '本局已重选' : '看广告重选一次'}</button><small>取消或广告失败不会消耗本局重选机会。</small></div>`;
-  return `<section class="run scene compact"><div class="run-heading"><div><span class="eyebrow">REWARD CHOICE</span><h1>潮汐回响</h1><p>只选一张，下一站的风险会记住你的选择。</p></div><span class="choice-count">3 选 1</span></div>${dailyDefinition ? renderDailyTrialRunBanner({ definition: dailyDefinition }) : ''}<div class="choice-grid">${options.map((option) => `<button class="choice-card" data-action="reward" data-option-id="${option.id}"><small>${option.kind}</small><b>${option.contentId}</b><span>${dailyDefinition ? '试炼本局临时选择' : option.kind === 'gear' ? '补充车站齿轮' : '加入本局构筑'}</span></button>`).join('')}</div>${rerollAction}<div class="note">${dailyDefinition ? '每日试炼保持同种子公平，不开放广告重选，构筑选择也不写入永久资源。' : '奖励由规则层生成；客户端只提交选择 ID，正式服由服务端校验发放。'}</div></section>`;
+  return `${dailyDefinition ? renderDailyTrialRunBanner({ definition: dailyDefinition }) : ''}${renderRewardCards({
+    options,
+    dailyTrial: Boolean(dailyDefinition),
+    rerollHtml: rerollAction,
+    escapeHtml,
+  })}`;
 }
 
 function renderRoute(): string {
   const nextNodes = route.filter((node) => node.id !== currentNodeId && (route.find((item) => item.id === currentNodeId)?.nextNodeIds.includes(node.id) ?? false));
-  return `<section class="run scene compact"><div class="run-heading"><div><span class="eyebrow">ROUTE CHOICE</span><h1>下一站去哪？</h1><p>补给更安全，但真正的高额奖励藏在潮位更高的分支。</p></div><span class="choice-count">航线 ${formatMap(currentMapId)}</span></div><div class="choice-grid">${nextNodes.map((node) => `<button class="choice-card route-choice" data-action="route" data-node-id="${node.id}"><small>深度 ${node.depth} · 风险 ${Math.round(node.risk * 100)}%</small><b>${node.type}</b><span>${node.type === 'boss' ? '潮汐巨兽正在等待' : '可能发现乘客、模块或互动点'}</span></button>`).join('')}</div></section>`;
+  return renderRouteCards({
+    nodes: nextNodes,
+    mapName: formatMap(currentMapId),
+    escapeHtml,
+  });
 }
 
 function renderBoss(): string {
-  const percent = Math.max(0, Math.round((battleState.enemyHp / battleState.enemyMaxHp) * 100));
   const dailyDefinition = getActiveDailyTrialDefinition();
   const dailyBanner = dailyDefinition ? renderDailyTrialRunBanner({ definition: dailyDefinition }) : '';
   const skillRefreshAvailable = canRefreshSkill(recoveryState);
+  const actionValues = getBattleActionValues();
   if (skillRefreshAvailable) trackAdOfferOnce('skill-refresh');
   const rewardCallout = dailyDefinition
     ? '<div class="first-clear-callout">试炼胜利只提交今日分数，不触发普通地图首通或重复通关奖励。</div>'
     : '<div class="first-clear-callout">首次通关：+400 齿轮 · +10 航线徽记 · +3 星票</div>';
-  return `<section class="run scene boss-scene"><div class="run-heading"><div><span class="eyebrow">FINAL BOSS</span><h1>潮汐巨兽 · 深海回响</h1><p>${dailyDefinition ? '击败它，提交今日固定种子试炼成绩。' : '击败它，首次通关奖励将以地图为单位结算一次。'}</p></div><span class="risk danger">高风险</span></div>${dailyBanner}<div class="boss-board"><div class="boss-orb">${battleState.enemyHp > 0 ? '◉' : '✦'}</div><div class="boss-name">${battleState.enemyHp > 0 ? '潮汐巨兽' : '潮位已平息'}</div></div><div class="hp-line"><div><span>Boss 生命</span><b>${battleState.enemyHp} / ${battleState.enemyMaxHp}</b></div><div class="progress danger"><i style="width:${percent}%"></i></div></div><div class="hp-line player-hp"><div><span>列车生命</span><b>${battleState.playerHp} / ${battleState.maxPlayerHp}</b></div><div class="progress"><i style="width:${Math.round((battleState.playerHp / battleState.maxPlayerHp) * 100)}%"></i></div></div><div class="skill-meter"><span>技能充能 ${recoveryState.skillCharges}/1</span>${skillRefreshAvailable ? `<button class="chip" data-action="skill-refresh" ${pendingRecoveryActions.has('skill-refresh') ? 'disabled' : ''}>看广告刷新技能</button>` : '<small>下一战斗节点自动补充</small>'}</div>${renderBattleStatus()}${renderBattleActions(true)}${rewardCallout}</section>`;
+  return `<section class="run scene boss-scene">
+    <div class="run-heading"><div><span class="eyebrow">FINAL BOSS</span><h1>潮汐巨兽 · 深海回响</h1><p>${dailyDefinition ? '击败它，提交今日固定种子试炼成绩。' : '击败它，首次通关奖励将以地图为单位结算一次。'}</p></div><span class="risk danger">高风险</span></div>
+    ${dailyBanner}
+    ${renderCombatScene({
+      captainId: getActiveCaptainId(),
+      skinId: getActiveSkinId(),
+      boss: true,
+      enemyHp: battleState.enemyHp,
+      enemyMaxHp: battleState.enemyMaxHp,
+      playerHp: battleState.playerHp,
+      playerMaxHp: battleState.maxPlayerHp,
+      skillCharges: recoveryState.skillCharges,
+      ...actionValues,
+    })}
+    ${skillRefreshAvailable ? `<div class="rewarded-actions"><button class="chip" data-action="skill-refresh" ${pendingRecoveryActions.has('skill-refresh') ? 'disabled' : ''}>看广告刷新技能</button></div>` : ''}
+    ${renderBattleStatus()}
+    ${rewardCallout}
+  </section>`;
 }
 
 function renderFailure(): string {
@@ -732,7 +822,18 @@ function renderSettlement(): string {
   const expeditionResult = socialState.legionId
     ? `<div class="expedition-settlement"><span>潮汐灯塔团</span><b>本局远征贡献 +${lastExpeditionContribution}</b><small>本周累计 ${socialState.contribution} / 100</small></div>`
     : '<div class="expedition-settlement muted"><span>军团远征</span><b>尚未加入军团</b><small>回到车站加入后，下一局开始累计贡献。</small></div>';
-  return `<section class="settlement scene"><div class="settlement-symbol">✦</div><span class="eyebrow">RUN SETTLED</span><h1>${repeatSettlement ? '潮汐已平息' : '首次通关完成'}</h1><p>${repeatSettlement ? '这条线路的首次通关奖励已经领取过，重复挑战会转为普通收益。' : `你完成了 ${formatMap(currentMapId)} 的首次通关，车站将从此拥有新的扩建方向。`}</p><div class="settlement-rewards">${currency(repeatSettlement ? '普通齿轮' : '首通齿轮', repeatSettlement ? repeatGears : firstClearGears, 'gear')}${currency(repeatSettlement ? '航线徽记' : '首通徽记', repeatSettlement ? 2 : 10, 'route-mark')}${currency(repeatSettlement ? '星票' : '首通星票', repeatSettlement ? 0 : 3, 'ticket')}</div>${doubleAction}${expeditionResult}<button class="primary" data-action="back-station">回到车站</button></section>`;
+  return renderSettlementCard({
+    firstClear: !repeatSettlement,
+    mapName: formatMap(currentMapId),
+    rewards: {
+      gears: repeatSettlement ? repeatGears : firstClearGears,
+      routeMarks: repeatSettlement ? 2 : 10,
+      starTickets: repeatSettlement ? 0 : 3,
+    },
+    doubleActionHtml: doubleAction,
+    expeditionHtml: expeditionResult,
+    escapeHtml,
+  });
 }
 
 function render(): void {
