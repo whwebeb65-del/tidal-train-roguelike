@@ -6,6 +6,7 @@ import {
   LANE_X,
   MAIN_CANNON_INTERVAL_MS,
   MAIN_PROJECTILE_SPEED,
+  SKILL_CONFIG,
   UPGRADE_IDS,
 } from './BattleConfig';
 import { SeededRandom } from './SeededRandom';
@@ -142,6 +143,79 @@ export class BattleEngine {
     this.status = this.pausedFrom;
     this.pausedFrom = null;
     this.pauseReason = null;
+  }
+
+  public useSkill(skillId: BattleSkillId): boolean {
+    if (this.status !== 'running') return false;
+    if (skillId === 'extreme-tide') {
+      if (this.energy < 100) return false;
+      this.energy = 0;
+      const damage = Math.floor(
+        this.input.mainCannonDamage
+          * 8
+          * this.modifiers.extremeDamageMultiplier,
+      );
+      for (const enemy of this.enemies) {
+        if (enemy.alive) {
+          this.applyDamage(enemy, damage, false, 'extreme-tide');
+        }
+      }
+      this.energy = 0;
+    } else {
+      if (this.cooldowns[skillId] > 0) return false;
+      if (skillId === 'tidal-volley' && !this.hasLivingTarget()) {
+        return false;
+      }
+      this.cooldowns[skillId] = Math.round(
+        SKILL_CONFIG[skillId].cooldownMs
+          * this.modifiers.activeCooldownMultiplier,
+      );
+      if (skillId === 'tidal-volley') this.fireVolley();
+      if (skillId === 'bubble-barrier') this.applyBarrier();
+    }
+    this.events.push({ type: 'skill-used', skillId });
+    return true;
+  }
+
+  public refreshActiveSkillCooldowns(): boolean {
+    if (
+      this.status !== 'running'
+      || this.skillRefreshUsed
+      || (
+        this.cooldowns['tidal-volley'] <= 0
+        && this.cooldowns['bubble-barrier'] <= 0
+      )
+    ) {
+      return false;
+    }
+    this.cooldowns['tidal-volley'] = 0;
+    this.cooldowns['bubble-barrier'] = 0;
+    this.skillRefreshUsed = true;
+    this.events.push({ type: 'skill-cooldowns-refreshed' });
+    return true;
+  }
+
+  public revive(hpRestored: number, protectionMs: number): boolean {
+    if (
+      this.status !== 'defeat'
+      || this.adReviveUsed
+      || !Number.isFinite(hpRestored)
+      || hpRestored <= 0
+      || !Number.isFinite(protectionMs)
+      || protectionMs < 0
+    ) {
+      return false;
+    }
+    this.trainHp = Math.min(this.input.maxTrainHp, hpRestored);
+    this.reviveProtectionMs = protectionMs;
+    this.adReviveUsed = true;
+    this.resolvedOutcome = null;
+    this.status = 'running';
+    return true;
+  }
+
+  public debugDamageTrain(amount: number): void {
+    this.damageTrain(amount);
   }
 
   public update(stepMs: number): void {
@@ -306,6 +380,44 @@ export class BattleEngine {
         xOffset: (index - (this.modifiers.mainProjectileCount - 1) / 2) * 8,
       });
     }
+  }
+
+  private fireVolley(): void {
+    const targets = this.enemies
+      .filter((enemy) => enemy.alive)
+      .sort((left, right) => right.y - left.y || left.id - right.id);
+    if (targets.length === 0) return;
+    const damage = Math.floor(this.input.mainCannonDamage * 0.7);
+    for (let index = 0; index < 8; index += 1) {
+      const target = targets[index % targets.length];
+      if (!target) continue;
+      this.createProjectile({
+        source: 'volley',
+        targetId: target.id,
+        damage,
+        critical: false,
+        splashRadius: 0,
+        chainRemaining: 0,
+        xOffset: (index - 3.5) * 5,
+      });
+    }
+  }
+
+  private applyBarrier(): void {
+    const heal = Math.floor(
+      this.input.maxTrainHp * this.modifiers.barrierHealPercent,
+    ) + this.input.repairBonus;
+    this.trainHp = Math.min(this.input.maxTrainHp, this.trainHp + heal);
+    this.shield = Math.floor(
+      this.input.maxTrainHp
+        * 0.25
+        * this.modifiers.barrierShieldMultiplier,
+    );
+    this.shieldRemainingMs = 4000;
+    this.events.push({
+      type: 'shield-changed',
+      shield: this.shield,
+    });
   }
 
   private createProjectile(input: {
@@ -531,6 +643,12 @@ export class BattleEngine {
     const damage = Math.max(0, Math.floor(rawAmount));
     const shieldAbsorbed = Math.min(this.shield, damage);
     this.shield -= shieldAbsorbed;
+    if (shieldAbsorbed > 0) {
+      this.events.push({
+        type: 'shield-changed',
+        shield: this.shield,
+      });
+    }
     const hpDamage = Math.min(this.trainHp, damage - shieldAbsorbed);
     this.trainHp = Math.max(0, this.trainHp - hpDamage);
     this.events.push({
