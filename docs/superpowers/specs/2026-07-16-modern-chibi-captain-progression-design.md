@@ -246,6 +246,7 @@ ownedSkinIds: string[]
 equippedSkinIds: Record<string, string>
 equipmentInventory: EquipmentInstance[]
 equippedEquipmentIds: Record<EquipmentSlot, string | null>
+equipmentFragments: Record<string, number>
 ```
 
 版本 2 迁移到版本 3 时：
@@ -254,6 +255,7 @@ equippedEquipmentIds: Record<EquipmentSlot, string | null>
 - `selectedCaptainId` 保持 `null`，首次打开新版时要求选择。
 - 旧 `ownedCosmeticIds` 继续保留；已知可迁移外观映射到新皮肤，未知 ID 不丢失。
 - 添加一套 0 星 1 级的新手装备，保证现有玩家可以立即继续游戏。
+- 初始化空的装备碎片库存；后续玩法和确定性商品按装备定义 ID 发放碎片。
 - 数组去重，非法目录 ID 忽略并记录非敏感诊断事件。
 
 ### 8.3 商店与购买
