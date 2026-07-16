@@ -7,3 +7,17 @@ export interface GameScene {
 }
 
 export type SceneFactory = (sceneId: SceneId) => GameScene;
+
+export interface SceneAction {
+  readonly action: string;
+  readonly data: Readonly<Record<string, string>>;
+}
+
+export interface FeatureSceneContext {
+  renderStation(): string;
+  renderCaptain(): string;
+  renderEquipment(): string;
+  renderLegion(): string;
+  renderStore(): string;
+  dispatch(command: SceneAction): void | Promise<void>;
+}

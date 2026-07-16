@@ -20,6 +20,7 @@ describe('EquipmentView', () => {
     expect(html).toContain('data-action="upgrade-equipment"');
     expect(html).toContain('data-action="star-equipment"');
     expect(html).toContain('data-action="reroll-equipment"');
+    expect(html).toContain('data-nav-scene="captain"');
     expect(html).not.toContain('概率');
   });
 });

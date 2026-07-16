@@ -144,6 +144,7 @@ import {
   renderEquipment,
 } from './views/EquipmentView';
 import { createBrowserAppStateRepository } from './app/AppStateRepository';
+import type { SceneId } from './app/AppTypes';
 import { renderLaunchCampaignView } from './views/LaunchCampaignView';
 import { renderSocialHubView } from './views/SocialHubView';
 import { requireElement } from './app/dom';
@@ -164,7 +165,7 @@ let campaignState = initialState.campaign;
 let dailyTrialState = initialState.dailyTrial;
 let dailyCheckInState = initialState.dailyCheckIn;
 let phase: 'station' | 'combat' | 'reward' | 'route' | 'boss' | 'failure' | 'settlement' = 'station';
-type HubView = 'station' | 'wardrobe' | 'equipment';
+type HubView = Exclude<SceneId, 'battle'>;
 let hubView: HubView = 'station';
 let captainSelectionTracked = false;
 let wardrobeViewTracked = false;
@@ -479,11 +480,7 @@ function renderSocialHub(): string {
   });
 }
 
-function renderStation(): string {
-  if (!storeViewTracked) {
-    track('store_viewed', { productCount: PRODUCT_CATALOG.length });
-    storeViewTracked = true;
-  }
+function renderStationScene(): string {
   const nextLevelCost = save.stationLevel * 80;
   const currentDayId = getChinaDayId(Date.now());
   const dailyDefinition = syncDailyTrialDay();
@@ -517,22 +514,16 @@ function renderStation(): string {
     ${renderDailyCheckIn({ state: dailyCheckInState, currentDayId })}
     ${renderDailyTrialHub({ stationLevel: save.stationLevel, state: dailyTrialState, definition: dailyDefinition })}
     ${renderLaunchCampaignCenter()}
-    ${renderSocialHub()}
-    <div id="shop-center">${renderCommerceStore({
-      products: PRODUCT_CATALOG,
-      purchasedProductIds: save.purchasedProductIds,
-      pendingProductId,
-    })}</div>
   </section>`;
 }
 
 function renderHubNavigation(): string {
   return `<nav class="hub-nav" aria-label="车站功能">
-    <button class="hub-nav__item ${hubView === 'station' ? 'is-active' : ''}" data-action="open-hub" data-hub-view="station" ${hubView === 'station' ? 'aria-current="page"' : ''}>车站</button>
-    <button class="hub-nav__item ${hubView !== 'station' ? 'is-active' : ''}" data-action="open-hub" data-hub-view="wardrobe" ${hubView !== 'station' ? 'aria-current="page"' : ''}>衣柜</button>
-    <button class="hub-nav__item" data-action="start-run">出发</button>
-    <button class="hub-nav__item" data-action="open-hub-anchor" data-anchor-id="legion-center">军团</button>
-    <button class="hub-nav__item" data-action="open-hub-anchor" data-anchor-id="shop-center">商店</button>
+    <button class="hub-nav__item ${hubView === 'station' ? 'is-active' : ''}" data-nav-scene="station" ${hubView === 'station' ? 'aria-current="page"' : ''}>车站</button>
+    <button class="hub-nav__item ${hubView === 'captain' ? 'is-active' : ''}" data-nav-scene="captain" ${hubView === 'captain' ? 'aria-current="page"' : ''}>角色</button>
+    <button class="hub-nav__item ${hubView === 'equipment' ? 'is-active' : ''}" data-nav-scene="equipment" ${hubView === 'equipment' ? 'aria-current="page"' : ''}>装备</button>
+    <button class="hub-nav__item ${hubView === 'legion' ? 'is-active' : ''}" data-nav-scene="legion" ${hubView === 'legion' ? 'aria-current="page"' : ''}>军团</button>
+    <button class="hub-nav__item ${hubView === 'store' ? 'is-active' : ''}" data-nav-scene="store" ${hubView === 'store' ? 'aria-current="page"' : ''}>商店</button>
   </nav>`;
 }
 
@@ -561,6 +552,30 @@ function renderEquipmentScreen(): string {
     equipmentViewTracked = true;
   }
   return renderEquipment({ state: getEquipmentStateFromSave() });
+}
+
+function renderCaptainScene(): string {
+  return renderWardrobeScreen();
+}
+
+function renderEquipmentScene(): string {
+  return renderEquipmentScreen();
+}
+
+function renderLegionScene(): string {
+  return renderSocialHub();
+}
+
+function renderStoreScene(): string {
+  if (!storeViewTracked) {
+    track('store_viewed', { productCount: PRODUCT_CATALOG.length });
+    storeViewTracked = true;
+  }
+  return renderCommerceStore({
+    products: PRODUCT_CATALOG,
+    purchasedProductIds: save.purchasedProductIds,
+    pendingProductId,
+  });
 }
 
 function handleCaptainSwitch(captainId: CaptainId): void {
@@ -908,11 +923,14 @@ function render(): void {
     return;
   }
 
-  const stationScene = hubView === 'station'
-    ? renderStation()
-    : hubView === 'wardrobe'
-      ? renderWardrobeScreen()
-      : renderEquipmentScreen();
+  const hubScene = {
+    station: renderStationScene,
+    captain: renderCaptainScene,
+    equipment: renderEquipmentScene,
+    legion: renderLegionScene,
+    store: renderStoreScene,
+  } satisfies Record<HubView, () => string>;
+  const stationScene = hubScene[hubView]();
   const scene = phase === 'station' ? stationScene : phase === 'combat' ? renderCombat() : phase === 'reward' ? renderReward() : phase === 'route' ? renderRoute() : phase === 'boss' ? renderBoss() : phase === 'failure' ? renderFailure() : renderSettlement();
   const hubNavigation = phase === 'station' ? renderHubNavigation() : '';
   app.innerHTML = `<div class="app-shell">${renderHeader()}<main>${scene}<div class="notice">${escapeHtml(notice)}</div></main>${hubNavigation}<footer><span>Prototype Web Preview</span><button class="text-button" data-action="reset-save">清空本地存档</button></footer></div>`;
@@ -1637,6 +1655,12 @@ async function handleShareSquad(): Promise<void> {
 
 app.addEventListener('click', async (event) => {
   const target = event.target as HTMLElement;
+  const navigation = target.closest<HTMLButtonElement>('[data-nav-scene]');
+  if (navigation?.dataset.navScene && phase === 'station') {
+    hubView = navigation.dataset.navScene as HubView;
+    render();
+    return;
+  }
   const button = target.closest<HTMLButtonElement>('[data-action]');
   if (!button) return;
   const action = button.dataset.action;
@@ -1648,17 +1672,6 @@ app.addEventListener('click', async (event) => {
     hubView = 'station';
     notice = '列车长已就位，潮汐列车准备出发。';
     render();
-    return;
-  }
-  if (action === 'open-hub' && button.dataset.hubView) {
-    hubView = button.dataset.hubView as HubView;
-    render();
-    return;
-  }
-  if (action === 'open-hub-anchor' && button.dataset.anchorId) {
-    hubView = 'station';
-    render();
-    document.getElementById(button.dataset.anchorId)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     return;
   }
   if (action === 'switch-captain' && button.dataset.captainId) {

@@ -24,7 +24,7 @@ export function renderStationHero(model: StationHeroModel): string {
   const captainArt = CHIBI_ART.captains[model.captainId][model.skinId];
 
   return `<section class="station-hero" aria-labelledby="station-hero-title">
-    <img class="station-hero__background" src="${CHIBI_ART.stationBackground}" alt="" aria-hidden="true" />
+    <img class="station-hero__background" data-motion-role="background" src="${CHIBI_ART.stationBackground}" alt="" aria-hidden="true" />
     <div class="station-hero__copy">
       <span class="eyebrow">STATION ${model.stationLevel} · READY</span>
       <h1 id="station-hero-title">潮汐列车，准备启航</h1>
@@ -36,9 +36,9 @@ export function renderStationHero(model: StationHeroModel): string {
       </div>
       <button class="primary station-hero__start" data-action="start-run">驾驶泡泡列车出发</button>
     </div>
-    <img class="station-hero__train" src="${CHIBI_ART.train}" alt="泡泡列车" />
-    <img class="captain-art station-hero__captain" src="${captainArt}" alt="${captain.name} · ${skin.name}" />
-    <img class="companion-art station-hero__otter" src="${CHIBI_ART.otter}" alt="" aria-hidden="true" />
-    <img class="companion-art station-hero__jellyfish" src="${CHIBI_ART.jellyfish}" alt="" aria-hidden="true" />
+    <img class="station-hero__train" data-motion-role="train" src="${CHIBI_ART.train}" alt="泡泡列车" />
+    <img class="captain-art station-hero__captain" data-motion-role="captain" src="${captainArt}" alt="${captain.name} · ${skin.name}" />
+    <img class="companion-art station-hero__otter" data-motion-role="otter" src="${CHIBI_ART.otter}" alt="" aria-hidden="true" />
+    <img class="companion-art station-hero__jellyfish" data-motion-role="jellyfish" src="${CHIBI_ART.jellyfish}" alt="" aria-hidden="true" />
   </section>`;
 }

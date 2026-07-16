@@ -31,6 +31,7 @@ describe('WardrobeView', () => {
     expect(html).toContain('永久叠加');
     expect(html).toContain('data-action="equip-skin"');
     expect(html).toContain('data-action="switch-captain"');
+    expect(html).toContain('data-nav-scene="equipment"');
     expect(html).toContain('¥30');
     expect(html).toContain('data-product-id="aurora-whale-song-skin"');
     expect(html).not.toMatch(/data-skin-id="skin-tide-base"[^>]*data-action="purchase-product"/);

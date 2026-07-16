@@ -16,5 +16,8 @@ describe('StationHeroView', () => {
     expect(html).toContain('alt="泡泡列车"');
     expect(html).toContain('alt="潮灯列车长 · 潮汐制服"');
     expect(html).toContain('alt=""');
+    expect(html.match(/data-motion-role=/g)).toHaveLength(5);
+    expect(html).toContain('data-motion-role="captain"');
+    expect(html).toContain('data-motion-role="train"');
   });
 });

@@ -114,7 +114,7 @@ export function renderEquipment(model: EquipmentViewModel): string {
   }).join('');
 
   return `<section class="equipment scene">
-    <div class="run-heading"><div><span class="eyebrow">TRAIN EQUIPMENT</span><h1>四槽装备舱</h1><p>装备、强化、升星和定向重铸都会保留。付费装备与免费装备遵循同一套成长规则。</p></div><button class="secondary" data-action="open-hub" data-hub-view="wardrobe">返回衣柜</button></div>
+    <div class="run-heading"><div><span class="eyebrow">TRAIN EQUIPMENT</span><h1>四槽装备舱</h1><p>装备、强化、升星和定向重铸都会保留。付费装备与免费装备遵循同一套成长规则。</p></div><button class="secondary" data-nav-scene="captain">返回角色</button></div>
     <div class="equipment-layout">
       <aside>
         <div class="equipment-loadout">${slots}</div>

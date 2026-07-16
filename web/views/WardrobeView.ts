@@ -90,7 +90,7 @@ export function renderWardrobe(model: WardrobeModel): string {
           <p>${collectionStats.length > 0 ? collectionStats.join(' · ') : '当前暂无额外属性'}</p>
           <small>每个皮肤 ID 仅计入一次，男女款式共用同一收藏。</small>
         </div>
-        <button class="chip" data-action="open-hub" data-hub-view="equipment">进入装备舱</button>
+        <button class="chip" data-nav-scene="equipment">进入装备舱</button>
       </aside>
       <div class="skin-grid">${cards}</div>
     </div>

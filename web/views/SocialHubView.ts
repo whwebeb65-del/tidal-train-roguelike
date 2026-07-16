@@ -27,7 +27,7 @@ export interface SocialHubViewModel {
 
 export function renderSocialHubView(model: SocialHubViewModel): string {
   if (!model.legionId) {
-    return `<section id="legion-center" class="system-card system-card--social deferred-section">
+    return `<section class="system-card system-card--social deferred-section">
       <div class="system-card__heading">
         <div><span class="eyebrow">CO-OP / ${model.cycleId}</span><h2>潮汐灯塔团</h2><p>加入异步军团，选择两名队友支援单局，并用每次结算推进共同远征。</p></div>
         <span class="system-card__badge">尚未加入</span>
@@ -53,7 +53,7 @@ export function renderSocialHubView(model: SocialHubViewModel): string {
     .map((support) => support.effect)
     .join(' · ') || '尚未选择支援';
 
-  return `<section id="legion-center" class="system-card system-card--social deferred-section">
+  return `<section class="system-card system-card--social deferred-section">
     <div class="system-card__heading">
       <div><span class="eyebrow">LEGION / ${model.cycleId}</span><h2>潮汐灯塔团</h2><p>异步远征不要求队友同时在线；正式服贡献和奖励由服务端校验。</p></div>
       <button class="chip" data-action="share-squad" ${model.sharePending ? 'disabled' : ''}>${model.sharePending ? '生成招募卡中…' : '分享列车队招募卡'}</button>
