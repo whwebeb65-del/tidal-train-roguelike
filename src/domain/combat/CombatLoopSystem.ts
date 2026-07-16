@@ -25,6 +25,8 @@ export interface CombatLoopOptions {
 export interface CombatActionOptions {
   readonly skillAvailable: boolean;
   readonly damageBonus?: number;
+  readonly damageMultiplier?: number;
+  readonly repairBonus?: number;
 }
 
 export interface CombatActionResult {
@@ -85,8 +87,16 @@ export function resolveCombatAction(
   options: CombatActionOptions,
 ): CombatActionResult {
   const damageBonus = options.damageBonus ?? 0;
+  const damageMultiplier = options.damageMultiplier ?? 1;
+  const repairBonus = options.repairBonus ?? 0;
   if (!Number.isFinite(damageBonus) || damageBonus < 0) {
     throw new Error('Damage bonus must be a finite non-negative number');
+  }
+  if (!Number.isFinite(damageMultiplier) || damageMultiplier < 1) {
+    throw new Error('Damage multiplier must be a finite number of at least 1');
+  }
+  if (!Number.isFinite(repairBonus) || repairBonus < 0) {
+    throw new Error('Repair bonus must be a finite non-negative number');
   }
   if (state.enemyHp <= 0) return rejected(state, 'enemy-defeated');
   if (action === 'skill' && !options.skillAvailable) return rejected(state, 'skill-unavailable');
@@ -126,7 +136,10 @@ export function resolveCombatAction(
   }
 
   if (rawDamage > 0) {
-    rawDamage += damageBonus;
+    rawDamage = Math.floor((rawDamage + damageBonus) * damageMultiplier);
+  }
+  if (rawHeal > 0) {
+    rawHeal += repairBonus;
   }
 
   const damageDealt = Math.min(state.enemyHp, rawDamage);

@@ -91,6 +91,29 @@ describe('CombatLoopSystem', () => {
     })).toThrow('Damage bonus must be a finite non-negative number');
   });
 
+  it('applies permanent damage multipliers and repair bonuses', () => {
+    const attack = resolveCombatAction(
+      createCombatLoopState({ enemyHp: 200 }),
+      'attack',
+      {
+        skillAvailable: true,
+        damageBonus: 2,
+        damageMultiplier: 1.1,
+      },
+    );
+    const repair = resolveCombatAction(
+      createCombatLoopState({ enemyHp: 200, playerHp: 50 }),
+      'repair',
+      {
+        skillAvailable: true,
+        repairBonus: 8,
+      },
+    );
+
+    expect(attack.damageDealt).toBe(29);
+    expect(repair.hpRestored).toBe(32);
+  });
+
   it('rejects actions after the enemy is defeated and clamps incoming damage', () => {
     const defeated = resolveCombatAction(createCombatLoopState({ enemyHp: 1 }), 'attack', { skillAvailable: true });
     const rejected = resolveCombatAction(defeated.state, 'attack', { skillAvailable: true });

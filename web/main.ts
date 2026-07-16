@@ -38,6 +38,11 @@ import {
   type CombatLoopState,
   type TideModifier,
 } from '../src/domain/combat/CombatLoopSystem';
+import type { EquipmentState } from '../src/domain/equipment/EquipmentSystem';
+import {
+  createProgressionSnapshot,
+  type ProgressionSnapshot,
+} from '../src/domain/progression/ProgressionStatService';
 import {
   applyForBeta,
   claimBetaGift,
@@ -213,6 +218,27 @@ function commit(next: PlayerSave): void {
   window.localStorage.setItem(SAVE_KEY, JSON.stringify(next));
 }
 
+function getEquipmentStateFromSave(): EquipmentState {
+  return {
+    inventory: save.equipmentInventory,
+    equippedEquipmentIds: save.equippedEquipmentIds,
+    fragments: save.equipmentFragments,
+    gears: save.gears,
+  };
+}
+
+function getProgressionSnapshot(): ProgressionSnapshot {
+  return createProgressionSnapshot({
+    baseMaxHp: 100,
+    ownedSkinIds: save.ownedSkinIds,
+    equipmentState: getEquipmentStateFromSave(),
+  });
+}
+
+function scaleGearReward(baseGears: number): number {
+  return Math.floor(baseGears * getProgressionSnapshot().gearsMultiplier);
+}
+
 function commitSocial(next: SocialExpeditionState): void {
   socialState = normalizeSocialExpeditionState(next, expeditionCycleId);
   window.localStorage.setItem(SOCIAL_SAVE_KEY, JSON.stringify(socialState));
@@ -293,11 +319,22 @@ function createBattleModifier(seedValue: number, nodeId: string): TideModifier {
 function resetBattleState(enemyHp: number): void {
   const bonuses = getSquadBonuses(socialState);
   const rule = getActiveDailyTrialDefinition()?.rule;
+  const progression = getProgressionSnapshot();
   battleState = createCombatLoopState({
     enemyHp: enemyHp + (rule?.enemyHpBonus ?? 0),
     modifier: createBattleModifier(seed, currentNodeId),
-    maxPlayerHp: Math.max(1, 100 + bonuses.maxPlayerHpBonus + (rule?.maxPlayerHpDelta ?? 0)),
-    initialMomentum: Math.min(100, bonuses.initialMomentum + (rule?.initialMomentumBonus ?? 0)),
+    maxPlayerHp: Math.max(
+      1,
+      progression.maxPlayerHp
+        + bonuses.maxPlayerHpBonus
+        + (rule?.maxPlayerHpDelta ?? 0),
+    ),
+    initialMomentum: Math.min(
+      100,
+      progression.initialMomentum
+        + bonuses.initialMomentum
+        + (rule?.initialMomentumBonus ?? 0),
+    ),
   });
 }
 
@@ -324,13 +361,26 @@ function renderBattleActions(isBoss: boolean): string {
   const burstReady = battleState.momentum >= 100 && !battleState.burstUsed;
   const repairReady = !battleState.repairUsed && battleState.playerHp < battleState.maxPlayerHp;
   const damageBonus = getActionDamageBonus();
-  const attackDamage = (battleState.modifier === 'surge-current' ? 30 : 25) + damageBonus;
-  const skillDamage = (battleState.modifier === 'echo-fog' ? 60 : 50) + damageBonus;
+  const progression = getProgressionSnapshot();
+  const totalFlatDamage = damageBonus + progression.damageFlat;
+  const attackDamage = Math.floor(
+    ((battleState.modifier === 'surge-current' ? 30 : 25) + totalFlatDamage)
+      * progression.damageMultiplier,
+  );
+  const skillDamage = Math.floor(
+    ((battleState.modifier === 'echo-fog' ? 60 : 50) + totalFlatDamage)
+      * progression.damageMultiplier,
+  );
+  const repairAmount = (battleState.modifier === 'calm-water' ? 24 : 18)
+    + progression.repairBonus;
+  const burstDamage = Math.floor(
+    (60 + totalFlatDamage) * progression.damageMultiplier,
+  );
   return `<div class="battle-actions action-row">
     <button class="primary battle-action" data-action="combat-action" data-combat-action="attack">${isBoss ? '集中火力' : '自动开炮'} · -${attackDamage}</button>
     <button class="secondary battle-action" data-action="combat-action" data-combat-action="skill" ${recoveryState.skillCharges <= 0 || battleState.enemyHp <= 0 ? 'disabled' : ''}>释放「汽笛共鸣」 · -${skillDamage}</button>
-    <button class="secondary battle-action repair-action" data-action="combat-action" data-combat-action="repair" ${!repairReady ? 'disabled' : ''}>维修车厢 · +${battleState.modifier === 'calm-water' ? '24' : '18'}</button>
-    <button class="burst-action ${burstReady ? 'burst-ready' : ''}" data-action="combat-action" data-combat-action="burst" ${!burstReady ? 'disabled' : ''}>潮汐爆发 · -${60 + damageBonus}</button>
+    <button class="secondary battle-action repair-action" data-action="combat-action" data-combat-action="repair" ${!repairReady ? 'disabled' : ''}>维修车厢 · +${repairAmount}</button>
+    <button class="burst-action ${burstReady ? 'burst-ready' : ''}" data-action="combat-action" data-combat-action="burst" ${!burstReady ? 'disabled' : ''}>潮汐爆发 · -${burstDamage}</button>
     <button class="debug-hit" data-action="damage">模拟受击 · -35</button>
   </div>`;
 }
@@ -505,9 +555,12 @@ function renderInteractionCards(): string {
 }
 
 function handleCombatAction(action: CombatAction): void {
+  const progression = getProgressionSnapshot();
   const result = resolveCombatAction(battleState, action, {
     skillAvailable: recoveryState.skillCharges > 0,
-    damageBonus: getActionDamageBonus(),
+    damageBonus: getActionDamageBonus() + progression.damageFlat,
+    damageMultiplier: progression.damageMultiplier,
+    repairBonus: progression.repairBonus,
   });
   if (!result.accepted) {
     const messages = {
@@ -632,17 +685,19 @@ function renderSettlement(): string {
     });
   }
   const repeatSettlement = !lastSettlementWasFirstClear;
+  const firstClearGears = scaleGearReward(400);
+  const repeatGears = scaleGearReward(80);
   const settlementDoublePending = pendingRecoveryActions.has('double-settlement');
   if (settlementDoubleAvailable && !settlementDoubleClaimed) trackAdOfferOnce('double-settlement');
   const doubleAction = settlementDoubleClaimed
     ? '<div class="rewarded-actions"><button class="secondary" disabled>普通奖励已加倍</button></div>'
     : settlementDoubleAvailable
-      ? `<div class="rewarded-actions"><button class="secondary" data-action="double-settlement" ${settlementDoublePending ? 'disabled' : ''}>${settlementDoublePending ? '广告加载中…' : '看广告再领 80 齿轮 · 2 航线徽记'}</button><small>仅重复通关可用；取消或失败不会消耗机会。</small></div>`
+      ? `<div class="rewarded-actions"><button class="secondary" data-action="double-settlement" ${settlementDoublePending ? 'disabled' : ''}>${settlementDoublePending ? '广告加载中…' : `看广告再领 ${repeatGears} 齿轮 · 2 航线徽记`}</button><small>仅重复通关可用；取消或失败不会消耗机会。</small></div>`
       : '';
   const expeditionResult = socialState.legionId
     ? `<div class="expedition-settlement"><span>潮汐灯塔团</span><b>本局远征贡献 +${lastExpeditionContribution}</b><small>本周累计 ${socialState.contribution} / 100</small></div>`
     : '<div class="expedition-settlement muted"><span>军团远征</span><b>尚未加入军团</b><small>回到车站加入后，下一局开始累计贡献。</small></div>';
-  return `<section class="settlement scene"><div class="settlement-symbol">✦</div><span class="eyebrow">RUN SETTLED</span><h1>${repeatSettlement ? '潮汐已平息' : '首次通关完成'}</h1><p>${repeatSettlement ? '这条线路的首次通关奖励已经领取过，重复挑战会转为普通收益。' : `你完成了 ${formatMap(currentMapId)} 的首次通关，车站将从此拥有新的扩建方向。`}</p><div class="settlement-rewards">${currency(repeatSettlement ? '普通齿轮' : '首通齿轮', repeatSettlement ? 80 : 400, 'gear')}${currency(repeatSettlement ? '航线徽记' : '首通徽记', repeatSettlement ? 2 : 10, 'route-mark')}${currency(repeatSettlement ? '星票' : '首通星票', repeatSettlement ? 0 : 3, 'ticket')}</div>${doubleAction}${expeditionResult}<button class="primary" data-action="back-station">回到车站</button></section>`;
+  return `<section class="settlement scene"><div class="settlement-symbol">✦</div><span class="eyebrow">RUN SETTLED</span><h1>${repeatSettlement ? '潮汐已平息' : '首次通关完成'}</h1><p>${repeatSettlement ? '这条线路的首次通关奖励已经领取过，重复挑战会转为普通收益。' : `你完成了 ${formatMap(currentMapId)} 的首次通关，车站将从此拥有新的扩建方向。`}</p><div class="settlement-rewards">${currency(repeatSettlement ? '普通齿轮' : '首通齿轮', repeatSettlement ? repeatGears : firstClearGears, 'gear')}${currency(repeatSettlement ? '航线徽记' : '首通徽记', repeatSettlement ? 2 : 10, 'route-mark')}${currency(repeatSettlement ? '星票' : '首通星票', repeatSettlement ? 0 : 3, 'ticket')}</div>${doubleAction}${expeditionResult}<button class="primary" data-action="back-station">回到车站</button></section>`;
 }
 
 function render(): void {
@@ -773,16 +828,19 @@ function settleRun(victory: boolean): void {
   lastSettlementWasFirstClear = result.granted;
   settlementDoubleAvailable = !result.granted;
   settlementDoubleClaimed = false;
+  const gearsGranted = scaleGearReward(
+    result.granted ? result.reward.gears : 80,
+  );
   commit({
     ...save,
-    gears: save.gears + (result.granted ? result.reward.gears : 80),
+    gears: save.gears + gearsGranted,
     routeMarks: save.routeMarks + (result.granted ? result.reward.routeMarks : 2),
     starTickets: save.starTickets + result.reward.starTickets,
     firstClearMapIds: [...firstClearState.claimedMapIds],
   });
   track('economy_reward_granted', {
     source: result.granted ? 'first-clear' : 'repeat-victory',
-    gears: result.granted ? result.reward.gears : 80,
+    gears: gearsGranted,
     routeMarks: result.granted ? result.reward.routeMarks : 2,
     starTickets: result.reward.starTickets,
   });
@@ -1017,9 +1075,10 @@ async function handleSettlementDouble(): Promise<void> {
   track('rewarded_ad_result', { placement: 'double-settlement', result: resultName });
 
   if (result === 'completed') {
+    const gearsGranted = scaleGearReward(80);
     commit({
       ...save,
-      gears: save.gears + 80,
+      gears: save.gears + gearsGranted,
       routeMarks: save.routeMarks + 2,
     });
     settlementDoubleAvailable = false;
@@ -1027,11 +1086,11 @@ async function handleSettlementDouble(): Promise<void> {
     track('economy_reward_granted', {
       source: 'rewarded-ad',
       placement: 'double-settlement',
-      gears: 80,
+      gears: gearsGranted,
       routeMarks: 2,
       starTickets: 0,
     });
-    notice = '广告完成，重复通关奖励已追加 80 齿轮和 2 航线徽记。';
+    notice = `广告完成，重复通关奖励已追加 ${gearsGranted} 齿轮和 2 航线徽记。`;
   } else {
     notice = result === 'closed'
       ? '你取消了广告，重复通关加倍机会仍然保留。'
