@@ -124,6 +124,10 @@ import type {
   BattleSettlementPresentation,
   SceneId,
 } from './app/AppTypes';
+import type {
+  GameSettings,
+  QualityPreference,
+} from './app/SettingsRepository';
 import {
   BATTLE_ART_URLS,
   type BattleArtId,
@@ -155,7 +159,18 @@ import { createStoreScene } from './scenes/StoreScene';
 
 export interface LegacyGameRuntime {
   start(): Promise<void>;
+  applySettings(
+    settings: GameSettings,
+    effectiveReducedMotion: boolean,
+  ): void;
   destroy(): void;
+}
+
+export interface RuntimeSettingsBridge {
+  getSettings(): GameSettings;
+  updateSettings(
+    patch: Partial<Omit<GameSettings, 'version'>>,
+  ): GameSettings;
 }
 
 export function createLegacyGameRuntime(
@@ -163,6 +178,7 @@ export function createLegacyGameRuntime(
   storage: Storage,
   reducedMotion: boolean,
   audio: AudioManager,
+  settingsBridge: RuntimeSettingsBridge,
 ): LegacyGameRuntime {
 const appStateRepository = createBrowserAppStateRepository(storage);
 const initialState = appStateRepository.load();
@@ -206,7 +222,9 @@ let battleAssets: BattleAssetSet<BattleArtId> | null = null;
 let activeBattleEngine: BattleEngine | null = null;
 let activeBattleProgression: ProgressionSnapshot | null = null;
 let activeBattleSettlement: BattleSettlementPresentation | null = null;
+let activeBattleScene: BattleScene | null = null;
 let battleStartPending = false;
+let effectiveReducedMotion = reducedMotion;
 let notice = '欢迎登车，先选择一条可以活着回来的路线。';
 const shell = mountAppShell(app, {
   gears: save.gears,
@@ -230,12 +248,12 @@ const sceneFactory: SceneFactory = (sceneId) => {
   if (!activeBattleEngine || !battleAssets) {
     throw new Error('Battle scene requested before battle preparation');
   }
-  return new BattleScene({
+  const scene = new BattleScene({
     engine: activeBattleEngine,
     effects: new EffectSystem({
       particleLimit: 200,
       damageNumberLimit: 18,
-      reducedMotion,
+      reducedMotion: effectiveReducedMotion,
     }),
     assets: battleAssets,
     callbacks: {
@@ -253,13 +271,15 @@ const sceneFactory: SceneFactory = (sceneId) => {
     ),
     createHud: (callbacks) => new BattleHUD(callbacks),
     captainArtId: getActiveCaptainArtId(),
-    reducedMotion,
+    reducedMotion: effectiveReducedMotion,
     sound: audio,
   });
+  activeBattleScene = scene;
+  return scene;
 };
 const router = new SceneRouter(shell.sceneHost, sceneFactory, {
   transitionMs: 220,
-  reducedMotion,
+  reducedMotion: effectiveReducedMotion,
   onSceneChanged: (sceneId) => {
     audio.playSound('scene-open');
     if (sceneId === 'battle') {
@@ -296,6 +316,31 @@ function stopStationAudioLoop(): void {
   if (stationAudioFrameId === null) return;
   window.cancelAnimationFrame(stationAudioFrameId);
   stationAudioFrameId = null;
+}
+
+function openSettingsPanel(): void {
+  const settings = settingsBridge.getSettings();
+  shell.openSettings({
+    settings,
+    audioAvailable: audio.available,
+    effectiveReducedMotion,
+  });
+}
+
+function applyRuntimeSettings(
+  settings: GameSettings,
+  nextReducedMotion: boolean,
+): void {
+  effectiveReducedMotion = nextReducedMotion;
+  router.setReducedMotion(nextReducedMotion);
+  activeBattleScene?.setReducedMotion(nextReducedMotion);
+  if (shell.isSettingsOpen()) {
+    shell.openSettings({
+      settings,
+      audioAvailable: audio.available,
+      effectiveReducedMotion,
+    });
+  }
 }
 
 function commit(next: PlayerSave): void {
@@ -1219,6 +1264,7 @@ function exitBattle(): void {
   activeBattleEngine = null;
   activeBattleProgression = null;
   activeBattleSettlement = null;
+  activeBattleScene = null;
   notice = '列车已经返回潮汐车站，可以整备后再次出发。';
   render();
 }
@@ -1582,6 +1628,14 @@ const onClick = async (event: Event): Promise<void> => {
   if (action !== 'start-run' && action !== 'start-daily-trial') {
     audio.playSound('ui-tap');
   }
+  if (action === 'open-settings') {
+    openSettingsPanel();
+    return;
+  }
+  if (action === 'close-settings') {
+    shell.closeSettings();
+    return;
+  }
   if (action === 'select-captain' && button.dataset.captainId) {
     const profile = selectCaptain(save, button.dataset.captainId as CaptainId);
     commit({ ...save, ...profile });
@@ -1661,13 +1715,55 @@ const onSubmit = (event: Event): void => {
   handleGiftCodeRedeem(typeof rawCode === 'string' ? rawCode : '');
 };
 
+const onChange = (event: Event): void => {
+  const target = event.target;
+  if (
+    target instanceof HTMLInputElement
+    && target.dataset.setting
+    && (
+      target.dataset.setting === 'musicEnabled'
+      || target.dataset.setting === 'sfxEnabled'
+      || target.dataset.setting === 'reducedMotion'
+    )
+  ) {
+    settingsBridge.updateSettings({
+      [target.dataset.setting]: target.checked,
+    });
+    openSettingsPanel();
+    return;
+  }
+  if (
+    target instanceof HTMLSelectElement
+    && target.dataset.setting === 'qualityPreference'
+  ) {
+    const quality = target.value as QualityPreference;
+    if (!['auto', 'high', 'medium', 'low'].includes(quality)) return;
+    settingsBridge.updateSettings({ qualityPreference: quality });
+    openSettingsPanel();
+  }
+};
+
+const onKeyDown = (event: KeyboardEvent): void => {
+  if (event.key !== 'Escape' || !shell.isSettingsOpen()) return;
+  event.preventDefault();
+  shell.closeSettings();
+};
+
 return {
   async start(): Promise<void> {
     if (started) return;
     started = true;
     app.addEventListener('click', onClick);
     app.addEventListener('submit', onSubmit);
+    app.addEventListener('change', onChange);
+    app.addEventListener('keydown', onKeyDown);
     await syncView();
+  },
+  applySettings(
+    settings: GameSettings,
+    nextReducedMotion: boolean,
+  ): void {
+    applyRuntimeSettings(settings, nextReducedMotion);
   },
   destroy(): void {
     if (!started) return;
@@ -1675,6 +1771,9 @@ return {
     stopStationAudioLoop();
     app.removeEventListener('click', onClick);
     app.removeEventListener('submit', onSubmit);
+    app.removeEventListener('change', onChange);
+    app.removeEventListener('keydown', onKeyDown);
+    shell.closeSettings();
     router.destroy();
     app.replaceChildren();
   },

@@ -67,6 +67,7 @@ export interface BattleEffectPort {
   consume(events: readonly BattleEvent[], frame: BattleFrameView): void;
   update(deltaMs: number): void;
   reset(): void;
+  setReducedMotion?(reducedMotion: boolean): void;
 }
 
 export interface BattleRendererPort {
@@ -163,6 +164,7 @@ export class BattleScene implements GameScene {
   private exitRequested = false;
   private settlement: BattleSettlementPresentation | null = null;
   private interactionNotice = '';
+  private reducedMotion: boolean;
 
   private readonly frameCallback: FrameRequestCallback = (timeMs): void => {
     if (!this.host || !this.loop) return;
@@ -201,6 +203,7 @@ export class BattleScene implements GameScene {
   public constructor(
     private readonly dependencies: BattleSceneDependencies,
   ) {
+    this.reducedMotion = dependencies.reducedMotion;
     this.sound = dependencies.sound ?? SILENT_BATTLE_SOUND;
     this.scheduler = dependencies.scheduler ?? BROWSER_FRAME_SCHEDULER;
     this.timerScheduler =
@@ -278,6 +281,11 @@ export class BattleScene implements GameScene {
     this.refreshViewport();
     this.renderBattle();
     this.frameRequestId = this.scheduler.request(this.frameCallback);
+  }
+
+  public setReducedMotion(reducedMotion: boolean): void {
+    this.reducedMotion = reducedMotion;
+    this.dependencies.effects.setReducedMotion?.(reducedMotion);
   }
 
   public unmount(): void {
@@ -365,7 +373,7 @@ export class BattleScene implements GameScene {
       viewport,
       captainArtId: this.dependencies.captainArtId,
       timeMs: this.lastFrameTimeMs,
-      reducedMotion: this.dependencies.reducedMotion,
+      reducedMotion: this.reducedMotion,
     });
     this.hud.update(createBattleHudModel(
       this.dependencies.engine.frame,

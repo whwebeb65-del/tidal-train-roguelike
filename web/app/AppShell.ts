@@ -1,5 +1,9 @@
 import type { SceneId } from './AppTypes';
 import { requireElement } from './dom';
+import {
+  renderSettingsPanel,
+  type SettingsPanelModel,
+} from '../views/SettingsPanelView';
 
 export interface CurrencySnapshot {
   readonly gears: number;
@@ -15,6 +19,9 @@ export interface AppShellHandles {
   setActiveScene(sceneId: SceneId): void;
   setNotice(message: string): void;
   setNavigationHidden(hidden: boolean): void;
+  openSettings(model: SettingsPanelModel): void;
+  closeSettings(): void;
+  isSettingsOpen(): boolean;
 }
 
 function currency(
@@ -55,6 +62,8 @@ export function renderAppShell(snapshot: CurrencySnapshot): string {
         ${currency('routeMarks', '◇', '航线徽记', snapshot.routeMarks)}
         ${currency('starTickets', '☆', '星票', snapshot.starTickets)}
         <button class="app-shell__reset" type="button" data-action="reset-save" aria-label="清空本地存档">重置</button>
+        <button class="app-shell__settings" type="button"
+          data-action="open-settings" aria-label="打开游戏设置">设置</button>
       </div>
     </header>
     <main class="scene-viewport">
@@ -68,6 +77,7 @@ export function renderAppShell(snapshot: CurrencySnapshot): string {
       ${navigationItem('legion', '⚑', '军团')}
       ${navigationItem('store', '▣', '商店')}
     </nav>
+    <div id="settings-host" hidden></div>
   </div>`;
 }
 
@@ -79,6 +89,7 @@ export function mountAppShell(
   const sceneHost = requireElement<HTMLElement>(root, '#scene-host');
   const noticeHost = requireElement<HTMLElement>(root, '#app-notice');
   const navigation = requireElement<HTMLElement>(root, '.hub-nav');
+  const settingsHost = requireElement<HTMLElement>(root, '#settings-host');
   let noticeTimer: ReturnType<typeof globalThis.setTimeout> | null = null;
 
   return {
@@ -124,6 +135,23 @@ export function mountAppShell(
 
     setNavigationHidden(hidden): void {
       navigation.hidden = hidden;
+    },
+
+    openSettings(model): void {
+      settingsHost.innerHTML = renderSettingsPanel(model);
+      settingsHost.hidden = false;
+      settingsHost.querySelector<HTMLButtonElement>(
+        '[data-action="close-settings"]',
+      )?.focus();
+    },
+
+    closeSettings(): void {
+      settingsHost.hidden = true;
+      settingsHost.replaceChildren();
+    },
+
+    isSettingsOpen(): boolean {
+      return !settingsHost.hidden;
     },
   };
 }

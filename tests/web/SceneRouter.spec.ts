@@ -114,4 +114,20 @@ describe('SceneRouter', () => {
 
     expect(changes).toEqual(['station']);
   });
+
+  it('applies reduced-motion changes to later transitions', async () => {
+    const router = new SceneRouter(createHost(), (id) => ({
+      id,
+      mount() {},
+      unmount() {},
+    }), {
+      transitionMs: 1,
+      reducedMotion: false,
+    });
+
+    router.setReducedMotion(true);
+    await router.go('station', 'replace');
+
+    expect(router.currentSceneId).toBe('station');
+  });
 });

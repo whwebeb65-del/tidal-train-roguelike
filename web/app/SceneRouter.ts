@@ -12,15 +12,22 @@ export interface SceneRouterOptions {
 export class SceneRouter {
   private current: GameScene | null = null;
   private transitionToken = 0;
+  private reducedMotion: boolean;
 
   public constructor(
     private readonly host: HTMLElement,
     private readonly factory: SceneFactory,
     private readonly options: SceneRouterOptions,
-  ) {}
+  ) {
+    this.reducedMotion = options.reducedMotion;
+  }
 
   public get currentSceneId(): SceneId | null {
     return this.current?.id ?? null;
+  }
+
+  public setReducedMotion(reducedMotion: boolean): void {
+    this.reducedMotion = reducedMotion;
   }
 
   public async go(
@@ -40,7 +47,7 @@ export class SceneRouter {
     if (token !== this.transitionToken) return;
     this.options.onSceneChanged?.(sceneId);
 
-    if (!this.options.reducedMotion && this.options.transitionMs > 0) {
+    if (!this.reducedMotion && this.options.transitionMs > 0) {
       await new Promise<void>((resolve) => {
         globalThis.setTimeout(resolve, this.options.transitionMs);
       });

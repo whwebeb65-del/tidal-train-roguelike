@@ -32,40 +32,80 @@ export class GameApp {
   private audio: AudioManager | null = null;
   private readonly settingsRepository: SettingsRepository;
   private settings: GameSettings;
+  private readonly onMotionPreferenceChange = (): void => {
+    this.runtime?.applySettings(
+      this.settings,
+      this.effectiveReducedMotion(),
+    );
+  };
 
   private constructor(
     private readonly root: HTMLElement,
     private readonly storage: Storage,
-    private readonly systemReducedMotion: boolean,
+    private readonly motionQuery: MediaQueryList | null,
   ) {
     this.settingsRepository = createBrowserSettingsRepository(storage);
     this.settings = this.settingsRepository.load();
   }
 
   public static createBrowser(root: HTMLElement): GameApp {
-    const systemReducedMotion = window.matchMedia?.(
+    const motionQuery = window.matchMedia?.(
       '(prefers-reduced-motion: reduce)',
-    ).matches ?? false;
-    return new GameApp(root, window.localStorage, systemReducedMotion);
+    ) ?? null;
+    return new GameApp(root, window.localStorage, motionQuery);
   }
 
   public async start(): Promise<void> {
     if (this.runtime) return;
+    this.motionQuery?.addEventListener(
+      'change',
+      this.onMotionPreferenceChange,
+    );
     this.audio = new AudioManager(createWebAudioBackend());
     this.audio.applySettings(this.settings);
     this.runtime = createLegacyGameRuntime(
       this.root,
       this.storage,
-      this.settings.reducedMotion || this.systemReducedMotion,
+      this.effectiveReducedMotion(),
       this.audio,
+      {
+        getSettings: () => ({ ...this.settings }),
+        updateSettings: (patch) => this.updateSettings(patch),
+      },
     );
     await this.runtime.start();
   }
 
+  public updateSettings(
+    patch: Partial<Omit<GameSettings, 'version'>>,
+  ): GameSettings {
+    this.settings = {
+      ...this.settings,
+      ...patch,
+      version: 1,
+    };
+    this.settingsRepository.save(this.settings);
+    this.audio?.applySettings(this.settings);
+    this.runtime?.applySettings(
+      this.settings,
+      this.effectiveReducedMotion(),
+    );
+    return { ...this.settings };
+  }
+
   public destroy(): void {
+    this.motionQuery?.removeEventListener(
+      'change',
+      this.onMotionPreferenceChange,
+    );
     this.runtime?.destroy();
     this.runtime = null;
     void this.audio?.close();
     this.audio = null;
+  }
+
+  private effectiveReducedMotion(): boolean {
+    return this.settings.reducedMotion
+      || (this.motionQuery?.matches ?? false);
   }
 }

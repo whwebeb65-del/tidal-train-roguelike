@@ -145,15 +145,25 @@ export class EffectSystem {
   private slowMotionRemainingMs = 0;
   private lastEventX = 195;
   private lastEventY = 360;
+  private reducedMotion: boolean;
 
   public constructor(private readonly options: EffectSystemOptions) {
     assertLimit(options.particleLimit, 'Particle limit');
     assertLimit(options.damageNumberLimit, 'Damage number limit');
     assertLimit(options.impactLimit ?? 24, 'Impact limit');
+    this.reducedMotion = options.reducedMotion;
+  }
+
+  public setReducedMotion(reducedMotion: boolean): void {
+    this.reducedMotion = reducedMotion;
+    if (reducedMotion) {
+      this.cameraAmplitude = 0;
+      this.cameraRemainingMs = 0;
+    }
   }
 
   public get view(): EffectFrameView {
-    const cameraStrength = this.options.reducedMotion
+    const cameraStrength = this.reducedMotion
       ? 0
       : this.cameraAmplitude * Math.min(
         1,
@@ -528,7 +538,7 @@ export class EffectSystem {
   }
 
   private shake(amplitude: number, durationMs: number): void {
-    if (this.options.reducedMotion) return;
+    if (this.reducedMotion) return;
     const merged = this.clockMs - this.lastShakeAtMs <= 120;
     this.cameraAmplitude = merged
       ? Math.max(this.cameraAmplitude, amplitude)
