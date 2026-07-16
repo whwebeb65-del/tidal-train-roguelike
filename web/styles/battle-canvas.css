@@ -1,0 +1,75 @@
+.scene-viewport:has(.game-scene--battle) {
+  width: 100%;
+  padding: 0;
+  overflow: hidden;
+}
+
+.scene-host:has(.game-scene--battle) {
+  min-height: 0;
+}
+
+.game-scene--battle {
+  position: relative;
+  width: min(430px, 100%);
+  height: min(844px, calc(100dvh - 72px));
+  min-height: 560px;
+  margin: 0 auto;
+  overflow: hidden;
+  border: 1px solid rgb(218 255 255 / 30%);
+  border-radius: 0 0 24px 24px;
+  background: #69cbd8;
+  box-shadow: 0 24px 70px rgb(3 37 54 / 26%);
+  isolation: isolate;
+  touch-action: manipulation;
+  user-select: none;
+}
+
+.battle-canvas-host,
+.battle-hud-host {
+  position: absolute;
+  inset: 0;
+}
+
+.battle-canvas-host {
+  z-index: 1;
+  overflow: hidden;
+  background:
+    linear-gradient(180deg, #c9f7fa, #58c9d8 55%, #207ca6);
+}
+
+[data-battle-canvas] {
+  display: block;
+  width: 100%;
+  height: 100%;
+  outline: 0;
+}
+
+.battle-hud-host {
+  z-index: 2;
+  pointer-events: none;
+}
+
+@media (min-width: 700px) and (min-height: 930px) {
+  .game-scene--battle {
+    margin-block: 18px;
+    border-radius: 26px;
+  }
+}
+
+@media (max-width: 430px) {
+  .game-scene--battle {
+    width: 100%;
+    height: calc(100dvh - 68px);
+    min-height: 540px;
+    border-right: 0;
+    border-left: 0;
+    border-radius: 0;
+  }
+}
+
+@media (max-height: 700px) {
+  .game-scene--battle {
+    height: calc(100dvh - 64px);
+    min-height: 500px;
+  }
+}

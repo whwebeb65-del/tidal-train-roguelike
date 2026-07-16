@@ -249,7 +249,8 @@ export function createBattleHudModel(
       ),
     interaction,
     interactionNotice: options.interactionNotice ?? '',
-    pauseOverlayVisible: frame.status === 'paused',
+    pauseOverlayVisible:
+      frame.status === 'paused' && !upgradeCountdownVisible,
     failureVisible: frame.status === 'defeat' && settlement === null,
     reviveAvailable: options.reviveAvailable ?? false,
     failureSummary: `坚持到第 ${frame.wave} 波 · 击败 ${frame.kills} 只潮兽`,
