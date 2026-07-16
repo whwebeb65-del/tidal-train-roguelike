@@ -151,6 +151,7 @@ import {
 } from './views/EquipmentView';
 import { renderLaunchCampaignView } from './views/LaunchCampaignView';
 import { renderSocialHubView } from './views/SocialHubView';
+import { requireElement } from './app/dom';
 import './styles.css';
 
 const SAVE_KEY = 'tidal-train-prototype-save-v1';
@@ -158,10 +159,7 @@ const SOCIAL_SAVE_KEY = 'tidal-train-social-v1';
 const CAMPAIGN_SAVE_KEY = 'tidal-train-launch-campaign-v1';
 const DAILY_TRIAL_SAVE_KEY = 'tidal-train-daily-trial-v1';
 const DAILY_CHECK_IN_SAVE_KEY = 'tidal-train-daily-checkin-v1';
-const app = document.querySelector<HTMLDivElement>('#app');
-if (!app) {
-  throw new Error('App root is missing');
-}
+const app = requireElement<HTMLDivElement>(document, '#app');
 
 function readSave(): PlayerSave {
   try {
