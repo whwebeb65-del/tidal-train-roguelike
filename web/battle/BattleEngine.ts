@@ -75,6 +75,16 @@ export class BattleEngine {
   private resolvedOutcome: BattleOutcome | null = null;
   private lastStartedWave = 0;
   private eliteKilled = false;
+  private eliteSpawned = false;
+  private eliteSummonIndex = 0;
+  private eliteShieldCycle = 0;
+  private eliteEnraged = false;
+  private bossIntroStarted = false;
+  private bossId: number | null = null;
+  private bossPressureAtMs = 6000;
+  private bossSummonIndex = 0;
+  private bossChargeIndex = 0;
+  private pendingBossChargeAtMs: number | null = null;
   private readonly cooldowns: Record<BattleSkillId, number> = {
     'tidal-volley': 0,
     'bubble-barrier': 0,
@@ -287,7 +297,7 @@ export class BattleEngine {
       throw new Error('Battle step must be positive');
     }
     if (this.status === 'boss-intro') {
-      this.phaseElapsedMs += stepMs;
+      this.updateBossIntro(stepMs);
       return;
     }
     if (this.status !== 'running') return;
@@ -296,12 +306,17 @@ export class BattleEngine {
     this.phaseElapsedMs += stepMs;
     this.updateTimers(stepMs);
     this.spawnScheduledEnemies();
+    this.maybeSpawnElite();
     this.moveEnemies(stepMs);
+    this.updateEliteMechanics();
+    this.updateBossMechanics(stepMs);
     if (this.status !== 'running') return;
     this.updateMainCannon(stepMs);
     this.moveProjectiles(stepMs);
+    if (this.status !== 'running') return;
     this.updateLoot(stepMs);
     this.maybeOfferUpgrade();
+    if (this.status === 'running') this.maybeStartBossIntro();
   }
 
   private updateTimers(stepMs: number): void {
@@ -382,6 +397,139 @@ export class BattleEngine {
     return enemy;
   }
 
+  private maybeSpawnElite(): void {
+    if (this.eliteSpawned || this.elapsedMs < 130_000) return;
+    this.eliteSpawned = true;
+    const elite = this.spawnEnemy('storm-ray-elite', 1);
+    this.events.push({
+      type: 'elite-entered',
+      enemyId: elite.id,
+    });
+  }
+
+  private updateEliteMechanics(): void {
+    const elite = this.enemies.find(
+      (enemy) => enemy.alive && enemy.kind === 'storm-ray-elite',
+    );
+    if (!elite) return;
+
+    const summonAtMs = [6000, 14_000, 22_000] as const;
+    while (
+      this.eliteSummonIndex < summonAtMs.length
+      && elite.ageMs >= (summonAtMs[this.eliteSummonIndex] ?? Infinity)
+    ) {
+      const lane = (this.eliteSummonIndex % 3) as 0 | 1 | 2;
+      this.spawnEnemy('needle-jelly', lane, -12);
+      this.spawnEnemy('needle-jelly', ((lane + 1) % 3) as 0 | 1 | 2, 12);
+      this.eliteSummonIndex += 1;
+    }
+
+    const shieldCycle = Math.floor(elite.ageMs / 8000);
+    if (shieldCycle > this.eliteShieldCycle) {
+      this.eliteShieldCycle = shieldCycle;
+      elite.shield = Math.max(elite.shield, Math.floor(elite.maxHp * 0.2));
+    }
+
+    if (!this.eliteEnraged && elite.ageMs >= 45_000) {
+      this.eliteEnraged = true;
+      elite.speedPerSecond *= 0.7;
+      elite.attackCooldownMs *= 0.7;
+    }
+
+    if (elite.ageMs >= 75_000) this.finish(false);
+  }
+
+  private maybeStartBossIntro(): void {
+    if (
+      this.bossIntroStarted
+      || !this.eliteKilled
+      || this.elapsedMs < 160_000
+      || this.upgradeCheckpoint < 3
+    ) {
+      return;
+    }
+    this.bossIntroStarted = true;
+    this.status = 'boss-intro';
+    this.phaseElapsedMs = 0;
+    this.events.push({ type: 'boss-intro-started' });
+  }
+
+  private updateBossIntro(stepMs: number): void {
+    this.phaseElapsedMs += stepMs;
+    if (this.phaseElapsedMs < 6000) return;
+    const boss = this.spawnEnemy('deep-echo-boss', 1);
+    boss.x = 195;
+    boss.y = 96;
+    this.bossId = boss.id;
+    this.status = 'running';
+    this.phaseElapsedMs = 0;
+    this.events.push({
+      type: 'boss-intro-ended',
+      enemyId: boss.id,
+    });
+  }
+
+  private updateBossMechanics(stepMs: number): void {
+    if (this.bossId === null) return;
+    const boss = this.enemies.find(
+      (enemy) => enemy.id === this.bossId && enemy.alive,
+    );
+    if (!boss) return;
+    boss.ageMs += stepMs;
+
+    while (this.phaseElapsedMs >= this.bossPressureAtMs) {
+      this.damageTrain(
+        this.input.maxTrainHp * 0.09 * this.input.enemyDamageMultiplier,
+      );
+      if (this.status !== 'running') return;
+      this.bossPressureAtMs += this.phaseElapsedMs >= 55_000
+        ? 4200
+        : 6000;
+    }
+
+    const summonAtMs = [10_000, 24_000, 38_000] as const;
+    while (
+      this.bossSummonIndex < summonAtMs.length
+      && this.phaseElapsedMs
+        >= (summonAtMs[this.bossSummonIndex] ?? Infinity)
+    ) {
+      for (let index = 0; index < 4; index += 1) {
+        this.spawnEnemy(
+          'needle-jelly',
+          (index % 3) as 0 | 1 | 2,
+          (index - 1.5) * 8,
+        );
+      }
+      this.bossSummonIndex += 1;
+    }
+
+    const chargeAtMs = [16_000, 34_000] as const;
+    while (
+      this.bossChargeIndex < chargeAtMs.length
+      && this.phaseElapsedMs
+        >= (chargeAtMs[this.bossChargeIndex] ?? Infinity)
+    ) {
+      this.pendingBossChargeAtMs = this.phaseElapsedMs + 1200;
+      this.bossChargeIndex += 1;
+      this.events.push({
+        type: 'boss-charge-started',
+        durationMs: 1200,
+      });
+    }
+    if (
+      this.pendingBossChargeAtMs !== null
+      && this.phaseElapsedMs >= this.pendingBossChargeAtMs
+    ) {
+      this.pendingBossChargeAtMs = null;
+      this.damageTrain(
+        this.input.maxTrainHp * 0.18 * this.input.enemyDamageMultiplier,
+      );
+      if (this.status !== 'running') return;
+    }
+
+    if (this.phaseElapsedMs >= 90_000) this.finish(false);
+  }
+
   private moveEnemies(stepMs: number): void {
     for (const enemy of this.enemies) {
       if (!enemy.alive || enemy.kind === 'deep-echo-boss') continue;
@@ -400,7 +548,13 @@ export class BattleEngine {
       this.damageTrain(
         definition.defenceDamage * this.input.enemyDamageMultiplier,
       );
-      enemy.attackCooldownMs += Math.max(1, definition.attackIntervalMs);
+      const attackIntervalMultiplier = (
+        enemy.kind === 'storm-ray-elite' && this.eliteEnraged
+      ) ? 0.7 : 1;
+      enemy.attackCooldownMs += Math.max(
+        1,
+        definition.attackIntervalMs * attackIntervalMultiplier,
+      );
       if (this.status !== 'running') return;
     }
   }
@@ -667,6 +821,7 @@ export class BattleEngine {
     if (experience > 0) {
       this.createLoot('experience', experience, enemy.x, enemy.y);
     }
+    if (enemy.kind === 'storm-ray-elite') this.eliteKilled = true;
     if (enemy.kind === 'deep-echo-boss') this.finish(true);
   }
 
