@@ -60,4 +60,37 @@ describe('EffectSystem', () => {
     expect(effects.view.particles).toHaveLength(5);
     expect(effects.view.camera.amplitude).toBe(0);
   });
+
+  it('reuses expired effects and releases every active object on reset', () => {
+    const effects = new EffectSystem({
+      particleLimit: 32,
+      damageNumberLimit: 8,
+      impactLimit: 8,
+      reducedMotion: false,
+    });
+    const events = [{
+      type: 'projectile-hit' as const,
+      enemyId: 1,
+      damage: 50,
+      critical: true,
+      source: 'main' as const,
+    }];
+
+    effects.consume(events, createFrameFixture());
+    effects.update(2000);
+    effects.consume(events, createFrameFixture());
+
+    expect(effects.poolStats.particles.reused).toBeGreaterThan(0);
+    expect(effects.poolStats.damageNumbers.reused).toBeGreaterThan(0);
+    expect(effects.poolStats.rings.reused).toBeGreaterThan(0);
+
+    effects.reset();
+
+    expect(effects.poolStats.particles.inUse).toBe(0);
+    expect(effects.poolStats.damageNumbers.inUse).toBe(0);
+    expect(effects.poolStats.rings.inUse).toBe(0);
+    expect(effects.view.particles).toHaveLength(0);
+    expect(effects.view.damageNumbers).toHaveLength(0);
+    expect(effects.view.rings).toHaveLength(0);
+  });
 });

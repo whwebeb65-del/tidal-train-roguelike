@@ -3,6 +3,10 @@ import type {
   BattleFrameView,
   EnemyState,
 } from './BattleTypes';
+import {
+  EntityPool,
+  type EntityPoolStats,
+} from './EntityPool';
 
 export type EffectParticleKind =
   | 'muzzle'
@@ -90,13 +94,13 @@ export interface EffectSystemOptions {
 }
 
 interface MutableParticle {
-  readonly id: number;
-  readonly kind: EffectParticleKind;
-  readonly layer: EffectParticleView['layer'];
-  readonly color: string;
-  readonly size: number;
-  readonly lifetimeMs: number;
-  readonly priority: number;
+  id: number;
+  kind: EffectParticleKind;
+  layer: EffectParticleView['layer'];
+  color: string;
+  size: number;
+  lifetimeMs: number;
+  priority: number;
   x: number;
   y: number;
   vx: number;
@@ -107,31 +111,40 @@ interface MutableParticle {
 }
 
 interface MutableDamageNumber {
-  readonly id: number;
-  readonly value: number;
-  readonly critical: boolean;
-  readonly lifetimeMs: number;
+  id: number;
+  value: number;
+  critical: boolean;
+  lifetimeMs: number;
   x: number;
   y: number;
   ageMs: number;
 }
 
 interface MutableImpactRing {
-  readonly id: number;
-  readonly x: number;
-  readonly y: number;
-  readonly color: string;
-  readonly startRadius: number;
-  readonly endRadius: number;
-  readonly lifetimeMs: number;
-  readonly priority: number;
+  id: number;
+  x: number;
+  y: number;
+  color: string;
+  startRadius: number;
+  endRadius: number;
+  lifetimeMs: number;
+  priority: number;
   ageMs: number;
+}
+
+export interface EffectPoolStats {
+  readonly particles: EntityPoolStats;
+  readonly damageNumbers: EntityPoolStats;
+  readonly rings: EntityPoolStats;
 }
 
 export class EffectSystem {
   private particles: MutableParticle[] = [];
   private damageNumbers: MutableDamageNumber[] = [];
   private rings: MutableImpactRing[] = [];
+  private readonly particlePool: EntityPool<MutableParticle>;
+  private readonly damageNumberPool: EntityPool<MutableDamageNumber>;
+  private readonly ringPool: EntityPool<MutableImpactRing>;
   private nextId = 1;
   private clockMs = 0;
   private cameraAmplitude = 0;
@@ -152,6 +165,29 @@ export class EffectSystem {
     assertLimit(options.damageNumberLimit, 'Damage number limit');
     assertLimit(options.impactLimit ?? 24, 'Impact limit');
     this.reducedMotion = options.reducedMotion;
+    this.particlePool = new EntityPool(
+      createParticle,
+      resetParticle,
+      options.particleLimit,
+    );
+    this.damageNumberPool = new EntityPool(
+      createDamageNumber,
+      resetDamageNumber,
+      options.damageNumberLimit,
+    );
+    this.ringPool = new EntityPool(
+      createImpactRing,
+      resetImpactRing,
+      options.impactLimit ?? 24,
+    );
+  }
+
+  public get poolStats(): EffectPoolStats {
+    return {
+      particles: this.particlePool.stats,
+      damageNumbers: this.damageNumberPool.stats,
+      rings: this.ringPool.stats,
+    };
   }
 
   public setReducedMotion(reducedMotion: boolean): void {
@@ -412,15 +448,7 @@ export class EffectSystem {
       number.y -= 32 * deltaSeconds;
     }
     for (const ring of this.rings) ring.ageMs += deltaMs;
-    this.particles = this.particles.filter(
-      (particle) => particle.ageMs < particle.lifetimeMs,
-    );
-    this.damageNumbers = this.damageNumbers.filter(
-      (number) => number.ageMs < number.lifetimeMs,
-    );
-    this.rings = this.rings.filter(
-      (ring) => ring.ageMs < ring.lifetimeMs,
-    );
+    this.releaseExpiredEffects();
     this.cameraRemainingMs = Math.max(
       0,
       this.cameraRemainingMs - deltaMs,
@@ -440,9 +468,12 @@ export class EffectSystem {
   }
 
   public reset(): void {
-    this.particles = [];
-    this.damageNumbers = [];
-    this.rings = [];
+    this.particlePool.releaseAll();
+    this.damageNumberPool.releaseAll();
+    this.ringPool.releaseAll();
+    this.particles.length = 0;
+    this.damageNumbers.length = 0;
+    this.rings.length = 0;
     this.cameraAmplitude = 0;
     this.cameraRemainingMs = 0;
     this.title = null;
@@ -466,22 +497,23 @@ export class EffectSystem {
       const id = this.nextId++;
       const angle = id * 2.399963 + index * 0.31;
       const speed = 34 + id % 5 * 13;
-      this.particles.push({
-        id,
-        kind,
-        layer,
-        color,
-        size: 2.5 + id % 4 * 1.1,
-        lifetimeMs,
-        priority,
-        x,
-        y,
-        vx: Math.cos(angle) * speed,
-        vy: Math.sin(angle) * speed - 18,
-        rotation: angle,
-        spin: (id % 2 === 0 ? 1 : -1) * (1.2 + id % 4),
-        ageMs: 0,
-      });
+      const particle = this.particlePool.acquire();
+      particle.id = id;
+      particle.kind = kind;
+      particle.layer = layer;
+      particle.color = color;
+      particle.size = 2.5 + id % 4 * 1.1;
+      particle.lifetimeMs = lifetimeMs;
+      particle.priority = priority;
+      particle.x = x;
+      particle.y = y;
+      particle.vx = Math.cos(angle) * speed;
+      particle.vy = Math.sin(angle) * speed - 18;
+      particle.rotation = angle;
+      particle.spin =
+        (id % 2 === 0 ? 1 : -1) * (1.2 + id % 4);
+      particle.ageMs = 0;
+      this.particles.push(particle);
     }
   }
 
@@ -505,15 +537,15 @@ export class EffectSystem {
     value: number,
     critical: boolean,
   ): void {
-    this.damageNumbers.push({
-      id: this.nextId++,
-      x,
-      y: y - 18,
-      value: Math.max(0, Math.floor(value)),
-      critical,
-      lifetimeMs: critical ? 900 : 720,
-      ageMs: 0,
-    });
+    const number = this.damageNumberPool.acquire();
+    number.id = this.nextId++;
+    number.x = x;
+    number.y = y - 18;
+    number.value = Math.max(0, Math.floor(value));
+    number.critical = critical;
+    number.lifetimeMs = critical ? 900 : 720;
+    number.ageMs = 0;
+    this.damageNumbers.push(number);
   }
 
   private addRing(
@@ -524,17 +556,17 @@ export class EffectSystem {
     color = '#cfffff',
     priority = 1,
   ): void {
-    this.rings.push({
-      id: this.nextId++,
-      x,
-      y,
-      color,
-      startRadius,
-      endRadius,
-      lifetimeMs: 420,
-      priority,
-      ageMs: 0,
-    });
+    const ring = this.ringPool.acquire();
+    ring.id = this.nextId++;
+    ring.x = x;
+    ring.y = y;
+    ring.color = color;
+    ring.startRadius = startRadius;
+    ring.endRadius = endRadius;
+    ring.lifetimeMs = 420;
+    ring.priority = priority;
+    ring.ageMs = 0;
+    this.rings.push(ring);
   }
 
   private shake(amplitude: number, durationMs: number): void {
@@ -558,19 +590,45 @@ export class EffectSystem {
   }
 
   private trim(): void {
-    this.particles = trimByPriority(
+    trimByPriority(
       this.particles,
       this.options.particleLimit,
+      this.particlePool,
     );
-    if (this.damageNumbers.length > this.options.damageNumberLimit) {
-      this.damageNumbers = this.damageNumbers.slice(
-        -this.options.damageNumberLimit,
-      );
+    while (this.damageNumbers.length > this.options.damageNumberLimit) {
+      const removed = this.damageNumbers.shift();
+      if (removed) this.damageNumberPool.release(removed);
     }
-    this.rings = trimByPriority(
+    trimByPriority(
       this.rings,
       this.options.impactLimit ?? 24,
+      this.ringPool,
     );
+  }
+
+  private releaseExpiredEffects(): void {
+    for (let index = this.particles.length - 1; index >= 0; index -= 1) {
+      const particle = this.particles[index];
+      if (!particle || particle.ageMs < particle.lifetimeMs) continue;
+      this.particles.splice(index, 1);
+      this.particlePool.release(particle);
+    }
+    for (
+      let index = this.damageNumbers.length - 1;
+      index >= 0;
+      index -= 1
+    ) {
+      const number = this.damageNumbers[index];
+      if (!number || number.ageMs < number.lifetimeMs) continue;
+      this.damageNumbers.splice(index, 1);
+      this.damageNumberPool.release(number);
+    }
+    for (let index = this.rings.length - 1; index >= 0; index -= 1) {
+      const ring = this.rings[index];
+      if (!ring || ring.ageMs < ring.lifetimeMs) continue;
+      this.rings.splice(index, 1);
+      this.ringPool.release(ring);
+    }
   }
 }
 
@@ -583,8 +641,12 @@ function findEnemy(
 
 function trimByPriority<
   T extends { readonly id: number; readonly priority: number },
->(items: readonly T[], limit: number): T[] {
-  if (items.length <= limit) return [...items];
+>(
+  items: T[],
+  limit: number,
+  pool: EntityPool<T>,
+): void {
+  if (items.length <= limit) return;
   const remove = new Set(
     [...items]
       .sort((left, right) => (
@@ -593,7 +655,12 @@ function trimByPriority<
       .slice(0, items.length - limit)
       .map((item) => item.id),
   );
-  return items.filter((item) => !remove.has(item.id));
+  for (let index = items.length - 1; index >= 0; index -= 1) {
+    const item = items[index];
+    if (!item || !remove.has(item.id)) continue;
+    items.splice(index, 1);
+    pool.release(item);
+  }
 }
 
 function fade(ageMs: number, lifetimeMs: number): number {
@@ -606,4 +673,88 @@ function assertLimit(value: number, label: string): void {
   if (!Number.isInteger(value) || value < 0) {
     throw new Error(`${label} must be a non-negative integer`);
   }
+}
+
+function createParticle(): MutableParticle {
+  return {
+    id: 0,
+    kind: 'muzzle',
+    layer: 'front-effects',
+    color: '',
+    size: 0,
+    lifetimeMs: 0,
+    priority: 0,
+    x: 0,
+    y: 0,
+    vx: 0,
+    vy: 0,
+    rotation: 0,
+    spin: 0,
+    ageMs: 0,
+  };
+}
+
+function resetParticle(particle: MutableParticle): void {
+  particle.id = 0;
+  particle.kind = 'muzzle';
+  particle.layer = 'front-effects';
+  particle.color = '';
+  particle.size = 0;
+  particle.lifetimeMs = 0;
+  particle.priority = 0;
+  particle.x = 0;
+  particle.y = 0;
+  particle.vx = 0;
+  particle.vy = 0;
+  particle.rotation = 0;
+  particle.spin = 0;
+  particle.ageMs = 0;
+}
+
+function createDamageNumber(): MutableDamageNumber {
+  return {
+    id: 0,
+    value: 0,
+    critical: false,
+    lifetimeMs: 0,
+    x: 0,
+    y: 0,
+    ageMs: 0,
+  };
+}
+
+function resetDamageNumber(number: MutableDamageNumber): void {
+  number.id = 0;
+  number.value = 0;
+  number.critical = false;
+  number.lifetimeMs = 0;
+  number.x = 0;
+  number.y = 0;
+  number.ageMs = 0;
+}
+
+function createImpactRing(): MutableImpactRing {
+  return {
+    id: 0,
+    x: 0,
+    y: 0,
+    color: '',
+    startRadius: 0,
+    endRadius: 0,
+    lifetimeMs: 0,
+    priority: 0,
+    ageMs: 0,
+  };
+}
+
+function resetImpactRing(ring: MutableImpactRing): void {
+  ring.id = 0;
+  ring.x = 0;
+  ring.y = 0;
+  ring.color = '';
+  ring.startRadius = 0;
+  ring.endRadius = 0;
+  ring.lifetimeMs = 0;
+  ring.priority = 0;
+  ring.ageMs = 0;
 }

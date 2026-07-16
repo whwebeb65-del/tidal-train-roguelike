@@ -33,16 +33,58 @@ import {
   getWaveAtTime,
   type SpawnInstruction,
 } from './WaveScheduler';
+import {
+  EntityPool,
+  type EntityPoolStats,
+} from './EntityPool';
 
-type MutableProjectileState = Omit<ProjectileState, 'targetId'> & {
-  targetId: number;
+type Mutable<T> = {
+  -readonly [Property in keyof T]: T[Property];
 };
+
+type MutableProjectileState = Mutable<ProjectileState>;
+type MutableLootState = Mutable<LootState>;
+
+export interface BattleEntityPoolStats {
+  readonly projectiles: EntityPoolStats;
+  readonly loot: EntityPoolStats;
+}
 
 export class BattleEngine {
   private readonly events: BattleEvent[] = [];
   private readonly enemies: EnemyState[] = [];
   private readonly projectiles: MutableProjectileState[] = [];
-  private readonly loot: LootState[] = [];
+  private readonly loot: MutableLootState[] = [];
+  private readonly projectilePool = new EntityPool<MutableProjectileState>(
+    () => ({
+      id: 0,
+      source: 'main',
+      x: 0,
+      y: 0,
+      targetId: 0,
+      speedPerSecond: 0,
+      damage: 0,
+      splashRadius: 0,
+      chainRemaining: 0,
+      critical: false,
+      active: false,
+    }),
+    resetProjectile,
+    256,
+  );
+  private readonly lootPool = new EntityPool<MutableLootState>(
+    () => ({
+      id: 0,
+      kind: 'experience',
+      x: 0,
+      y: 0,
+      amount: 0,
+      ageMs: 0,
+      collected: false,
+    }),
+    resetLoot,
+    128,
+  );
   private readonly schedule: readonly SpawnInstruction[];
   private readonly random: SeededRandom;
   private readonly modifiers = createBaseModifiers();
@@ -106,6 +148,13 @@ export class BattleEngine {
 
   public get outcome(): BattleOutcome | null {
     return this.resolvedOutcome;
+  }
+
+  public get poolStats(): BattleEntityPoolStats {
+    return {
+      projectiles: this.projectilePool.stats,
+      loot: this.lootPool.stats,
+    };
   }
 
   public get frame(): BattleFrameView {
@@ -296,27 +345,32 @@ export class BattleEngine {
     if (!Number.isFinite(stepMs) || stepMs <= 0) {
       throw new Error('Battle step must be positive');
     }
-    if (this.status === 'boss-intro') {
-      this.updateBossIntro(stepMs);
-      return;
-    }
-    if (this.status !== 'running') return;
+    if (this.status !== 'running' && this.status !== 'boss-intro') return;
 
-    this.elapsedMs += stepMs;
-    this.phaseElapsedMs += stepMs;
-    this.updateTimers(stepMs);
-    this.spawnScheduledEnemies();
-    this.maybeSpawnElite();
-    this.moveEnemies(stepMs);
-    this.updateEliteMechanics();
-    this.updateBossMechanics(stepMs);
-    if (this.status !== 'running') return;
-    this.updateMainCannon(stepMs);
-    this.moveProjectiles(stepMs);
-    if (this.status !== 'running') return;
-    this.updateLoot(stepMs);
-    this.maybeOfferUpgrade();
-    if (this.status === 'running') this.maybeStartBossIntro();
+    try {
+      if (this.status === 'boss-intro') {
+        this.updateBossIntro(stepMs);
+        return;
+      }
+
+      this.elapsedMs += stepMs;
+      this.phaseElapsedMs += stepMs;
+      this.updateTimers(stepMs);
+      this.spawnScheduledEnemies();
+      this.maybeSpawnElite();
+      this.moveEnemies(stepMs);
+      this.updateEliteMechanics();
+      this.updateBossMechanics(stepMs);
+      if (this.status !== 'running') return;
+      this.updateMainCannon(stepMs);
+      this.moveProjectiles(stepMs);
+      if (this.status !== 'running') return;
+      this.updateLoot(stepMs);
+      this.maybeOfferUpgrade();
+      if (this.status === 'running') this.maybeStartBossIntro();
+    } finally {
+      this.recycleInactiveEntities();
+    }
   }
 
   private updateTimers(stepMs: number): void {
@@ -650,19 +704,18 @@ export class BattleEngine {
     readonly startX?: number;
     readonly startY?: number;
   }): MutableProjectileState {
-    const projectile: MutableProjectileState = {
-      id: this.nextEntityId++,
-      source: input.source,
-      x: (input.startX ?? 195) + (input.xOffset ?? 0),
-      y: input.startY ?? 690,
-      targetId: input.targetId,
-      speedPerSecond: MAIN_PROJECTILE_SPEED,
-      damage: Math.max(0, input.damage),
-      splashRadius: Math.max(0, input.splashRadius),
-      chainRemaining: Math.max(0, input.chainRemaining),
-      critical: input.critical,
-      active: true,
-    };
+    const projectile = this.projectilePool.acquire();
+    projectile.id = this.nextEntityId++;
+    projectile.source = input.source;
+    projectile.x = (input.startX ?? 195) + (input.xOffset ?? 0);
+    projectile.y = input.startY ?? 690;
+    projectile.targetId = input.targetId;
+    projectile.speedPerSecond = MAIN_PROJECTILE_SPEED;
+    projectile.damage = Math.max(0, input.damage);
+    projectile.splashRadius = Math.max(0, input.splashRadius);
+    projectile.chainRemaining = Math.max(0, input.chainRemaining);
+    projectile.critical = input.critical;
+    projectile.active = true;
     this.projectiles.push(projectile);
     this.events.push({
       type: 'weapon-fired',
@@ -831,15 +884,14 @@ export class BattleEngine {
     x: number,
     y: number,
   ): void {
-    const loot: LootState = {
-      id: this.nextEntityId++,
-      kind,
-      x: x + this.random.int(-8, 8),
-      y: y + this.random.int(-5, 5),
-      amount,
-      ageMs: 0,
-      collected: false,
-    };
+    const loot = this.lootPool.acquire();
+    loot.id = this.nextEntityId++;
+    loot.kind = kind;
+    loot.x = x + this.random.int(-8, 8);
+    loot.y = y + this.random.int(-5, 5);
+    loot.amount = amount;
+    loot.ageMs = 0;
+    loot.collected = false;
     this.loot.push(loot);
     this.events.push({
       type: 'loot-created',
@@ -887,6 +939,21 @@ export class BattleEngine {
     return this.enemies
       .filter((enemy) => enemy.alive)
       .sort((left, right) => right.y - left.y || left.id - right.id)[0];
+  }
+
+  private recycleInactiveEntities(): void {
+    for (let index = this.projectiles.length - 1; index >= 0; index -= 1) {
+      const projectile = this.projectiles[index];
+      if (!projectile || projectile.active) continue;
+      this.projectiles.splice(index, 1);
+      this.projectilePool.release(projectile);
+    }
+    for (let index = this.loot.length - 1; index >= 0; index -= 1) {
+      const item = this.loot[index];
+      if (!item || !item.collected) continue;
+      this.loot.splice(index, 1);
+      this.lootPool.release(item);
+    }
   }
 
   private hasLivingTarget(): boolean {
@@ -970,4 +1037,28 @@ export class BattleEngine {
   private isTerminal(): boolean {
     return this.status === 'victory' || this.status === 'defeat';
   }
+}
+
+function resetProjectile(projectile: MutableProjectileState): void {
+  projectile.id = 0;
+  projectile.source = 'main';
+  projectile.x = 0;
+  projectile.y = 0;
+  projectile.targetId = 0;
+  projectile.speedPerSecond = 0;
+  projectile.damage = 0;
+  projectile.splashRadius = 0;
+  projectile.chainRemaining = 0;
+  projectile.critical = false;
+  projectile.active = false;
+}
+
+function resetLoot(loot: MutableLootState): void {
+  loot.id = 0;
+  loot.kind = 'experience';
+  loot.x = 0;
+  loot.y = 0;
+  loot.amount = 0;
+  loot.ageMs = 0;
+  loot.collected = false;
 }
