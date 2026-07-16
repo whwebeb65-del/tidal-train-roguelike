@@ -1,0 +1,76 @@
+import { describe, expect, it } from 'vitest';
+import { SceneRouter } from '../../web/app/SceneRouter';
+import type { GameScene } from '../../web/scenes/Scene';
+
+function createHost(): HTMLElement {
+  return {
+    innerHTML: '',
+    className: '',
+    dataset: {},
+    classList: {
+      add() {},
+      remove() {},
+    },
+    replaceChildren() {},
+  } as unknown as HTMLElement;
+}
+
+describe('SceneRouter', () => {
+  it('unmounts the previous scene before mounting the next one', async () => {
+    const calls: string[] = [];
+    const factory = (id: GameScene['id']): GameScene => ({
+      id,
+      mount() {
+        calls.push(`mount:${id}`);
+      },
+      unmount() {
+        calls.push(`unmount:${id}`);
+      },
+    });
+    const router = new SceneRouter(createHost(), factory, {
+      transitionMs: 0,
+      reducedMotion: true,
+    });
+
+    await router.go('station', 'replace');
+    await router.go('captain', 'forward');
+
+    expect(calls).toEqual([
+      'mount:station',
+      'unmount:station',
+      'mount:captain',
+    ]);
+    expect(router.currentSceneId).toBe('captain');
+  });
+
+  it('does not let an older transition clear a newer entering state', async () => {
+    let releaseStation = (): void => undefined;
+    const stationMounted = new Promise<void>((resolve) => {
+      releaseStation = resolve;
+    });
+    const host = createHost();
+    const removed: string[] = [];
+    host.classList.remove = (...tokens: string[]) => {
+      removed.push(...tokens);
+    };
+    const factory = (id: GameScene['id']): GameScene => ({
+      id,
+      mount() {
+        return id === 'station' ? stationMounted : undefined;
+      },
+      unmount() {},
+    });
+    const router = new SceneRouter(host, factory, {
+      transitionMs: 0,
+      reducedMotion: true,
+    });
+
+    const older = router.go('station', 'replace');
+    const newer = router.go('captain', 'forward');
+    releaseStation();
+    await Promise.all([older, newer]);
+
+    expect(router.currentSceneId).toBe('captain');
+    expect(removed).toEqual(['scene-host--entering']);
+  });
+});
