@@ -71,7 +71,6 @@ import {
   applyForBeta,
   claimBetaGift,
   claimLaunchGift,
-  createLaunchCampaignState,
   GIFT_CODE_CATALOG,
   normalizeLaunchCampaignState,
   redeemGiftCode,
@@ -93,7 +92,6 @@ import {
 } from '../src/domain/challenge/DailyTrialSystem';
 import {
   claimDailyCheckIn,
-  createDailyCheckInState,
   normalizeDailyCheckInState,
   type DailyCheckInState,
 } from '../src/domain/retention/DailyCheckInSystem';
@@ -106,9 +104,7 @@ import { settlePurchase } from '../src/domain/commerce/PurchaseService';
 import {
   claimExpeditionMilestone,
   contributeToExpedition,
-  createSocialExpeditionState,
   EXPEDITION_MILESTONES,
-  getIsoWeekCycleId,
   getSquadBonuses,
   joinLegion,
   normalizeSocialExpeditionState,
@@ -123,8 +119,6 @@ import { MockAds, MockShare, MockStore } from '../src/platform/MockPlatform';
 import type { RewardedPlacement } from '../src/platform/PlatformContracts';
 import {
   createMemorySaveRepository,
-  defaultSave,
-  normalizePlayerSave,
   type PlayerSave,
 } from '../src/save/SaveRepository';
 import { createMemoryTelemetry } from '../src/telemetry/TelemetryClient';
@@ -149,77 +143,26 @@ import {
   PROTOTYPE_REROLL,
   renderEquipment,
 } from './views/EquipmentView';
+import { createBrowserAppStateRepository } from './app/AppStateRepository';
 import { renderLaunchCampaignView } from './views/LaunchCampaignView';
 import { renderSocialHubView } from './views/SocialHubView';
 import { requireElement } from './app/dom';
 import './styles.css';
 
-const SAVE_KEY = 'tidal-train-prototype-save-v1';
-const SOCIAL_SAVE_KEY = 'tidal-train-social-v1';
-const CAMPAIGN_SAVE_KEY = 'tidal-train-launch-campaign-v1';
-const DAILY_TRIAL_SAVE_KEY = 'tidal-train-daily-trial-v1';
-const DAILY_CHECK_IN_SAVE_KEY = 'tidal-train-daily-checkin-v1';
 const app = requireElement<HTMLDivElement>(document, '#app');
-
-function readSave(): PlayerSave {
-  try {
-    const raw = window.localStorage.getItem(SAVE_KEY);
-    if (!raw) return defaultSave();
-    return normalizePlayerSave(JSON.parse(raw) as unknown);
-  } catch {
-    return defaultSave();
-  }
-}
-
-const expeditionCycleId = getIsoWeekCycleId(new Date());
-
-function readSocialState(): SocialExpeditionState {
-  try {
-    const raw = window.localStorage.getItem(SOCIAL_SAVE_KEY);
-    return normalizeSocialExpeditionState(raw ? JSON.parse(raw) : null, expeditionCycleId);
-  } catch {
-    return createSocialExpeditionState(expeditionCycleId);
-  }
-}
-
-function readCampaignState(): LaunchCampaignState {
-  try {
-    const raw = window.localStorage.getItem(CAMPAIGN_SAVE_KEY);
-    return normalizeLaunchCampaignState(raw ? JSON.parse(raw) : null);
-  } catch {
-    return createLaunchCampaignState();
-  }
-}
-
-function readDailyTrialState(): DailyTrialState {
-  const dayId = getChinaDayId(Date.now());
-  try {
-    const raw = window.localStorage.getItem(DAILY_TRIAL_SAVE_KEY);
-    return normalizeDailyTrialState(raw ? JSON.parse(raw) : null, dayId);
-  } catch {
-    return createDailyTrialState(dayId);
-  }
-}
-
-function readDailyCheckInState(): DailyCheckInState {
-  try {
-    const raw = window.localStorage.getItem(DAILY_CHECK_IN_SAVE_KEY);
-    return normalizeDailyCheckInState(raw ? JSON.parse(raw) : null);
-  } catch {
-    return createDailyCheckInState();
-  }
-}
-
-const repository = createMemorySaveRepository(readSave());
+const appStateRepository = createBrowserAppStateRepository(window.localStorage);
+const initialState = appStateRepository.load();
+const expeditionCycleId = initialState.social.cycleId;
+const repository = createMemorySaveRepository(initialState.save);
 const telemetry = createMemoryTelemetry();
 const ads = new MockAds('completed');
 const share = new MockShare('completed');
 const store = new MockStore('verified');
 let save = repository.load();
-let socialState = readSocialState();
-let campaignState = readCampaignState();
-let dailyTrialState = readDailyTrialState();
-let dailyCheckInState = readDailyCheckInState();
+let socialState = initialState.social;
+let campaignState = initialState.campaign;
+let dailyTrialState = initialState.dailyTrial;
+let dailyCheckInState = initialState.dailyCheckIn;
 let phase: 'station' | 'combat' | 'reward' | 'route' | 'boss' | 'failure' | 'settlement' = 'station';
 type HubView = 'station' | 'wardrobe' | 'equipment';
 let hubView: HubView = 'station';
@@ -227,7 +170,7 @@ let captainSelectionTracked = false;
 let wardrobeViewTracked = false;
 let equipmentViewTracked = false;
 let runMode: 'normal' | 'daily-trial' = 'normal';
-let currentMapId: MapId = 'drift-suburb';
+let currentMapId: MapId = initialState.selectedMapId;
 let runId = '';
 let seed = 0;
 let currentNodeId = 'node-0';
@@ -258,7 +201,7 @@ let notice = '欢迎登车，先选择一条可以活着回来的路线。';
 function commit(next: PlayerSave): void {
   save = next;
   repository.save(next);
-  window.localStorage.setItem(SAVE_KEY, JSON.stringify(next));
+  appStateRepository.savePlayer(next);
 }
 
 function getEquipmentStateFromSave(): EquipmentState {
@@ -293,22 +236,22 @@ function scaleGearReward(baseGears: number): number {
 
 function commitSocial(next: SocialExpeditionState): void {
   socialState = normalizeSocialExpeditionState(next, expeditionCycleId);
-  window.localStorage.setItem(SOCIAL_SAVE_KEY, JSON.stringify(socialState));
+  appStateRepository.saveSocial(socialState);
 }
 
 function commitCampaign(next: LaunchCampaignState): void {
   campaignState = normalizeLaunchCampaignState(next);
-  window.localStorage.setItem(CAMPAIGN_SAVE_KEY, JSON.stringify(campaignState));
+  appStateRepository.saveCampaign(campaignState);
 }
 
 function commitDailyTrial(next: DailyTrialState): void {
   dailyTrialState = normalizeDailyTrialState(next, next.dayId);
-  window.localStorage.setItem(DAILY_TRIAL_SAVE_KEY, JSON.stringify(dailyTrialState));
+  appStateRepository.saveDailyTrial(dailyTrialState);
 }
 
 function commitDailyCheckIn(next: DailyCheckInState): void {
   dailyCheckInState = normalizeDailyCheckInState(next);
-  window.localStorage.setItem(DAILY_CHECK_IN_SAVE_KEY, JSON.stringify(dailyCheckInState));
+  appStateRepository.saveDailyCheckIn(dailyCheckInState);
 }
 
 function syncDailyTrialDay(): DailyTrialDefinition {
@@ -1760,8 +1703,8 @@ app.addEventListener('click', async (event) => {
   if (action === 'ad-revive') await handleAdRevive();
   if (action === 'double-settlement') await handleSettlementDouble();
   if (action === 'give-up') settleRun(false);
-  if (action === 'select-map' && button.dataset.mapId) { currentMapId = button.dataset.mapId as MapId; notice = `已切换路线：${formatMap(currentMapId)}。`; render(); }
-  if (action === 'unlock-map' && button.dataset.mapId) { commit(unlockMap(save, button.dataset.mapId as MapId)); currentMapId = button.dataset.mapId as MapId; notice = `新地图 ${formatMap(currentMapId)} 已开放。`; render(); }
+  if (action === 'select-map' && button.dataset.mapId) { currentMapId = button.dataset.mapId as MapId; appStateRepository.saveSelectedMap(currentMapId); notice = `已切换路线：${formatMap(currentMapId)}。`; render(); }
+  if (action === 'unlock-map' && button.dataset.mapId) { commit(unlockMap(save, button.dataset.mapId as MapId)); currentMapId = button.dataset.mapId as MapId; appStateRepository.saveSelectedMap(currentMapId); notice = `新地图 ${formatMap(currentMapId)} 已开放。`; render(); }
   if (action === 'upgrade-station') upgradeStationAtStation();
   if (action === 'apply-beta') handleBetaApplication();
   if (action === 'claim-beta-gift') handleBetaGiftClaim();
@@ -1782,7 +1725,7 @@ app.addEventListener('click', async (event) => {
       });
     }
   }
-  if (action === 'reset-save') { window.localStorage.removeItem(SAVE_KEY); window.localStorage.removeItem(SOCIAL_SAVE_KEY); window.localStorage.removeItem(CAMPAIGN_SAVE_KEY); window.localStorage.removeItem(DAILY_TRIAL_SAVE_KEY); window.localStorage.removeItem(DAILY_CHECK_IN_SAVE_KEY); window.location.reload(); }
+  if (action === 'reset-save') { appStateRepository.clear(); window.location.reload(); }
 });
 
 app.addEventListener('submit', (event) => {
