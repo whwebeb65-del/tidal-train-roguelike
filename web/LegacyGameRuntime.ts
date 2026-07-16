@@ -130,6 +130,8 @@ import type {
 } from './app/SettingsRepository';
 import {
   BATTLE_ART_URLS,
+  DEFERRED_BATTLE_ART_IDS,
+  getCriticalBattleArtIds,
   type BattleArtId,
 } from './assets/BattleArtCatalog';
 import {
@@ -221,6 +223,7 @@ const battleAssetLoader = new BattleAssetLoader(BATTLE_ART_URLS);
 const battleSettlementAdapter =
   new BattleSettlementAdapter<BattleSettlementPresentation | null>();
 let battleAssets: BattleAssetSet<BattleArtId> | null = null;
+let deferredAssetTimerId: ReturnType<typeof setTimeout> | null = null;
 let activeBattleEngine: BattleEngine | null = null;
 let activeBattleProgression: ProgressionSnapshot | null = null;
 let activeBattleSettlement: BattleSettlementPresentation | null = null;
@@ -331,6 +334,33 @@ function stopStationAudioLoop(): void {
   if (stationAudioFrameId === null) return;
   window.cancelAnimationFrame(stationAudioFrameId);
   stationAudioFrameId = null;
+}
+
+async function loadCriticalBattleAssets(
+  captainArtId: BattleArtId,
+): Promise<BattleAssetSet<BattleArtId>> {
+  const assets = battleAssetLoader.assets;
+  battleAssets = assets;
+  const load = battleAssetLoader.load(
+    getCriticalBattleArtIds(captainArtId),
+  );
+  let timeoutId: ReturnType<typeof setTimeout> | null = null;
+  await Promise.race([
+    load,
+    new Promise<void>((resolve) => {
+      timeoutId = globalThis.setTimeout(resolve, 3000);
+    }),
+  ]);
+  if (timeoutId !== null) globalThis.clearTimeout(timeoutId);
+  return assets;
+}
+
+function scheduleDeferredBattleAssets(): void {
+  if (deferredAssetTimerId !== null) return;
+  deferredAssetTimerId = globalThis.setTimeout(() => {
+    deferredAssetTimerId = null;
+    void battleAssetLoader.load(DEFERRED_BATTLE_ART_IDS);
+  }, 0);
 }
 
 function handlePageHidden(): void {
@@ -819,7 +849,9 @@ async function startRun(
       ? '正在装载列车、潮兽与战斗特效……'
       : '当前浏览器未启用声音，游戏仍可正常游玩。正在装载战斗……';
     render();
-    if (!battleAssets) battleAssets = await battleAssetLoader.loadAll();
+    const currentBattleAssets = await loadCriticalBattleAssets(
+      getActiveCaptainArtId(),
+    );
     if (runId) {
       track('run_restart', { afterAdRevive: lastRunRecovery === 'ad' });
     }
@@ -856,6 +888,7 @@ async function startRun(
     }));
 
     phase = 'combat';
+    scheduleDeferredBattleAssets();
     notice = dailyDefinition
       ? `${dailyDefinition.dayId} 每日试炼出发：${dailyDefinition.rule.name}，固定种子 ${seed}。`
       : `${formatMap(currentMapId)} 已发车，潮汐种子 ${seed}。`;
@@ -867,8 +900,8 @@ async function startRun(
         ruleId: dailyDefinition.rule.id,
       });
     }
-    if (battleAssets.failedIds.length > 0) {
-      notice += ` ${battleAssets.failedIds.length} 项美术资源将使用安全替代图形。`;
+    if (currentBattleAssets.failedIds.length > 0) {
+      notice += ` ${currentBattleAssets.failedIds.length} 项美术资源将使用安全替代图形。`;
     }
   } catch (error) {
     console.error(error);
@@ -1806,6 +1839,10 @@ return {
     if (!started) return;
     started = false;
     stopStationAudioLoop();
+    if (deferredAssetTimerId !== null) {
+      globalThis.clearTimeout(deferredAssetTimerId);
+      deferredAssetTimerId = null;
+    }
     app.removeEventListener('click', onClick);
     app.removeEventListener('submit', onSubmit);
     app.removeEventListener('change', onChange);

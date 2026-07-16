@@ -40,29 +40,45 @@ export class BattleAssetLoader<Id extends string> {
     string,
     Promise<CanvasImageSource | null>
   >();
+  private readonly images = new Map<Id, CanvasImageSource | null>();
+  private readonly failed = new Set<Id>();
+  private readonly ids: readonly Id[];
+  private readonly liveAssets: BattleAssetSet<Id>;
 
   public constructor(
     private readonly urls: Readonly<Record<Id, string>>,
     private readonly factory: BattleImageFactory = createBrowserBattleImage,
-  ) {}
+  ) {
+    this.ids = Object.keys(urls) as Id[];
+    const loader = this;
+    this.liveAssets = {
+      get failedIds() {
+        return loader.ids.filter((id) => loader.failed.has(id));
+      },
+      get(id) {
+        return loader.images.get(id) ?? null;
+      },
+    };
+  }
+
+  public get assets(): BattleAssetSet<Id> {
+    return this.liveAssets;
+  }
 
   public async loadAll(): Promise<BattleAssetSet<Id>> {
-    const images = new Map<Id, CanvasImageSource | null>();
-    const failedIds: Id[] = [];
+    return this.load(this.ids);
+  }
 
-    for (
-      const [id, url]
-      of Object.entries(this.urls) as [Id, string][]
-    ) {
+  public async load(ids: readonly Id[]): Promise<BattleAssetSet<Id>> {
+    await Promise.all(ids.map(async (id) => {
+      const url = this.urls[id];
+      if (!url) throw new Error(`Unknown battle art id: ${id}`);
       const image = await this.loadUrl(url);
-      images.set(id, image);
-      if (image === null) failedIds.push(id);
-    }
-
-    return {
-      failedIds,
-      get: (id) => images.get(id) ?? null,
-    };
+      this.images.set(id, image);
+      if (image === null) this.failed.add(id);
+      else this.failed.delete(id);
+    }));
+    return this.liveAssets;
   }
 
   private loadUrl(url: string): Promise<CanvasImageSource | null> {

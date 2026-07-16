@@ -36,4 +36,44 @@ describe('BattleAssetLoader', () => {
 
     expect(factory).toHaveBeenCalledTimes(1);
   });
+
+  it('loads requested stages in parallel and updates a live asset set', async () => {
+    const releases = new Map<
+      string,
+      (image: CanvasImageSource) => void
+    >();
+    const factory = vi.fn<BattleImageFactory>((url) => (
+      new Promise((resolve) => releases.set(url, resolve))
+    ));
+    const loader = new BattleAssetLoader({
+      background: '/background.webp',
+      normalEnemy: '/normal.webp',
+      boss: '/boss.webp',
+    }, factory);
+    const assets = loader.assets;
+    const critical = loader.load(['background', 'normalEnemy']);
+    await Promise.resolve();
+
+    expect(factory).toHaveBeenCalledTimes(2);
+    expect(assets.get('background')).toBeNull();
+    releases.get('/background.webp')?.(
+      { id: 'background' } as unknown as CanvasImageSource,
+    );
+    releases.get('/normal.webp')?.(
+      { id: 'normal' } as unknown as CanvasImageSource,
+    );
+    await critical;
+
+    expect(assets.get('background')).not.toBeNull();
+    expect(assets.get('boss')).toBeNull();
+
+    const deferred = loader.load(['boss']);
+    await Promise.resolve();
+    expect(factory).toHaveBeenCalledTimes(3);
+    releases.get('/boss.webp')?.(
+      { id: 'boss' } as unknown as CanvasImageSource,
+    );
+    await deferred;
+    expect(assets.get('boss')).not.toBeNull();
+  });
 });

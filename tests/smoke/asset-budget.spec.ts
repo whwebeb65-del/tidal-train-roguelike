@@ -9,6 +9,8 @@ describe('asset budget', () => {
       { encoding: 'utf8' },
     );
 
+    expect(output).toContain('first-screen bytes');
+    expect(output).toContain('battle-screen bytes');
     expect(output).toContain('asset budget ok');
   });
 });
