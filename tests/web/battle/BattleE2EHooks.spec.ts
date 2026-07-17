@@ -12,6 +12,7 @@ function createController(): BattleE2EController {
     e2eSnapshot: vi.fn((): BattleE2ESnapshot => ({
       sceneId: 'station',
       battle: null,
+      trainMotion: null,
       diagnostics: {
         activeFrameLoops: 0,
         activeListeners: 0,
@@ -63,6 +64,7 @@ describe('BattleE2EHooks', () => {
 
     expect(controller.e2eAdvanceBattle).toHaveBeenCalledWith(2000);
     expect(controller.e2eNavigate).toHaveBeenCalledWith('captain');
+    expect(target.__TIDAL_TRAIN_E2E__?.snapshot().trainMotion).toBeNull();
     removeBattleE2EHooks(target);
     expect(target.__TIDAL_TRAIN_E2E__).toBeUndefined();
   });

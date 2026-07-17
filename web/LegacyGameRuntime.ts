@@ -1852,6 +1852,9 @@ function e2eSnapshot(): BattleE2ESnapshot {
     battle: activeBattleEngine
       ? cloneBattleFrame(activeBattleEngine.frame)
       : null,
+    trainMotion: activeBattleScene
+      ? activeBattleScene.snapshotTrainMotion()
+      : null,
     diagnostics: snapshot,
     settlementCount: snapshot.settledBattleCount,
   };

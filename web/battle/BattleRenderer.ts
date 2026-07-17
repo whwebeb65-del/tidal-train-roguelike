@@ -31,30 +31,11 @@ export interface BattleRenderInput {
   readonly reducedMotion: boolean;
   readonly effects: EffectFrameView;
   readonly renderBudget: RenderBudget;
-  readonly trainMotion?: TrainMotionFrameView;
+  readonly trainMotion: TrainMotionFrameView;
 }
 
 const TRAIN_PIVOT_X = 195;
 const TRAIN_PIVOT_Y = 842;
-
-const NEUTRAL_TRAIN_MOTION: TrainMotionFrameView = Object.freeze({
-  phase: 'cruise',
-  motionTimeMs: 0,
-  speed: 1,
-  offsetX: 0,
-  offsetY: 0,
-  rotation: 0,
-  scale: 1,
-  cannonRecoil: 0,
-  surge: 0,
-  damagePulse: 0,
-  laneOffset: 0,
-  wakeStrength: 1,
-  engineGlow: 0.73,
-  windowGlowPhase: 0,
-  lowPowerPulse: 0,
-  detailAlpha: 1,
-});
 
 const ENEMY_ART: Readonly<Record<EnemyKind, BattleArtId>> = {
   'bubble-fin': 'bubbleFin',
@@ -82,7 +63,7 @@ export class BattleRenderer {
   public constructor(private readonly painter: BattlePainter) {}
 
   public render(input: BattleRenderInput): void {
-    const trainMotion = input.trainMotion ?? NEUTRAL_TRAIN_MOTION;
+    const trainMotion = input.trainMotion;
     const camera: CameraPose = {
       x: input.effects.camera.x,
       y: input.effects.camera.y,

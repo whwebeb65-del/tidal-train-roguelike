@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { BattleEvent } from '../../../web/battle/BattleTypes';
+import type {
+  BattleEvent,
+  BattleFrameView,
+} from '../../../web/battle/BattleTypes';
 import {
   BattleScene,
   type BattleEnginePort,
@@ -12,7 +15,10 @@ import {
 import type {
   BattleHudCallbacks,
 } from '../../../web/battle/BattleHUD';
-import { createFrameFixture } from './helpers/BattleFixtures';
+import {
+  createFrameFixture,
+  createTrainMotionFixture,
+} from './helpers/BattleFixtures';
 
 class ManualFrameScheduler implements FrameScheduler {
   private nextId = 1;
@@ -50,8 +56,10 @@ interface TestEngine extends BattleEnginePort {
   setOutcome(next: BattleEnginePort['outcome']): void;
 }
 
-function createEngine(): TestEngine {
-  let frame = createFrameFixture();
+function createEngine(
+  initialFrame: BattleFrameView = createFrameFixture(),
+): TestEngine {
+  let frame = initialFrame;
   let outcome: BattleEnginePort['outcome'] = null;
   return {
     updateCalls: 0,
@@ -83,6 +91,93 @@ function createEngine(): TestEngine {
       outcome = next;
     },
   };
+}
+
+function createMotion() {
+  const view = { ...createTrainMotionFixture() };
+  let frozen = false;
+  return {
+    view,
+    reset: vi.fn((_frame: BattleFrameView) => undefined),
+    update: vi.fn((
+      stepMs: number,
+      _frame: BattleFrameView,
+      _events: readonly BattleEvent[],
+    ) => {
+      if (frozen) return;
+      view.motionTimeMs += stepMs;
+      view.laneOffset += stepMs;
+    }),
+    setPresentationFrozen: vi.fn((next: boolean) => {
+      frozen = next;
+    }),
+    setReducedMotion: vi.fn((_reducedMotion: boolean) => undefined),
+    setQualityLevel: vi.fn(),
+  };
+}
+
+function createDeferred<T>(): {
+  readonly promise: Promise<T>;
+  readonly resolve: (value: T) => void;
+  readonly reject: (reason: unknown) => void;
+} {
+  let resolve = (_value: T): void => undefined;
+  let reject = (_reason: unknown): void => undefined;
+  const promise = new Promise<T>((nextResolve, nextReject) => {
+    resolve = nextResolve;
+    reject = nextReject;
+  });
+  return { promise, resolve, reject };
+}
+
+async function flushMicrotasks(): Promise<void> {
+  await Promise.resolve();
+  await Promise.resolve();
+  await Promise.resolve();
+  await Promise.resolve();
+}
+
+function mountReviveScene(
+  onRequestRevive: BattleSceneCallbacks['onRequestRevive'],
+) {
+  const scheduler = new ManualFrameScheduler();
+  const engine = createEngine(createFrameFixture({ status: 'defeat' }));
+  const motion = createMotion();
+  const hudCallbackRef: { current?: BattleHudCallbacks } = {};
+  const { host } = createHost();
+  const scene = new BattleScene({
+    engine,
+    effects: {
+      view: EMPTY_EFFECT_FRAME_VIEW,
+      consume: vi.fn(),
+      update: vi.fn(),
+      reset: vi.fn(),
+    },
+    assets: { failedIds: [], get: () => null },
+    callbacks: {
+      ...createCallbacks(),
+      onRequestRevive,
+    },
+    createRenderer: () => ({ render: vi.fn() }),
+    createHud: (callbacks) => {
+      hudCallbackRef.current = callbacks;
+      return {
+        mount: vi.fn(),
+        update: vi.fn(),
+        dispose: vi.fn(),
+      };
+    },
+    motion,
+    scheduler,
+    captainArtId: 'captainFemaleBase',
+    reducedMotion: false,
+    eventTarget: new EventTarget(),
+    getDevicePixelRatio: () => 1,
+  });
+  scene.mount(host);
+  const hudCallbacks = hudCallbackRef.current;
+  if (!hudCallbacks) throw new Error('HUD callbacks were not created');
+  return { engine, host, hudCallbacks, motion, scene, scheduler };
 }
 
 function createCallbacks(): BattleSceneCallbacks {
@@ -162,6 +257,9 @@ describe('BattleScene', () => {
   it('owns one frame loop and consumes each event batch once', () => {
     const scheduler = new ManualFrameScheduler();
     const engine = createEngine();
+    const originalUpdate = engine.update.bind(engine);
+    const engineUpdate = vi.fn((stepMs: number) => originalUpdate(stepMs));
+    engine.update = engineUpdate;
     engine.events.push({
       type: 'weapon-fired',
       projectileId: 3,
@@ -174,6 +272,7 @@ describe('BattleScene', () => {
       reset: vi.fn(),
     };
     const renderer = { render: vi.fn() };
+    const motion = createMotion();
     const hud = {
       mount: vi.fn(),
       update: vi.fn(),
@@ -195,24 +294,63 @@ describe('BattleScene', () => {
       createRenderer: () => renderer,
       createHud: () => hud,
       sound,
+      motion,
       scheduler,
       captainArtId: 'captainFemaleBase',
-      reducedMotion: true,
+      reducedMotion: false,
       eventTarget: new EventTarget(),
       getDevicePixelRatio: () => 2,
     });
 
     scene.mount(host);
+    expect(motion.reset).toHaveBeenCalledWith(engine.frame);
+    expect(motion.update).not.toHaveBeenCalled();
+    expect(renderer.render).toHaveBeenLastCalledWith(
+      expect.objectContaining({ trainMotion: motion.view }),
+    );
     expect(scheduler.activeCount).toBe(1);
     scheduler.fire(0);
     scheduler.fire(17);
 
     expect(engine.updateCalls).toBe(1);
+    expect(motion.update).toHaveBeenCalledWith(
+      expect.any(Number),
+      engine.frame,
+      expect.any(Array),
+    );
+    const motionEvents = motion.update.mock.calls[0]?.[2];
+    expect(effects.consume).toHaveBeenCalledWith(motionEvents, engine.frame);
+    expect(engineUpdate.mock.invocationCallOrder[0]).toBeLessThan(
+      motion.update.mock.invocationCallOrder[0] ?? Number.MAX_SAFE_INTEGER,
+    );
+    expect(motion.update.mock.invocationCallOrder[0]).toBeLessThan(
+      effects.consume.mock.invocationCallOrder[0] ?? Number.MAX_SAFE_INTEGER,
+    );
+    expect(motion.update.mock.invocationCallOrder[0]).toBeLessThan(
+      effects.update.mock.invocationCallOrder[0] ?? Number.MAX_SAFE_INTEGER,
+    );
     expect(effects.consume).toHaveBeenCalledTimes(1);
     expect(sound.consume).toHaveBeenCalledTimes(1);
     expect(renderer.render).toHaveBeenCalled();
     expect(hud.update).toHaveBeenCalled();
     expect(scheduler.activeCount).toBe(1);
+
+    scene.setReducedMotion(true);
+    expect(motion.setReducedMotion).toHaveBeenCalledWith(true);
+    const snapshot = scene.snapshotTrainMotion();
+    expect(snapshot).toEqual(motion.view);
+    expect(snapshot).not.toBe(motion.view);
+
+    const updatesBeforePause = motion.update.mock.calls.length;
+    const laneOffsetBeforePause = motion.view.laneOffset;
+    scene.pauseForVisibility();
+    expect(motion.update).toHaveBeenCalledTimes(updatesBeforePause);
+    expect(motion.update).not.toHaveBeenCalledWith(
+      1000,
+      expect.anything(),
+      expect.anything(),
+    );
+    expect(motion.view.laneOffset).toBe(laneOffsetBeforePause);
 
     scene.unmount();
     scene.unmount();
@@ -423,6 +561,7 @@ describe('BattleScene', () => {
       setRenderBudget: vi.fn(),
     };
     const renderer = { render: vi.fn() };
+    const motion = createMotion();
     const { host } = createHost();
     const scene = new BattleScene({
       engine,
@@ -438,6 +577,7 @@ describe('BattleScene', () => {
         update: vi.fn(),
         dispose: vi.fn(),
       }),
+      motion,
       scheduler,
       captainArtId: 'captainFemaleBase',
       reducedMotion: true,
@@ -459,6 +599,7 @@ describe('BattleScene', () => {
     expect(effects.setRenderBudget).toHaveBeenLastCalledWith(
       expect.objectContaining({ particles: 130, dprCap: 1.75 }),
     );
+    expect(motion.setQualityLevel).toHaveBeenCalledWith('medium');
     expect(renderer.render).toHaveBeenLastCalledWith(
       expect.objectContaining({
         renderBudget: expect.objectContaining({ dprCap: 1.75 }),
@@ -467,5 +608,101 @@ describe('BattleScene', () => {
     );
     expect(engine.frame.status).toBe('running');
     scene.unmount();
+  });
+
+  it.each([
+    ['accepted', { accepted: true, hpRestored: 40 }],
+    ['rejected', { accepted: false, hpRestored: 0 }],
+  ] as const)(
+    'freezes presentation only while a revive request is %s',
+    async (_label, result) => {
+      const deferred = createDeferred<{
+        readonly accepted: boolean;
+        readonly hpRestored: number;
+      }>();
+      const harness = mountReviveScene(() => deferred.promise);
+      const before = { ...harness.motion.view };
+
+      expect(harness.motion.setPresentationFrozen).not.toHaveBeenCalled();
+      harness.hudCallbacks.onRequestRevive();
+      expect(harness.motion.setPresentationFrozen).toHaveBeenCalledTimes(1);
+      expect(harness.motion.setPresentationFrozen).toHaveBeenLastCalledWith(true);
+
+      harness.scheduler.fire(0);
+      harness.scheduler.fire(17);
+      expect(harness.motion.update).toHaveBeenCalled();
+      expect(harness.motion.view.motionTimeMs).toBe(before.motionTimeMs);
+      expect(harness.motion.view.laneOffset).toBe(before.laneOffset);
+
+      deferred.resolve(result);
+      await flushMicrotasks();
+
+      expect(harness.motion.setPresentationFrozen.mock.calls).toEqual([
+        [true],
+        [false],
+      ]);
+      harness.scene.unmount();
+    },
+  );
+
+  it('unfreezes presentation when the revive callback throws', async () => {
+    const harness = mountReviveScene(async () => {
+      throw new Error('platform callback failed');
+    });
+
+    harness.hudCallbacks.onRequestRevive();
+    await flushMicrotasks();
+
+    expect(harness.motion.setPresentationFrozen.mock.calls).toEqual([
+      [true],
+      [false],
+    ]);
+    harness.scene.unmount();
+  });
+
+  it('unfreezes an unresolved revive request during teardown', async () => {
+    const deferred = createDeferred<{
+      readonly accepted: boolean;
+      readonly hpRestored: number;
+    }>();
+    const harness = mountReviveScene(() => deferred.promise);
+
+    harness.hudCallbacks.onRequestRevive();
+    expect(harness.motion.setPresentationFrozen).toHaveBeenLastCalledWith(true);
+    harness.scene.unmount();
+    expect(harness.motion.setPresentationFrozen.mock.calls).toEqual([
+      [true],
+      [false],
+    ]);
+
+    deferred.resolve({ accepted: true, hpRestored: 40 });
+    await flushMicrotasks();
+    expect(harness.motion.setPresentationFrozen.mock.calls).toEqual([
+      [true],
+      [false],
+    ]);
+  });
+
+  it('ignores an old revive result after teardown and remount', async () => {
+    const deferred = createDeferred<{
+      readonly accepted: boolean;
+      readonly hpRestored: number;
+    }>();
+    const harness = mountReviveScene(() => deferred.promise);
+    const revive = vi.fn(() => true);
+    harness.engine.revive = revive;
+
+    harness.hudCallbacks.onRequestRevive();
+    harness.scene.unmount();
+    harness.scene.mount(harness.host);
+    deferred.resolve({ accepted: true, hpRestored: 40 });
+    await flushMicrotasks();
+
+    expect(revive).not.toHaveBeenCalled();
+    expect(harness.motion.setPresentationFrozen.mock.calls).toEqual([
+      [true],
+      [false],
+    ]);
+    harness.scene.unmount();
   });
 });

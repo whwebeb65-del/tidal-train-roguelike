@@ -49,6 +49,11 @@ import type {
   BattleEntityPoolStats,
 } from '../battle/BattleEngine';
 import type { EffectPoolStats } from '../battle/EffectSystem';
+import { TrainMotionController } from '../battle/TrainMotionController';
+import type {
+  TrainMotionControllerPort,
+  TrainMotionFrameView,
+} from '../battle/TrainMotionTypes';
 import type { GameScene } from './Scene';
 
 export interface FrameScheduler {
@@ -125,6 +130,7 @@ export interface BattleSceneDependencies {
   readonly createHud: (callbacks: BattleHudCallbacks) => BattleHudPort;
   readonly captainArtId: BattleArtId;
   readonly reducedMotion: boolean;
+  readonly motion?: TrainMotionControllerPort;
   readonly qualityPreference?: QualityPreference;
   readonly diagnostics?: BattleDiagnostics;
   readonly manualStepMode?: boolean;
@@ -189,7 +195,9 @@ export class BattleScene implements GameScene {
   private interactionNotice = '';
   private reducedMotion: boolean;
   private readonly qualityMonitor: QualityMonitor;
+  private readonly motion: TrainMotionControllerPort;
   private renderBudget: RenderBudget;
+  private revivePresentationFreezeVersion: number | null = null;
 
   private readonly frameCallback: FrameRequestCallback = (timeMs): void => {
     if (!this.host || !this.loop) return;
@@ -223,6 +231,10 @@ export class BattleScene implements GameScene {
     this.qualityMonitor = new QualityMonitor(
       dependencies.qualityPreference ?? 'auto',
     );
+    this.motion = dependencies.motion ?? new TrainMotionController(
+      this.reducedMotion,
+      this.qualityMonitor.level,
+    );
     this.renderBudget = getRenderBudget(this.qualityMonitor.level);
     dependencies.effects.setRenderBudget?.(this.renderBudget);
     dependencies.diagnostics?.setQualityLevel(this.qualityMonitor.level);
@@ -255,6 +267,7 @@ export class BattleScene implements GameScene {
     this.visibilityPaused = false;
     this.frameLoopPaused = false;
     this.exitRequested = false;
+    this.motion.reset(this.dependencies.engine.frame);
     host.innerHTML = `<section class="game-scene game-scene--battle">
       <div class="battle-canvas-host">
         <canvas data-battle-canvas aria-label="潮汐列车战斗"></canvas>
@@ -307,6 +320,7 @@ export class BattleScene implements GameScene {
 
   public setReducedMotion(reducedMotion: boolean): void {
     this.reducedMotion = reducedMotion;
+    this.motion.setReducedMotion(reducedMotion);
     this.dependencies.effects.setReducedMotion?.(reducedMotion);
   }
 
@@ -388,9 +402,32 @@ export class BattleScene implements GameScene {
     this.renderBattle();
   }
 
+  public snapshotTrainMotion(): TrainMotionFrameView {
+    const view = this.motion.view;
+    return {
+      phase: view.phase,
+      motionTimeMs: view.motionTimeMs,
+      speed: view.speed,
+      offsetX: view.offsetX,
+      offsetY: view.offsetY,
+      rotation: view.rotation,
+      scale: view.scale,
+      cannonRecoil: view.cannonRecoil,
+      surge: view.surge,
+      damagePulse: view.damagePulse,
+      laneOffset: view.laneOffset,
+      wakeStrength: view.wakeStrength,
+      engineGlow: view.engineGlow,
+      windowGlowPhase: view.windowGlowPhase,
+      lowPowerPulse: view.lowPowerPulse,
+      detailAlpha: view.detailAlpha,
+    };
+  }
+
   public unmount(): void {
     if (!this.host) return;
     this.lifecycleVersion += 1;
+    this.releaseRevivePresentationFreeze();
     this.stopAnimationLoop();
     if (this.upgradeTimerId !== null) {
       this.timerScheduler.clear(this.upgradeTimerId);
@@ -429,6 +466,7 @@ export class BattleScene implements GameScene {
     }
     this.dependencies.engine.update(stepMs);
     const events = this.dependencies.engine.drainEvents();
+    this.motion.update(stepMs, this.dependencies.engine.frame, events);
     if (events.length > 0) {
       this.dependencies.effects.consume(
         events,
@@ -475,6 +513,7 @@ export class BattleScene implements GameScene {
       timeMs: this.lastFrameTimeMs,
       reducedMotion: this.reducedMotion,
       renderBudget: this.renderBudget,
+      trainMotion: this.motion.view,
     });
     this.hud.update(createBattleHudModel(
       this.dependencies.engine.frame,
@@ -531,6 +570,7 @@ export class BattleScene implements GameScene {
   }
 
   private applyRenderBudget(level: QualityLevel): void {
+    this.motion.setQualityLevel(level);
     const next = getRenderBudget(level);
     if (next === this.renderBudget) return;
     this.renderBudget = next;
@@ -721,9 +761,13 @@ export class BattleScene implements GameScene {
       onRequestRevive: () => {
         void this.runPending('revive', async () => {
           if (this.dependencies.engine.frame.status !== 'defeat') return;
-          const result = await this.dependencies.callbacks.onRequestRevive();
+          const version = this.lifecycleVersion;
+          const result = await this.requestReviveWithFrozenPresentation(
+            version,
+          );
           if (
-            !this.host
+            version !== this.lifecycleVersion
+            || !this.host
             || !result.accepted
             || result.hpRestored <= 0
           ) {
@@ -763,6 +807,32 @@ export class BattleScene implements GameScene {
         this.dependencies.callbacks.onExit();
       },
     };
+  }
+
+  private async requestReviveWithFrozenPresentation(
+    version: number,
+  ): ReturnType<BattleSceneCallbacks['onRequestRevive']> {
+    this.revivePresentationFreezeVersion = version;
+    this.motion.setPresentationFrozen(true);
+    try {
+      return await this.dependencies.callbacks.onRequestRevive();
+    } finally {
+      this.releaseRevivePresentationFreeze(version);
+    }
+  }
+
+  private releaseRevivePresentationFreeze(version?: number): void {
+    if (
+      this.revivePresentationFreezeVersion === null
+      || (
+        version !== undefined
+        && this.revivePresentationFreezeVersion !== version
+      )
+    ) {
+      return;
+    }
+    this.revivePresentationFreezeVersion = null;
+    this.motion.setPresentationFrozen(false);
   }
 
   private async runPending(

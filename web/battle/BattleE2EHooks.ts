@@ -6,10 +6,12 @@ import type {
 import type {
   BattleDiagnosticsSnapshot,
 } from './BattleDiagnostics';
+import type { TrainMotionFrameView } from './TrainMotionTypes';
 
 export interface BattleE2ESnapshot {
   readonly sceneId: SceneId;
   readonly battle: BattleFrameView | null;
+  readonly trainMotion: TrainMotionFrameView | null;
   readonly diagnostics: BattleDiagnosticsSnapshot;
   readonly settlementCount: number;
 }
