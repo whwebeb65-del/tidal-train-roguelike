@@ -279,7 +279,7 @@ export class BattleEngine {
   }
 
   public debugDamageTrain(amount: number): void {
-    this.damageTrain(amount);
+    this.damageTrain(amount, 0);
   }
 
   public rerollUpgradeOffer(): boolean {
@@ -534,6 +534,7 @@ export class BattleEngine {
     while (this.phaseElapsedMs >= this.bossPressureAtMs) {
       this.damageTrain(
         this.input.maxTrainHp * 0.09 * this.input.enemyDamageMultiplier,
+        0,
       );
       if (this.status !== 'running') return;
       this.bossPressureAtMs += this.phaseElapsedMs >= 55_000
@@ -577,6 +578,7 @@ export class BattleEngine {
       this.pendingBossChargeAtMs = null;
       this.damageTrain(
         this.input.maxTrainHp * 0.18 * this.input.enemyDamageMultiplier,
+        0,
       );
       if (this.status !== 'running') return;
     }
@@ -601,6 +603,7 @@ export class BattleEngine {
       const definition = ENEMY_CONFIG[enemy.kind];
       this.damageTrain(
         definition.defenceDamage * this.input.enemyDamageMultiplier,
+        enemy.x < 195 ? 1 : enemy.x > 195 ? -1 : 0,
       );
       const attackIntervalMultiplier = (
         enemy.kind === 'storm-ray-elite' && this.eliteEnraged
@@ -960,7 +963,7 @@ export class BattleEngine {
     return this.enemies.some((enemy) => enemy.alive);
   }
 
-  private damageTrain(rawAmount: number): void {
+  private damageTrain(rawAmount: number, impactDirectionX: -1 | 0 | 1 = 0): void {
     if (this.reviveProtectionMs > 0 || this.isTerminal()) return;
     const damage = Math.max(0, Math.floor(rawAmount));
     const shieldAbsorbed = Math.min(this.shield, damage);
@@ -978,6 +981,7 @@ export class BattleEngine {
       amount: hpDamage,
       shieldAbsorbed,
       remainingHp: this.trainHp,
+      impactDirectionX,
     });
     if (this.trainHp <= 0) this.finish(false);
   }

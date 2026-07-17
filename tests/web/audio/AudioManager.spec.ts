@@ -24,6 +24,7 @@ describe('AudioManager', () => {
         amount: 0,
         shieldAbsorbed: 10,
         remainingHp: 100,
+        impactDirectionX: 0,
       },
       {
         type: 'enemy-killed',

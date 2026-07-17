@@ -65,4 +65,14 @@ describe('BattleEngine skills', () => {
     expect(engine.frame.status).toBe('defeat');
     expect(engine.revive(60, 3000)).toBe(false);
   });
+
+  it('emits visual impact direction without changing damage', () => {
+    const engine = new BattleEngine(input);
+    const hpBefore = engine.frame.trainHp;
+    engine.debugDamageTrain(7);
+    expect(engine.frame.trainHp).toBe(hpBefore - 7);
+    expect(engine.drainEvents()).toContainEqual(expect.objectContaining({
+      type: 'train-damaged', amount: 7, impactDirectionX: 0,
+    }));
+  });
 });

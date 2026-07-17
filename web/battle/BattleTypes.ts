@@ -187,6 +187,7 @@ export type BattleEvent =
       readonly amount: number;
       readonly shieldAbsorbed: number;
       readonly remainingHp: number;
+      readonly impactDirectionX: -1 | 0 | 1;
     }
   | { readonly type: 'shield-changed'; readonly shield: number }
   | { readonly type: 'skill-used'; readonly skillId: BattleSkillId }
