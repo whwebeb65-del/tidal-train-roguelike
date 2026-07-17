@@ -8,7 +8,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
-    "check:assets": "node scripts/check-asset-budget.mjs"
+    "check:assets": "node scripts/check-asset-budget.mjs",
+    "smoke:browser": "node scripts/smoke-browser.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.20.1",

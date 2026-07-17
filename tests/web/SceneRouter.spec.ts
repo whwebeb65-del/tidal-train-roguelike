@@ -27,7 +27,8 @@ describe('SceneRouter', () => {
         calls.push(`unmount:${id}`);
       },
     });
-    const router = new SceneRouter(createHost(), factory, {
+    const host = createHost();
+    const router = new SceneRouter(host, factory, {
       transitionMs: 0,
       reducedMotion: true,
     });
@@ -41,6 +42,7 @@ describe('SceneRouter', () => {
       'mount:captain',
     ]);
     expect(router.currentSceneId).toBe('captain');
+    expect(host.dataset.sceneId).toBe('captain');
   });
 
   it('does not let an older transition clear a newer entering state', async () => {

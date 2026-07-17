@@ -231,8 +231,13 @@ let storeViewTracked = false;
 let settlementDoubleClaimed = false;
 const battleAssetLoader = new BattleAssetLoader(BATTLE_ART_URLS);
 const diagnostics = new BattleDiagnostics();
-const e2eEnabled = new URLSearchParams(window.location.search)
-  .get('e2e') === '1';
+const runtimeSearchParams = new URLSearchParams(window.location.search);
+const e2eEnabled = runtimeSearchParams.get('e2e') === '1';
+const requestedE2ESeed = Number(runtimeSearchParams.get('e2eSeed'));
+const e2eSeed = Number.isSafeInteger(requestedE2ESeed)
+  && requestedE2ESeed > 0
+  ? requestedE2ESeed
+  : 17;
 const battleSettlementAdapter =
   new BattleSettlementAdapter<BattleSettlementPresentation | null>();
 let battleAssets: BattleAssetSet<BattleArtId> | null = null;
@@ -879,7 +884,9 @@ async function startRun(
     const dailyDefinition =
       mode === 'daily-trial' ? syncDailyTrialDay() : null;
     seed = dailyDefinition?.seed
-      ?? Math.floor(Math.random() * 1_000_000) + 1;
+      ?? (e2eEnabled
+        ? e2eSeed
+        : Math.floor(Math.random() * 1_000_000) + 1);
     runId = mode === 'daily-trial'
       ? `daily-${dailyDefinition?.dayId}-${Date.now()}`
       : `run-${Date.now()}`;

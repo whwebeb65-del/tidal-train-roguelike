@@ -41,6 +41,7 @@ export class SceneRouter {
 
     const next = this.factory(sceneId);
     this.current = next;
+    this.host.dataset.sceneId = sceneId;
     this.host.dataset.sceneDirection = direction;
     this.host.classList.add('scene-host--entering');
     await next.mount(this.host);
@@ -66,6 +67,8 @@ export class SceneRouter {
     this.transitionToken += 1;
     this.current?.unmount();
     this.current = null;
+    delete this.host.dataset.sceneId;
+    delete this.host.dataset.sceneDirection;
     this.host.replaceChildren();
   }
 }
