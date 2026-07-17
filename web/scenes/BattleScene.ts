@@ -42,6 +42,13 @@ import {
   type QualityLevel,
   type RenderBudget,
 } from '../battle/QualityMonitor';
+import {
+  type BattleDiagnostics,
+} from '../battle/BattleDiagnostics';
+import type {
+  BattleEntityPoolStats,
+} from '../battle/BattleEngine';
+import type { EffectPoolStats } from '../battle/EffectSystem';
 import type { GameScene } from './Scene';
 
 export interface FrameScheduler {
@@ -57,6 +64,7 @@ export interface TimerScheduler {
 export interface BattleEnginePort {
   readonly frame: BattleFrameView;
   readonly outcome: BattleOutcome | null;
+  readonly poolStats?: BattleEntityPoolStats;
   update(stepMs: number): void;
   drainEvents(): readonly BattleEvent[];
   useSkill(skillId: BattleSkillId): boolean;
@@ -73,6 +81,7 @@ export interface BattleEffectPort {
   consume(events: readonly BattleEvent[], frame: BattleFrameView): void;
   update(deltaMs: number): void;
   reset(): void;
+  readonly poolStats?: EffectPoolStats;
   setReducedMotion?(reducedMotion: boolean): void;
   setRenderBudget?(budget: RenderBudget): void;
 }
@@ -117,6 +126,8 @@ export interface BattleSceneDependencies {
   readonly captainArtId: BattleArtId;
   readonly reducedMotion: boolean;
   readonly qualityPreference?: QualityPreference;
+  readonly diagnostics?: BattleDiagnostics;
+  readonly manualStepMode?: boolean;
   readonly sound?: BattleSoundPort;
   readonly scheduler?: FrameScheduler;
   readonly timerScheduler?: TimerScheduler;
@@ -170,6 +181,9 @@ export class BattleScene implements GameScene {
   private visibilityPaused = false;
   private queuedSkillRefresh = false;
   private outcomeHandled = false;
+  private diagnosticsSettlementRecorded = false;
+  private diagnosticsFrameLoopActive = false;
+  private diagnosticsListenerActive = false;
   private exitRequested = false;
   private settlement: BattleSettlementPresentation | null = null;
   private interactionNotice = '';
@@ -211,6 +225,7 @@ export class BattleScene implements GameScene {
     );
     this.renderBudget = getRenderBudget(this.qualityMonitor.level);
     dependencies.effects.setRenderBudget?.(this.renderBudget);
+    dependencies.diagnostics?.setQualityLevel(this.qualityMonitor.level);
     this.sound = dependencies.sound ?? SILENT_BATTLE_SOUND;
     this.scheduler = dependencies.scheduler ?? BROWSER_FRAME_SCHEDULER;
     this.timerScheduler =
@@ -233,6 +248,7 @@ export class BattleScene implements GameScene {
       delete this.interactionClaims[actionId];
     }
     this.outcomeHandled = false;
+    this.diagnosticsSettlementRecorded = false;
     this.settlement = null;
     this.interactionNotice = '';
     this.queuedSkillRefresh = false;
@@ -268,6 +284,10 @@ export class BattleScene implements GameScene {
     this.hud.mount(hudHost);
     this.sound.setBattlePhase('battle');
     this.eventTarget?.addEventListener('resize', this.onResize);
+    if (this.eventTarget) {
+      this.dependencies.diagnostics?.listenerAdded();
+      this.diagnosticsListenerActive = true;
+    }
 
     this.loop = new FixedStepLoop({
       stepMs: FIXED_STEP_MS,
@@ -278,7 +298,11 @@ export class BattleScene implements GameScene {
     });
     this.refreshViewport();
     this.renderBattle();
-    this.startAnimationLoop();
+    if (this.dependencies.manualStepMode) {
+      this.frameLoopPaused = true;
+    } else {
+      this.startAnimationLoop();
+    }
   }
 
   public setReducedMotion(reducedMotion: boolean): void {
@@ -289,6 +313,7 @@ export class BattleScene implements GameScene {
   public setQualityPreference(preference: QualityPreference): void {
     const level = this.qualityMonitor.setPreference(preference);
     this.applyRenderBudget(level);
+    this.dependencies.diagnostics?.setQualityLevel(level);
     this.renderBattle();
   }
 
@@ -304,6 +329,65 @@ export class BattleScene implements GameScene {
     this.renderBattle();
   }
 
+  public advanceForE2E(durationMs: number): void {
+    if (!this.dependencies.manualStepMode) {
+      throw new Error('Direct battle advancement is only available in E2E');
+    }
+    if (
+      !Number.isFinite(durationMs)
+      || durationMs < 0
+      || durationMs > 300_000
+    ) {
+      throw new Error('E2E battle advancement must be within 0..300000 ms');
+    }
+    const steps = Math.floor(durationMs / FIXED_STEP_MS);
+    for (let index = 0; index < steps; index += 1) {
+      const status = this.dependencies.engine.frame.status;
+      if (status !== 'running' && status !== 'boss-intro') break;
+      this.updateBattle(FIXED_STEP_MS);
+      const nextStatus = this.dependencies.engine.frame.status;
+      if (
+        nextStatus === 'upgrade'
+        || nextStatus === 'victory'
+        || nextStatus === 'defeat'
+      ) {
+        break;
+      }
+    }
+    this.renderBattle();
+  }
+
+  public chooseFirstUpgradeForE2E(): boolean {
+    if (!this.dependencies.manualStepMode) return false;
+    const first = this.dependencies.engine.frame.offeredUpgradeIds[0];
+    if (!first) return false;
+    const accepted = this.dependencies.engine.chooseUpgrade(first);
+    this.renderBattle();
+    return accepted;
+  }
+
+  public useSkillForE2E(skillId: BattleSkillId): boolean {
+    if (!this.dependencies.manualStepMode) return false;
+    const accepted = this.dependencies.engine.useSkill(skillId);
+    this.renderBattle();
+    return accepted;
+  }
+
+  public requestPauseForE2E(): void {
+    if (!this.dependencies.manualStepMode) return;
+    this.dependencies.engine.pause('manual');
+    this.sound.pause();
+    this.renderBattle();
+  }
+
+  public async requestResumeForE2E(): Promise<void> {
+    if (!this.dependencies.manualStepMode) return;
+    await this.sound.resume();
+    if (!this.host) return;
+    this.dependencies.engine.resume();
+    this.renderBattle();
+  }
+
   public unmount(): void {
     if (!this.host) return;
     this.lifecycleVersion += 1;
@@ -313,6 +397,10 @@ export class BattleScene implements GameScene {
       this.upgradeTimerId = null;
     }
     this.eventTarget?.removeEventListener('resize', this.onResize);
+    if (this.diagnosticsListenerActive) {
+      this.dependencies.diagnostics?.listenerRemoved();
+      this.diagnosticsListenerActive = false;
+    }
     this.hud?.dispose();
     this.dependencies.effects.reset();
     this.sound.dispose();
@@ -330,6 +418,8 @@ export class BattleScene implements GameScene {
     this.queuedSkillRefresh = false;
     this.visibilityPaused = false;
     this.frameLoopPaused = false;
+    this.diagnosticsSettlementRecorded = false;
+    this.updateDiagnostics(true);
   }
 
   private updateBattle(stepMs: number): void {
@@ -364,6 +454,7 @@ export class BattleScene implements GameScene {
         if (outcome?.victory === true && !this.outcomeHandled) {
           this.outcomeHandled = true;
           this.settlement = this.dependencies.callbacks.onOutcome(outcome);
+          this.recordSettlement();
         }
       }
     }
@@ -401,10 +492,13 @@ export class BattleScene implements GameScene {
         visibilityResumeRequired: this.visibilityPaused,
       },
     ));
+    this.updateDiagnostics(false);
   }
 
   private startAnimationLoop(): void {
     if (
+      this.dependencies.manualStepMode
+      ||
       !this.host
       || !this.loop
       || this.frameRequestId !== null
@@ -416,6 +510,10 @@ export class BattleScene implements GameScene {
     this.lastFrameTimeMs = 0;
     this.lastQualityFrameTimeMs = null;
     this.frameRequestId = this.scheduler.request(this.frameCallback);
+    if (!this.diagnosticsFrameLoopActive) {
+      this.dependencies.diagnostics?.frameLoopStarted();
+      this.diagnosticsFrameLoopActive = true;
+    }
   }
 
   private stopAnimationLoop(): void {
@@ -426,6 +524,10 @@ export class BattleScene implements GameScene {
     }
     this.loop?.stop();
     this.lastQualityFrameTimeMs = null;
+    if (this.diagnosticsFrameLoopActive) {
+      this.dependencies.diagnostics?.frameLoopStopped();
+      this.diagnosticsFrameLoopActive = false;
+    }
   }
 
   private applyRenderBudget(level: QualityLevel): void {
@@ -433,7 +535,48 @@ export class BattleScene implements GameScene {
     if (next === this.renderBudget) return;
     this.renderBudget = next;
     this.dependencies.effects.setRenderBudget?.(next);
+    this.dependencies.diagnostics?.setQualityLevel(level);
     this.viewport = null;
+  }
+
+  private recordSettlement(): void {
+    if (this.diagnosticsSettlementRecorded) return;
+    this.diagnosticsSettlementRecorded = true;
+    this.dependencies.diagnostics?.battleSettled();
+  }
+
+  private updateDiagnostics(cleared: boolean): void {
+    const diagnostics = this.dependencies.diagnostics;
+    if (!diagnostics) return;
+    if (cleared) {
+      diagnostics.updateEntities({
+        enemies: 0,
+        projectiles: 0,
+        loot: 0,
+        effects: 0,
+        pooledInUse: 0,
+      });
+      return;
+    }
+    const frame = this.dependencies.engine.frame;
+    const effectView = this.dependencies.effects.view;
+    const enginePools = this.dependencies.engine.poolStats;
+    const effectPools = this.dependencies.effects.poolStats;
+    diagnostics.updateEntities({
+      enemies: frame.enemies.filter((enemy) => enemy.alive).length,
+      projectiles: frame.projectiles.length,
+      loot: frame.loot.length,
+      effects:
+        effectView.particles.length
+        + effectView.damageNumbers.length
+        + effectView.rings.length,
+      pooledInUse:
+        (enginePools?.projectiles.inUse ?? 0)
+        + (enginePools?.loot.inUse ?? 0)
+        + (effectPools?.particles.inUse ?? 0)
+        + (effectPools?.damageNumbers.inUse ?? 0)
+        + (effectPools?.rings.inUse ?? 0),
+    });
   }
 
   private refreshViewport(): void {
@@ -612,6 +755,7 @@ export class BattleScene implements GameScene {
           return;
         }
         this.settlement = this.dependencies.callbacks.onGiveUp(outcome);
+        this.recordSettlement();
       },
       onReturnStation: () => {
         if (this.exitRequested) return;

@@ -140,12 +140,21 @@ import {
 } from './battle/AssetLoader';
 import { BATTLE_INTERACTIONS } from './battle/BattleInteractionSchedule';
 import { BattleEngine } from './battle/BattleEngine';
+import { BattleDiagnostics } from './battle/BattleDiagnostics';
+import type {
+  BattleE2EController,
+  BattleE2ESnapshot,
+} from './battle/BattleE2EHooks';
 import { createBattleRunInput } from './battle/BattleRunInputFactory';
 import { CanvasPainter } from './battle/CanvasPainter';
 import { EffectSystem } from './battle/EffectSystem';
 import { BattleHUD } from './battle/BattleHUD';
 import { BattleRenderer } from './battle/BattleRenderer';
-import type { BattleOutcome } from './battle/BattleTypes';
+import type {
+  BattleFrameView,
+  BattleOutcome,
+  BattleSkillId,
+} from './battle/BattleTypes';
 import type { AudioManager } from './audio/AudioManager';
 import { renderLaunchCampaignView } from './views/LaunchCampaignView';
 import { renderSocialHubView } from './views/SocialHubView';
@@ -159,7 +168,7 @@ import type { FeatureSceneContext, SceneFactory } from './scenes/Scene';
 import { createStationScene } from './scenes/StationScene';
 import { createStoreScene } from './scenes/StoreScene';
 
-export interface LegacyGameRuntime {
+export interface LegacyGameRuntime extends BattleE2EController {
   start(): Promise<void>;
   applySettings(
     settings: GameSettings,
@@ -167,6 +176,7 @@ export interface LegacyGameRuntime {
   ): void;
   handlePageHidden(): void;
   handlePageVisible(): void;
+  captureUncaughtError(error: unknown): void;
   destroy(): void;
 }
 
@@ -220,6 +230,9 @@ let pendingProductId: string | null = null;
 let storeViewTracked = false;
 let settlementDoubleClaimed = false;
 const battleAssetLoader = new BattleAssetLoader(BATTLE_ART_URLS);
+const diagnostics = new BattleDiagnostics();
+const e2eEnabled = new URLSearchParams(window.location.search)
+  .get('e2e') === '1';
 const battleSettlementAdapter =
   new BattleSettlementAdapter<BattleSettlementPresentation | null>();
 let battleAssets: BattleAssetSet<BattleArtId> | null = null;
@@ -287,6 +300,8 @@ const sceneFactory: SceneFactory = (sceneId) => {
     captainArtId: getActiveCaptainArtId(),
     reducedMotion: effectiveReducedMotion,
     qualityPreference,
+    diagnostics,
+    manualStepMode: e2eEnabled,
     sound: audio,
   });
   activeBattleScene = scene;
@@ -313,6 +328,7 @@ let pageHidden = false;
 
 function stationAudioFrame(nowMs: number): void {
   stationAudioFrameId = null;
+  diagnostics.audioSchedulerStopped();
   if (!started || router.currentSceneId === 'battle') return;
   audio.update(nowMs);
   startStationAudioLoop();
@@ -328,12 +344,14 @@ function startStationAudioLoop(): void {
     return;
   }
   stationAudioFrameId = window.requestAnimationFrame(stationAudioFrame);
+  diagnostics.audioSchedulerStarted();
 }
 
 function stopStationAudioLoop(): void {
   if (stationAudioFrameId === null) return;
   window.cancelAnimationFrame(stationAudioFrameId);
   stationAudioFrameId = null;
+  diagnostics.audioSchedulerStopped();
 }
 
 async function loadCriticalBattleAssets(
@@ -827,6 +845,7 @@ function render(): void {
     .then(() => syncView())
     .catch((error: unknown) => {
       console.error(error);
+      diagnostics.captureUncaughtError(error);
       shell.setNotice('界面刷新失败，请重试或清空本地存档。');
     });
 }
@@ -1817,6 +1836,42 @@ const onKeyDown = (event: KeyboardEvent): void => {
   shell.closeSettings();
 };
 
+function e2eSnapshot(): BattleE2ESnapshot {
+  const sceneId = router.currentSceneId
+    ?? (phase === 'combat' ? 'battle' : hubView);
+  const snapshot = diagnostics.snapshot();
+  return {
+    sceneId,
+    battle: activeBattleEngine
+      ? cloneBattleFrame(activeBattleEngine.frame)
+      : null,
+    diagnostics: snapshot,
+    settlementCount: snapshot.settledBattleCount,
+  };
+}
+
+async function e2eNavigate(sceneId: HubView): Promise<void> {
+  if (!e2eEnabled) return;
+  if (phase === 'combat') {
+    phase = 'station';
+    activeBattleEngine = null;
+    activeBattleProgression = null;
+    activeBattleSettlement = null;
+    activeBattleScene = null;
+  }
+  hubView = sceneId;
+  render();
+  await renderQueue;
+}
+
+async function e2eStartBattle(
+  mode: 'normal' | 'daily-trial',
+): Promise<void> {
+  if (!e2eEnabled) return;
+  await startRun(mode);
+  await renderQueue;
+}
+
 return {
   async start(): Promise<void> {
     if (started) return;
@@ -1835,6 +1890,39 @@ return {
   },
   handlePageHidden,
   handlePageVisible,
+  captureUncaughtError(error: unknown): void {
+    diagnostics.captureUncaughtError(error);
+  },
+  e2eSnapshot,
+  async e2eNavigate(sceneId: HubView): Promise<void> {
+    await e2eNavigate(sceneId);
+  },
+  async e2eStartNormalBattle(): Promise<void> {
+    await e2eStartBattle('normal');
+  },
+  async e2eStartDailyTrial(): Promise<void> {
+    await e2eStartBattle('daily-trial');
+  },
+  e2eAdvanceBattle(durationMs: number): void {
+    activeBattleScene?.advanceForE2E(durationMs);
+  },
+  e2eChooseFirstUpgrade(): boolean {
+    return activeBattleScene?.chooseFirstUpgradeForE2E() ?? false;
+  },
+  e2eUseSkill(skillId: BattleSkillId): boolean {
+    return activeBattleScene?.useSkillForE2E(skillId) ?? false;
+  },
+  e2eRequestPause(): void {
+    activeBattleScene?.requestPauseForE2E();
+  },
+  async e2eRequestResume(): Promise<void> {
+    await activeBattleScene?.requestResumeForE2E();
+  },
+  async e2eReturnToStation(): Promise<void> {
+    if (!e2eEnabled) return;
+    exitBattle();
+    await renderQueue;
+  },
   destroy(): void {
     if (!started) return;
     started = false;
@@ -1852,4 +1940,16 @@ return {
     app.replaceChildren();
   },
 };
+}
+
+function cloneBattleFrame(frame: BattleFrameView): BattleFrameView {
+  return {
+    ...frame,
+    offeredUpgradeIds: [...frame.offeredUpgradeIds],
+    upgradeLevels: { ...frame.upgradeLevels },
+    cooldowns: { ...frame.cooldowns },
+    enemies: frame.enemies.map((enemy) => ({ ...enemy })),
+    projectiles: frame.projectiles.map((projectile) => ({ ...projectile })),
+    loot: frame.loot.map((loot) => ({ ...loot })),
+  };
 }

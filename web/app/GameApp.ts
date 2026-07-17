@@ -13,6 +13,10 @@ import {
 import {
   PageLifecycleController,
 } from './PageLifecycleController';
+import {
+  installBattleE2EHooks,
+  removeBattleE2EHooks,
+} from '../battle/BattleE2EHooks';
 
 export function appSceneForAction(action: string): SceneId | null {
   if (action === 'start-run' || action === 'start-daily-trial') {
@@ -41,6 +45,14 @@ export class GameApp {
       this.settings,
       this.effectiveReducedMotion(),
     );
+  };
+  private readonly onWindowError = (event: ErrorEvent): void => {
+    this.runtime?.captureUncaughtError(event.error ?? event.message);
+  };
+  private readonly onUnhandledRejection = (
+    event: PromiseRejectionEvent,
+  ): void => {
+    this.runtime?.captureUncaughtError(event.reason);
   };
 
   private constructor(
@@ -81,8 +93,14 @@ export class GameApp {
       onHidden: () => this.runtime?.handlePageHidden(),
       onVisible: () => this.runtime?.handlePageVisible(),
     });
+    window.addEventListener('error', this.onWindowError);
+    window.addEventListener(
+      'unhandledrejection',
+      this.onUnhandledRejection,
+    );
     this.lifecycle.start();
     await this.runtime.start();
+    installBattleE2EHooks(window, this.runtime);
   }
 
   public updateSettings(
@@ -103,6 +121,12 @@ export class GameApp {
   }
 
   public destroy(): void {
+    removeBattleE2EHooks(window);
+    window.removeEventListener('error', this.onWindowError);
+    window.removeEventListener(
+      'unhandledrejection',
+      this.onUnhandledRejection,
+    );
     this.motionQuery?.removeEventListener(
       'change',
       this.onMotionPreferenceChange,
