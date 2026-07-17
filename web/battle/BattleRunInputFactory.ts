@@ -16,7 +16,7 @@ const MAP_DIFFICULTY: Readonly<Record<MapId, {
   readonly hp: number;
   readonly damage: number;
 }>> = {
-  'drift-suburb': { hp: 1, damage: 1 },
+  'drift-suburb': { hp: 0.85, damage: 0.72 },
   'old-port': { hp: 1.12, damage: 1.08 },
   'glass-city': { hp: 1.28, damage: 1.16 },
   'deep-tunnel': { hp: 1.48, damage: 1.25 },

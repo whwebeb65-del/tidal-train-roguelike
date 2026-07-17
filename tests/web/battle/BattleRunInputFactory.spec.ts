@@ -7,6 +7,39 @@ import {
 import { createBattleRunInput } from '../../../web/battle/BattleRunInputFactory';
 
 describe('createBattleRunInput', () => {
+  it('uses a forgiving difficulty ramp on the first route', () => {
+    const zeroModifiers = {
+      maxHpFlat: 0,
+      maxHpPercent: 0,
+      damageFlat: 0,
+      damagePercent: 0,
+      gearsPercent: 0,
+      initialMomentum: 0,
+      repairFlat: 0,
+    };
+    const result = createBattleRunInput({
+      battleId: 'first-route',
+      seed: 17,
+      mode: 'normal',
+      mapId: 'drift-suburb',
+      progression: {
+        maxPlayerHp: 100,
+        damageFlat: 0,
+        damageMultiplier: 1,
+        gearsMultiplier: 1,
+        initialMomentum: 0,
+        repairBonus: 0,
+        skinModifiers: zeroModifiers,
+        equipmentModifiers: zeroModifiers,
+      },
+      social: createSocialExpeditionState('2026-W29'),
+      dailyTrial: null,
+    });
+
+    expect(result.enemyHpMultiplier).toBe(0.85);
+    expect(result.enemyDamageMultiplier).toBe(0.72);
+  });
+
   it('combines progression, squad, map and daily rule once', () => {
     let social = joinLegion(
       createSocialExpeditionState('2026-W29'),
