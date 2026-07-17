@@ -16,6 +16,8 @@ export interface RenderBudget {
   readonly particles: number;
   readonly damageNumbers: number;
   readonly impactRings: number;
+  readonly travelMarkers: number;
+  readonly trainWakeSegments: number;
   readonly dprCap: number;
 }
 
@@ -28,6 +30,8 @@ export const RENDER_BUDGETS: Readonly<
     particles: 200,
     damageNumbers: 18,
     impactRings: 24,
+    travelMarkers: 15,
+    trainWakeSegments: 6,
     dprCap: 2,
   },
   medium: {
@@ -36,6 +40,8 @@ export const RENDER_BUDGETS: Readonly<
     particles: 130,
     damageNumbers: 12,
     impactRings: 16,
+    travelMarkers: 9,
+    trainWakeSegments: 4,
     dprCap: 1.75,
   },
   low: {
@@ -44,6 +50,8 @@ export const RENDER_BUDGETS: Readonly<
     particles: 80,
     damageNumbers: 8,
     impactRings: 10,
+    travelMarkers: 3,
+    trainWakeSegments: 2,
     dprCap: 1.5,
   },
 };

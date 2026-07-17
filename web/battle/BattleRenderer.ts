@@ -20,6 +20,7 @@ import type {
   EnemyState,
 } from './BattleTypes';
 import type { RenderBudget } from './QualityMonitor';
+import type { TrainMotionFrameView } from './TrainMotionTypes';
 
 export interface BattleRenderInput {
   readonly frame: BattleFrameView;
@@ -30,7 +31,30 @@ export interface BattleRenderInput {
   readonly reducedMotion: boolean;
   readonly effects: EffectFrameView;
   readonly renderBudget: RenderBudget;
+  readonly trainMotion?: TrainMotionFrameView;
 }
+
+const TRAIN_PIVOT_X = 195;
+const TRAIN_PIVOT_Y = 842;
+
+const NEUTRAL_TRAIN_MOTION: TrainMotionFrameView = Object.freeze({
+  phase: 'cruise',
+  motionTimeMs: 0,
+  speed: 1,
+  offsetX: 0,
+  offsetY: 0,
+  rotation: 0,
+  scale: 1,
+  cannonRecoil: 0,
+  surge: 0,
+  damagePulse: 0,
+  laneOffset: 0,
+  wakeStrength: 1,
+  engineGlow: 0.73,
+  windowGlowPhase: 0,
+  lowPowerPulse: 0,
+  detailAlpha: 1,
+});
 
 const ENEMY_ART: Readonly<Record<EnemyKind, BattleArtId>> = {
   'bubble-fin': 'bubbleFin',
@@ -58,6 +82,7 @@ export class BattleRenderer {
   public constructor(private readonly painter: BattlePainter) {}
 
   public render(input: BattleRenderInput): void {
+    const trainMotion = input.trainMotion ?? NEUTRAL_TRAIN_MOTION;
     const camera: CameraPose = {
       x: input.effects.camera.x,
       y: input.effects.camera.y,
@@ -69,14 +94,14 @@ export class BattleRenderer {
       this.painter.clear('#8edbe7');
       this.drawBackground(input);
       this.drawBackgroundParticles(input);
-      this.drawWaterLanes(input);
+      this.drawWaterLanes(input, trainMotion);
       this.drawLoot(input);
       this.drawEnemies(input);
       this.drawEffectParticles(input, 'enemies');
       this.drawProjectiles(input);
-      this.drawTrain(input);
-      this.drawCrew(input);
-      this.drawFrontEffects(input);
+      this.drawTrain(input, trainMotion);
+      this.drawCrew(input, trainMotion);
+      this.drawFrontEffects(input, trainMotion);
       this.drawEffectParticles(input, 'front-effects');
       this.drawImpactRings(input);
       this.drawDamageNumbers(input);
@@ -129,10 +154,10 @@ export class BattleRenderer {
     });
   }
 
-  private drawWaterLanes(input: BattleRenderInput): void {
-    const pulse = input.reducedMotion
-      ? 0
-      : Math.sin(input.timeMs / 720) * 2;
+  private drawWaterLanes(
+    input: BattleRenderInput,
+    motion: TrainMotionFrameView,
+  ): void {
     for (let lane = 0; lane < 3; lane += 1) {
       const bottomX = [92, 195, 298][lane] ?? 195;
       const topX = [154, 195, 236][lane] ?? 195;
@@ -141,11 +166,89 @@ export class BattleRenderer {
         layer: 'water-lanes',
         points: [
           { x: topX, y: 96 },
-          { x: (topX + bottomX) / 2 + pulse, y: 390 },
+          { x: (topX + bottomX) / 2, y: 390 },
           { x: bottomX, y: 704 },
         ],
         stroke: 'rgba(229, 255, 255, 0.34)',
         lineWidth: lane === 1 ? 19 : 14,
+        curve: true,
+      });
+    }
+    this.drawTravelMarkers(input, motion);
+    this.drawTrainWake(input, motion);
+  }
+
+  private drawTravelMarkers(
+    input: BattleRenderInput,
+    motion: TrainMotionFrameView,
+  ): void {
+    const count = input.renderBudget.travelMarkers;
+    const markersPerLane = Math.max(1, Math.ceil(count / 3));
+    for (let index = 0; index < count; index += 1) {
+      const lane = index % 3;
+      const laneIndex = Math.floor(index / 3);
+      const progress = wrapUnit(
+        motion.laneOffset / 610 + laneIndex / markersPerLane,
+      );
+      const topX = [154, 195, 236][lane] ?? 195;
+      const bottomX = [92, 195, 298][lane] ?? 195;
+      const x = topX + (bottomX - topX) * progress;
+      const y = 106 + progress * 598;
+      const width = 7 + progress * 22;
+      this.painter.line({
+        kind: 'travel-marker',
+        layer: 'water-lanes',
+        points: [
+          { x: x - width / 2, y },
+          { x: x + width / 2, y },
+        ],
+        stroke: 'rgba(229, 255, 255, 0.9)',
+        lineWidth: 1.2 + progress * 2.8,
+        alpha: (0.2 + progress * 0.6) * motion.detailAlpha,
+      });
+    }
+  }
+
+  private drawTrainWake(
+    input: BattleRenderInput,
+    motion: TrainMotionFrameView,
+  ): void {
+    const pairCount = Math.max(
+      1,
+      Math.ceil(input.renderBudget.trainWakeSegments / 2),
+    );
+    for (
+      let index = 0;
+      index < input.renderBudget.trainWakeSegments;
+      index += 1
+    ) {
+      const side = index % 2 === 0 ? -1 : 1;
+      const pair = Math.floor(index / 2);
+      const progress = (pair + 1) / (pairCount + 1);
+      const innerX = 195 + side * (72 + progress * 18);
+      const outerX = innerX + side * (24 + progress * 18);
+      const startY = 812 + progress * 22;
+      const endY = startY + 12 + progress * 14;
+      this.painter.line({
+        kind: 'train-wake',
+        layer: 'water-lanes',
+        points: [
+          {
+            x: posedX(innerX, startY, motion),
+            y: posedY(innerX, startY, motion),
+          },
+          {
+            x: posedX(outerX, endY, motion),
+            y: posedY(outerX, endY, motion),
+          },
+        ],
+        stroke: 'rgba(221, 255, 252, 0.88)',
+        lineWidth: 2.4 + progress * 2.6,
+        alpha: clamp01(
+          (0.3 + motion.wakeStrength * 0.38)
+            * (1 - progress * 0.28)
+            * motion.detailAlpha,
+        ),
         curve: true,
       });
     }
@@ -339,22 +442,45 @@ export class BattleRenderer {
     }
   }
 
-  private drawTrain(input: BattleRenderInput): void {
+  private drawTrain(
+    input: BattleRenderInput,
+    motion: TrainMotionFrameView,
+  ): void {
     const train = input.assets.get('train');
-    const target = [...input.frame.enemies]
-      .filter((enemy) => enemy.alive)
-      .sort((left, right) => right.y - left.y || left.id - right.id)[0];
+    let target: EnemyState | null = null;
+    for (let index = 0; index < input.frame.enemies.length; index += 1) {
+      const enemy = input.frame.enemies[index];
+      if (!enemy || !enemy.alive) continue;
+      if (
+        !target
+        || enemy.y > target.y
+        || (enemy.y === target.y && enemy.id < target.id)
+      ) {
+        target = enemy;
+      }
+    }
     const angle = target
       ? Math.atan2(target.y - 692, target.x - 195)
       : -Math.PI / 2;
+    const directionX = Math.cos(angle);
+    const directionY = Math.sin(angle);
+    const cannonBaseX = 195 - directionX * motion.cannonRecoil;
+    const cannonBaseY = 699 - directionY * motion.cannonRecoil;
+    const cannonEndX = 195 + directionX * 38
+      - directionX * motion.cannonRecoil;
+    const cannonEndY = 699 + directionY * 38
+      - directionY * motion.cannonRecoil;
     this.painter.line({
       kind: 'main-cannon',
       layer: 'train',
       points: [
-        { x: 195, y: 699 },
         {
-          x: 195 + Math.cos(angle) * 38,
-          y: 699 + Math.sin(angle) * 38,
+          x: posedX(cannonBaseX, cannonBaseY, motion),
+          y: posedY(cannonBaseX, cannonBaseY, motion),
+        },
+        {
+          x: posedX(cannonEndX, cannonEndY, motion),
+          y: posedY(cannonEndX, cannonEndY, motion),
         },
       ],
       stroke: '#dffbff',
@@ -365,22 +491,24 @@ export class BattleRenderer {
         kind: 'train',
         layer: 'train',
         source: train,
-        x: 195,
-        y: 842,
-        width: 320,
-        height: 178,
+        x: posedX(195, 842, motion),
+        y: posedY(195, 842, motion),
+        width: 320 * motion.scale,
+        height: 178 * motion.scale,
         anchorX: 0.5,
         anchorY: 1,
+        rotation: motion.rotation,
         fallbackColor: '#69bac9',
       });
     } else {
       this.painter.ellipse({
         kind: 'train',
         layer: 'train',
-        x: 195,
-        y: 782,
-        radiusX: 150,
-        radiusY: 58,
+        x: posedX(195, 782, motion),
+        y: posedY(195, 782, motion),
+        radiusX: 150 * motion.scale,
+        radiusY: 58 * motion.scale,
+        rotation: motion.rotation,
         fill: '#69bac9',
         stroke: '#efffff',
         lineWidth: 3,
@@ -390,19 +518,73 @@ export class BattleRenderer {
       this.painter.ellipse({
         kind: 'train-shield',
         layer: 'train',
-        x: 195,
-        y: 758,
-        radiusX: 164,
-        radiusY: 92,
-        fill: 'rgba(160, 245, 255, 0.08)',
-        stroke: 'rgba(198, 255, 255, 0.7)',
+        x: posedX(195, 758, motion),
+        y: posedY(195, 758, motion),
+        radiusX: 164 * motion.scale,
+        radiusY: 92 * motion.scale,
+        rotation: motion.rotation,
+        fill: 'rgba(132, 255, 226, 0.1)',
+        stroke: 'rgba(159, 255, 234, 0.82)',
         lineWidth: 3,
+        alpha: motion.detailAlpha,
       });
     }
+    this.drawTrainPower(input, motion);
   }
 
-  private drawCrew(input: BattleRenderInput): void {
-    this.drawCaptain(input);
+  private drawTrainPower(
+    input: BattleRenderInput,
+    motion: TrainMotionFrameView,
+  ): void {
+    const powerAlpha = clamp01(
+      (0.34 + motion.engineGlow * 0.66)
+        * (1 - motion.lowPowerPulse * 0.46)
+        * motion.detailAlpha,
+    );
+    this.painter.ellipse({
+      kind: 'train-engine-glow',
+      layer: 'train',
+      x: posedX(195, 806, motion),
+      y: posedY(195, 806, motion),
+      radiusX: 22 + motion.engineGlow * 10,
+      radiusY: 8 + motion.engineGlow * 4,
+      rotation: motion.rotation,
+      fill: input.frame.shield > 0
+        ? 'rgba(132, 255, 226, 0.72)'
+        : 'rgba(255, 224, 139, 0.68)',
+      alpha: powerAlpha,
+      blendMode: 'screen',
+    });
+    if (input.renderBudget.travelMarkers < 15) return;
+
+    const flow = wrapUnit(motion.windowGlowPhase);
+    const startX = 139 + flow * 92;
+    const endX = Math.min(251, startX + 28);
+    this.painter.line({
+      kind: 'train-window-flow',
+      layer: 'train',
+      points: [
+        {
+          x: posedX(startX, 756, motion),
+          y: posedY(startX, 756, motion),
+        },
+        {
+          x: posedX(endX, 756, motion),
+          y: posedY(endX, 756, motion),
+        },
+      ],
+      stroke: input.frame.shield > 0 ? '#9fffea' : '#fff0ad',
+      lineWidth: 3,
+      alpha: clamp01(powerAlpha * (0.66 + flow * 0.24)),
+      blendMode: 'screen',
+    });
+  }
+
+  private drawCrew(
+    input: BattleRenderInput,
+    motion: TrainMotionFrameView,
+  ): void {
+    this.drawCaptain(input, motion);
     const recoil = input.reducedMotion
       ? 0
       : Math.max(0, 1 - input.timeMs % 400 / 100) * 4;
@@ -414,6 +596,7 @@ export class BattleRenderer {
       62,
       72,
       '#7dc8cc',
+      motion,
     );
     const medicRise = input.frame.shield > 0 ? -12 : 0;
     const medicFloat = input.reducedMotion
@@ -427,6 +610,7 @@ export class BattleRenderer {
       58,
       68,
       '#9ddff0',
+      motion,
     );
     if (input.frame.shield > 0) {
       this.painter.ellipse({
@@ -434,10 +618,11 @@ export class BattleRenderer {
         layer: 'captain-and-companions',
         actor: 'jelly-medic',
         partId: 'barrier-ring',
-        x: 258,
-        y: 724 + medicRise,
+        x: posedX(258, 724 + medicRise, motion),
+        y: posedY(258, 724 + medicRise, motion),
         radiusX: 34,
         radiusY: 16,
+        rotation: motion.rotation,
         stroke: '#ccffff',
         lineWidth: 2,
         alpha: 0.72,
@@ -445,17 +630,21 @@ export class BattleRenderer {
     }
   }
 
-  private drawCaptain(input: BattleRenderInput): void {
+  private drawCaptain(
+    input: BattleRenderInput,
+    motion: TrainMotionFrameView,
+  ): void {
     const source = input.assets.get(input.captainArtId);
     if (!source) {
       this.painter.ellipse({
         kind: 'captain-fallback',
         layer: 'captain-and-companions',
         actor: 'captain',
-        x: 195,
-        y: 720,
+        x: posedX(195, 720, motion),
+        y: posedY(195, 720, motion),
         radiusX: 26,
         radiusY: 42,
+        rotation: motion.rotation,
         fill: '#69c8d4',
         stroke: '#ffffff',
         lineWidth: 2,
@@ -468,13 +657,14 @@ export class BattleRenderer {
       hitPulse: 0,
     });
     for (const part of parts) {
-      this.drawCaptainPart(source, part);
+      this.drawCaptainPart(source, part, motion);
     }
   }
 
   private drawCaptainPart(
     source: CanvasImageSource,
     part: SpritePartPose,
+    motion: TrainMotionFrameView,
   ): void {
     const x = 195 + part.offsetX;
     const y = 758 + part.offsetY;
@@ -486,13 +676,13 @@ export class BattleRenderer {
         partId: part.id,
         source,
         sourceRect: part.sourceRect,
-        x,
-        y,
+        x: posedX(x, y, motion),
+        y: posedY(x, y, motion),
         width: 74 * part.widthScale,
         height: 94 * part.heightScale,
         anchorX: part.anchorX,
         anchorY: part.anchorY,
-        rotation: part.rotation,
+        rotation: part.rotation + motion.rotation,
         alpha: part.alpha,
         fallbackColor: '#69c8d4',
       });
@@ -505,12 +695,18 @@ export class BattleRenderer {
         actor: 'captain',
         partId: part.id,
         points: [
-          { x, y },
           {
-            x: x - 16,
-            y: y + Math.sin(part.rotation) * 16,
+            x: posedX(x, y, motion),
+            y: posedY(x, y, motion),
           },
-          { x: x - 31, y: y + 8 + part.rotation * 12 },
+          {
+            x: posedX(x - 16, y + Math.sin(part.rotation) * 16, motion),
+            y: posedY(x - 16, y + Math.sin(part.rotation) * 16, motion),
+          },
+          {
+            x: posedX(x - 31, y + 8 + part.rotation * 12, motion),
+            y: posedY(x - 31, y + 8 + part.rotation * 12, motion),
+          },
         ],
         stroke: '#ff9a85',
         lineWidth: 6,
@@ -524,10 +720,11 @@ export class BattleRenderer {
       layer: 'captain-and-companions',
       actor: 'captain',
       partId: part.id,
-      x,
-      y,
+      x: posedX(x, y, motion),
+      y: posedY(x, y, motion),
       radiusX: 32,
       radiusY: 18,
+      rotation: motion.rotation,
       fill: 'rgba(170, 255, 245, 0.35)',
       stroke: 'rgba(225, 255, 255, 0.65)',
       lineWidth: 2,
@@ -543,6 +740,7 @@ export class BattleRenderer {
     width: number,
     height: number,
     fallbackColor: string,
+    motion: TrainMotionFrameView,
   ): void {
     if (source) {
       this.painter.image({
@@ -551,12 +749,13 @@ export class BattleRenderer {
         actor,
         partId: 'body',
         source,
-        x,
-        y,
+        x: posedX(x, y, motion),
+        y: posedY(x, y, motion),
         width,
         height,
         anchorX: 0.5,
         anchorY: 1,
+        rotation: motion.rotation,
         fallbackColor,
       });
       return;
@@ -566,30 +765,40 @@ export class BattleRenderer {
       layer: 'captain-and-companions',
       actor,
       partId: 'body',
-      x,
-      y: y - height / 2,
+      x: posedX(x, y - height / 2, motion),
+      y: posedY(x, y - height / 2, motion),
       radiusX: width * 0.42,
       radiusY: height * 0.44,
+      rotation: motion.rotation,
       fill: fallbackColor,
       stroke: '#ffffff',
       lineWidth: 2,
     });
   }
 
-  private drawFrontEffects(input: BattleRenderInput): void {
+  private drawFrontEffects(
+    input: BattleRenderInput,
+    motion: TrainMotionFrameView,
+  ): void {
     const corePulse = input.reducedMotion
       ? 1
       : 1 + Math.sin(input.timeMs / 190) * 0.12;
     this.painter.ellipse({
       kind: 'train-core',
       layer: 'front-effects',
-      x: 195,
-      y: 782,
+      x: posedX(195, 782, motion),
+      y: posedY(195, 782, motion),
       radiusX: 15 * corePulse,
       radiusY: 9 * corePulse,
+      rotation: motion.rotation,
       fill: input.frame.energy >= 100
         ? 'rgba(255, 239, 151, 0.68)'
         : 'rgba(151, 255, 241, 0.48)',
+      alpha: clamp01(
+        (0.48 + motion.engineGlow * 0.52)
+          * (1 - motion.lowPowerPulse * 0.42)
+          * motion.detailAlpha,
+      ),
       blendMode: 'screen',
     });
   }
@@ -716,4 +925,28 @@ export class BattleRenderer {
       });
     }
   }
+}
+
+const posedX = (
+  x: number,
+  y: number,
+  motion: TrainMotionFrameView,
+): number => TRAIN_PIVOT_X + motion.offsetX
+  + (x - TRAIN_PIVOT_X) * Math.cos(motion.rotation)
+  - (y - TRAIN_PIVOT_Y) * Math.sin(motion.rotation);
+
+const posedY = (
+  x: number,
+  y: number,
+  motion: TrainMotionFrameView,
+): number => TRAIN_PIVOT_Y + motion.offsetY
+  + (x - TRAIN_PIVOT_X) * Math.sin(motion.rotation)
+  + (y - TRAIN_PIVOT_Y) * Math.cos(motion.rotation);
+
+function clamp01(value: number): number {
+  return Math.min(1, Math.max(0, value));
+}
+
+function wrapUnit(value: number): number {
+  return ((value % 1) + 1) % 1;
 }

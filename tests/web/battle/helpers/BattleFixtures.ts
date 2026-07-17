@@ -23,6 +23,9 @@ import type {
 import {
   getRenderBudget,
 } from '../../../../web/battle/QualityMonitor';
+import type {
+  TrainMotionFrameView,
+} from '../../../../web/battle/TrainMotionTypes';
 
 export function createFrameFixture(
   patch: Partial<BattleFrameView> = {},
@@ -126,11 +129,33 @@ export function createFrameFixture(
   };
 }
 
+export function createTrainMotionFixture(): TrainMotionFrameView {
+  return {
+    phase: 'cruise',
+    motionTimeMs: 42_000,
+    speed: 1,
+    offsetX: 0,
+    offsetY: 0,
+    rotation: 0,
+    scale: 1,
+    cannonRecoil: 0,
+    surge: 0,
+    damagePulse: 0,
+    laneOffset: 120,
+    wakeStrength: 1,
+    engineGlow: 0.73,
+    windowGlowPhase: 0.42,
+    lowPowerPulse: 0,
+    detailAlpha: 1,
+  };
+}
+
 export function createPresentationFixture(input: {
   readonly failedArtIds?: readonly BattleArtId[];
   readonly frame?: Partial<BattleFrameView>;
   readonly reducedMotion?: boolean;
   readonly effects?: EffectFrameView;
+  readonly trainMotion?: Partial<TrainMotionFrameView>;
 } = {}): BattleRenderInput {
   const failed = new Set(input.failedArtIds ?? []);
   const sources = new Map<BattleArtId, CanvasImageSource>();
@@ -159,6 +184,10 @@ export function createPresentationFixture(input: {
     reducedMotion: input.reducedMotion ?? false,
     effects: input.effects ?? EMPTY_EFFECT_FRAME_VIEW,
     renderBudget: getRenderBudget('high'),
+    trainMotion: {
+      ...createTrainMotionFixture(),
+      ...input.trainMotion,
+    },
   };
 }
 

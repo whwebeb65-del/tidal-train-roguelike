@@ -49,11 +49,19 @@ describe('QualityMonitor', () => {
       particles: 200,
       damageNumbers: 18,
       dprCap: 2,
+      travelMarkers: 15,
+      trainWakeSegments: 6,
+    });
+    expect(getRenderBudget('medium')).toMatchObject({
+      travelMarkers: 9,
+      trainWakeSegments: 4,
     });
     expect(getRenderBudget('low')).toMatchObject({
       particles: 80,
       damageNumbers: 8,
       dprCap: 1.5,
+      travelMarkers: 3,
+      trainWakeSegments: 2,
     });
   });
 });
