@@ -11,5 +11,6 @@ describe('browser smoke script', () => {
     expect(source).toContain('412');
     expect(source).toContain('430');
     expect(source).toContain('__TIDAL_TRAIN_E2E__');
+    expect(source).toContain('timeoutMs: 45_000');
   });
 });

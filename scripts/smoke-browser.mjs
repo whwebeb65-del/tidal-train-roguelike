@@ -605,6 +605,7 @@ async function main() {
     browserOutput = captureChildOutput(browserProcess, 'browser output');
     await waitForHttp(`http://127.0.0.1:${cdpPort}/json/version`, {
       child: browserProcess,
+      timeoutMs: 45_000,
     });
 
     target = await createCdpTarget(cdpPort, 'about:blank');
