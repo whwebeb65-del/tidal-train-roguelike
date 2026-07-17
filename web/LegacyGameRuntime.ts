@@ -159,6 +159,7 @@ import type { AudioManager } from './audio/AudioManager';
 import { renderLaunchCampaignView } from './views/LaunchCampaignView';
 import { renderSocialHubView } from './views/SocialHubView';
 import { mountAppShell } from './app/AppShell';
+import { StationDepartureController } from './app/StationDepartureController';
 import { SceneRouter } from './app/SceneRouter';
 import { BattleScene } from './scenes/BattleScene';
 import { createCaptainScene } from './scenes/CaptainScene';
@@ -246,6 +247,7 @@ let activeBattleEngine: BattleEngine | null = null;
 let activeBattleProgression: ProgressionSnapshot | null = null;
 let activeBattleSettlement: BattleSettlementPresentation | null = null;
 let activeBattleScene: BattleScene | null = null;
+let activeStationDeparture: StationDepartureController | null = null;
 let battleStartPending = false;
 let effectiveReducedMotion = reducedMotion;
 let qualityPreference = settingsBridge.getSettings().qualityPreference;
@@ -359,6 +361,12 @@ function stopStationAudioLoop(): void {
   diagnostics.audioSchedulerStopped();
 }
 
+function cancelActiveStationDeparture(): void {
+  const departure = activeStationDeparture;
+  activeStationDeparture = null;
+  departure?.dispose();
+}
+
 async function loadCriticalBattleAssets(
   captainArtId: BattleArtId,
 ): Promise<BattleAssetSet<BattleArtId>> {
@@ -417,6 +425,9 @@ function applyRuntimeSettings(
   settings: GameSettings,
   nextReducedMotion: boolean,
 ): void {
+  if (effectiveReducedMotion !== nextReducedMotion) {
+    cancelActiveStationDeparture();
+  }
   effectiveReducedMotion = nextReducedMotion;
   qualityPreference = settings.qualityPreference;
   router.setReducedMotion(nextReducedMotion);
@@ -617,6 +628,7 @@ function renderStationScene(): string {
       stationLevel: save.stationLevel,
       maxHp: progression.maxPlayerHp,
       damagePercent: Math.max(0, Math.round((progression.damageMultiplier - 1) * 100)),
+      reducedMotion: effectiveReducedMotion,
     })}
     <div class="section-title"><h2>航线逐步开放</h2><span>已开放 ${save.unlockedMapIds.length}/${MAP_PROGRESSION.length}</span></div>
     <div class="map-grid">${mapCards}</div>
@@ -866,16 +878,30 @@ async function startRun(
   }
 
   battleStartPending = true;
+  const stationNotice = notice;
+  const departure = new StationDepartureController(
+    shell.sceneHost,
+    effectiveReducedMotion,
+  );
+  activeStationDeparture = departure;
   try {
     const audioReady = await audio.unlockFromGesture();
     if (audioReady) audio.playSound('ui-tap');
     notice = audioReady
       ? '正在装载列车、潮兽与战斗特效……'
       : '当前浏览器未启用声音，游戏仍可正常游玩。正在装载战斗……';
-    render();
+    shell.setNotice(notice);
+    if (!departure.beginCharging()) {
+      notice = stationNotice;
+      return;
+    }
     const currentBattleAssets = await loadCriticalBattleAssets(
       getActiveCaptainArtId(),
     );
+    if (!await departure.playDeparture()) {
+      notice = stationNotice;
+      return;
+    }
     if (runId) {
       track('run_restart', { afterAdRevive: lastRunRecovery === 'ad' });
     }
@@ -930,6 +956,7 @@ async function startRun(
       notice += ` ${currentBattleAssets.failedIds.length} 项美术资源将使用安全替代图形。`;
     }
   } catch (error) {
+    departure.cancel();
     console.error(error);
     activeBattleEngine = null;
     activeBattleProgression = null;
@@ -937,6 +964,10 @@ async function startRun(
     phase = 'station';
     notice = '战斗资源初始化失败，请稍后重试。';
   } finally {
+    departure.dispose();
+    if (activeStationDeparture === departure) {
+      activeStationDeparture = null;
+    }
     battleStartPending = false;
     render();
   }
@@ -1711,6 +1742,7 @@ const onClick = async (event: Event): Promise<void> => {
   const target = event.target as HTMLElement;
   const navigation = target.closest<HTMLButtonElement>('[data-nav-scene]');
   if (navigation?.dataset.navScene && phase === 'station') {
+    cancelActiveStationDeparture();
     audio.playSound('ui-tap');
     hubView = navigation.dataset.navScene as HubView;
     render();
@@ -1719,6 +1751,13 @@ const onClick = async (event: Event): Promise<void> => {
   const button = target.closest<HTMLButtonElement>('[data-action]');
   if (!button) return;
   const action = button.dataset.action;
+  if (
+    battleStartPending
+    && action !== 'open-settings'
+    && action !== 'close-settings'
+  ) {
+    return;
+  }
   if (action !== 'start-run' && action !== 'start-daily-trial') {
     audio.playSound('ui-tap');
   }
@@ -1805,6 +1844,7 @@ const onSubmit = (event: Event): void => {
   const form = event.target as HTMLFormElement;
   if (form.id !== 'gift-code-form') return;
   event.preventDefault();
+  if (battleStartPending) return;
   const rawCode = new FormData(form).get('giftCode');
   handleGiftCodeRedeem(typeof rawCode === 'string' ? rawCode : '');
 };
@@ -1862,6 +1902,7 @@ function e2eSnapshot(): BattleE2ESnapshot {
 
 async function e2eNavigate(sceneId: HubView): Promise<void> {
   if (!e2eEnabled) return;
+  cancelActiveStationDeparture();
   if (phase === 'combat') {
     phase = 'station';
     activeBattleEngine = null;
@@ -1936,6 +1977,7 @@ return {
   destroy(): void {
     if (!started) return;
     started = false;
+    cancelActiveStationDeparture();
     stopStationAudioLoop();
     if (deferredAssetTimerId !== null) {
       globalThis.clearTimeout(deferredAssetTimerId);

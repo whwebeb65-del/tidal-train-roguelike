@@ -15,6 +15,7 @@ export interface StationHeroModel {
   readonly stationLevel: number;
   readonly maxHp: number;
   readonly damagePercent: number;
+  readonly reducedMotion: boolean;
 }
 
 export function renderStationHero(model: StationHeroModel): string {
@@ -23,7 +24,7 @@ export function renderStationHero(model: StationHeroModel): string {
   if (!skin) throw new Error(`Unknown skin: ${model.skinId}`);
   const captainArt = CHIBI_ART.captains[model.captainId][model.skinId];
 
-  return `<section class="station-hero" aria-labelledby="station-hero-title">
+  return `<section class="station-hero" data-reduced-motion="${model.reducedMotion}" aria-labelledby="station-hero-title">
     <img class="station-hero__background" data-motion-role="background" src="${CHIBI_ART.stationBackground}" alt="" aria-hidden="true" />
     <div class="station-hero__copy">
       <span class="eyebrow">STATION ${model.stationLevel} · READY</span>
@@ -36,6 +37,8 @@ export function renderStationHero(model: StationHeroModel): string {
       </div>
       <button class="primary station-hero__start" data-action="start-run">驾驶泡泡列车出发</button>
     </div>
+    <div class="station-hero__wake" data-motion-role="wake" aria-hidden="true"><i></i><i></i><i></i></div>
+    <span class="station-hero__engine-glow" data-motion-role="engine" aria-hidden="true"></span>
     <img class="station-hero__train" data-motion-role="train" src="${CHIBI_ART.train}" alt="泡泡列车" />
     <img class="captain-art station-hero__captain" data-motion-role="captain" src="${captainArt}" alt="${captain.name} · ${skin.name}" />
     <img class="companion-art station-hero__otter" data-motion-role="otter" src="${CHIBI_ART.otter}" alt="" aria-hidden="true" />
