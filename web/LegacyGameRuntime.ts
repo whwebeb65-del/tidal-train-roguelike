@@ -324,6 +324,7 @@ const router = new SceneRouter(shell.sceneHost, sceneFactory, {
       if (pageHidden) activeBattleScene?.pauseForVisibility();
       return;
     }
+    setStationIdleMotion();
     audio.setMusicCue('station');
     startStationAudioLoop();
   },
@@ -332,6 +333,10 @@ let renderQueue = Promise.resolve();
 let started = false;
 let stationAudioFrameId: number | null = null;
 let pageHidden = false;
+
+function setStationIdleMotion(): void {
+  audio.setTrainMotion({ active: true, speed: 0.18, power: 0.55 });
+}
 
 function stationAudioFrame(nowMs: number): void {
   stationAudioFrameId = null;
@@ -892,13 +897,24 @@ async function startRun(
       : '当前浏览器未启用声音，游戏仍可正常游玩。正在装载战斗……';
     shell.setNotice(notice);
     if (!departure.beginCharging()) {
+      setStationIdleMotion();
       notice = stationNotice;
       return;
     }
+    audio.setTrainMotion({ active: true, speed: 0.18, power: 0.9 });
+    audio.playSound('train-charge');
     const currentBattleAssets = await loadCriticalBattleAssets(
       getActiveCaptainArtId(),
     );
+    if (activeStationDeparture !== departure) {
+      setStationIdleMotion();
+      notice = stationNotice;
+      return;
+    }
+    audio.setTrainMotion({ active: true, speed: 1, power: 0.9 });
+    audio.playSound('train-depart');
     if (!await departure.playDeparture()) {
+      setStationIdleMotion();
       notice = stationNotice;
       return;
     }
@@ -957,6 +973,7 @@ async function startRun(
     }
   } catch (error) {
     departure.cancel();
+    setStationIdleMotion();
     console.error(error);
     activeBattleEngine = null;
     activeBattleProgression = null;

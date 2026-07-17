@@ -20,6 +20,8 @@ export type SoundCue =
   | 'boss-alarm'
   | 'boss-charge'
   | 'boss-down'
+  | 'train-charge'
+  | 'train-depart'
   | 'loot'
   | 'upgrade-open'
   | 'upgrade-select'
@@ -32,6 +34,15 @@ export type SoundCue =
   | 'defeat';
 
 export type AudioBus = 'music' | 'sfx';
+
+export interface ContinuousToneInstruction {
+  readonly bus: AudioBus;
+  readonly waveform: OscillatorType;
+  readonly frequencyHz: number;
+  readonly gain: number;
+  readonly filterHz: number;
+  readonly rampSeconds: number;
+}
 
 export interface ToneInstruction {
   readonly bus: AudioBus;

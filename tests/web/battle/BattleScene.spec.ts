@@ -279,7 +279,9 @@ describe('BattleScene', () => {
       dispose: vi.fn(),
     };
     const sound = {
+      update: vi.fn(),
       consume: vi.fn(),
+      setTrainMotion: vi.fn(),
       setBattlePhase: vi.fn(),
       pause: vi.fn(),
       resume: vi.fn(async () => undefined),
@@ -303,6 +305,14 @@ describe('BattleScene', () => {
     });
 
     scene.mount(host);
+    expect(sound.setTrainMotion).toHaveBeenLastCalledWith({
+      active: true,
+      speed: motion.view.speed,
+      power: motion.view.engineGlow,
+    });
+    expect(sound.setTrainMotion.mock.invocationCallOrder[0]).toBeLessThan(
+      sound.update.mock.invocationCallOrder[0] ?? Number.MAX_SAFE_INTEGER,
+    );
     expect(motion.reset).toHaveBeenCalledWith(engine.frame);
     expect(motion.update).not.toHaveBeenCalled();
     expect(renderer.render).toHaveBeenLastCalledWith(
@@ -482,7 +492,9 @@ describe('BattleScene', () => {
       originalResume.call(engine);
     };
     const sound = {
+      update: vi.fn(),
       consume: vi.fn(),
+      setTrainMotion: vi.fn(),
       setBattlePhase: vi.fn(),
       pause: vi.fn(),
       resume: vi.fn(async () => {

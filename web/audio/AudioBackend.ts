@@ -1,5 +1,6 @@
 import type {
   AudioBus,
+  ContinuousToneInstruction,
   ToneInstruction,
 } from './AudioTypes';
 
@@ -9,6 +10,10 @@ export interface AudioBackend {
   nowSeconds(): number;
   unlock(): Promise<boolean>;
   scheduleTone(instruction: ToneInstruction): void;
+  setContinuousTone(
+    id: string,
+    instruction: ContinuousToneInstruction | null,
+  ): void;
   setBusGain(bus: AudioBus, value: number, rampSeconds?: number): void;
   suspend(): Promise<void>;
   resume(): Promise<boolean>;

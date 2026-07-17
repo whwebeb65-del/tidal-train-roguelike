@@ -54,4 +54,42 @@ describe('SfxSynth', () => {
     expect(synth.debugState.activeByGroup.hit).toBe(0);
     expect(synth.play('cannon', 0)).toBe(true);
   });
+
+  it('synthesizes the filtered 110 to 220 Hz train charge rise', () => {
+    const backend = new RecordingAudioBackend();
+    const synth = new SfxSynth(backend);
+
+    expect(synth.play('train-charge', 4)).toBe(true);
+
+    const charge = backend.instructions.filter((tone) => (
+      tone.startSeconds >= 4 && tone.startSeconds < 4.3
+    ));
+    expect(charge[0]?.frequencyHz).toBe(110);
+    expect(charge.at(-1)?.frequencyHz).toBe(220);
+    expect(charge.every((tone) => tone.filterHz !== undefined)).toBe(true);
+    expect(charge.map((tone) => tone.filterHz)).toEqual(
+      [...charge.map((tone) => tone.filterHz)].sort((left, right) => (
+        (left ?? 0) - (right ?? 0)
+      )),
+    );
+    expect(synth.debugState.activeByGroup.major).toBe(1);
+  });
+
+  it('synthesizes the exact train departure arpeggio and low pulse', () => {
+    const backend = new RecordingAudioBackend();
+    const synth = new SfxSynth(backend);
+
+    expect(synth.play('train-depart', 8)).toBe(true);
+
+    const departure = backend.instructions.filter((tone) => (
+      tone.startSeconds >= 8 && tone.startSeconds < 8.4
+    ));
+    const arpeggio = departure.filter((tone) => tone.frequencyHz !== 70);
+    expect(arpeggio.map((tone) => tone.frequencyHz)).toEqual([90, 180, 360]);
+    expect(arpeggio.every((tone) => tone.durationSeconds === 0.18)).toBe(true);
+    expect(departure).toEqual(expect.arrayContaining([
+      expect.objectContaining({ frequencyHz: 70, waveform: 'sine' }),
+    ]));
+    expect(synth.debugState.activeByGroup.major).toBe(1);
+  });
 });

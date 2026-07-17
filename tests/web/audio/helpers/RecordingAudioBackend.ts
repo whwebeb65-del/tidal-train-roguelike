@@ -1,6 +1,7 @@
 import type { AudioBackend } from '../../../../web/audio/AudioBackend';
 import type {
   AudioBus,
+  ContinuousToneInstruction,
   ToneInstruction,
 } from '../../../../web/audio/AudioTypes';
 
@@ -10,6 +11,11 @@ export class RecordingAudioBackend implements AudioBackend {
   public unlockResult = true;
   public currentSeconds = 0;
   public readonly instructions: ToneInstruction[] = [];
+  public readonly continuousTones: {
+    readonly id: string;
+    readonly instruction: ContinuousToneInstruction | null;
+  }[] = [];
+  public readonly lifecycle: string[] = [];
   public readonly busGains: {
     readonly bus: AudioBus;
     readonly value: number;
@@ -33,6 +39,17 @@ export class RecordingAudioBackend implements AudioBackend {
     this.instructions.push({ ...instruction });
   }
 
+  public setContinuousTone(
+    id: string,
+    instruction: ContinuousToneInstruction | null,
+  ): void {
+    this.continuousTones.push({
+      id,
+      instruction: instruction ? { ...instruction } : null,
+    });
+    this.lifecycle.push(`continuous:${id}:${instruction ? 'set' : 'stop'}`);
+  }
+
   public setBusGain(
     bus: AudioBus,
     value: number,
@@ -53,6 +70,7 @@ export class RecordingAudioBackend implements AudioBackend {
 
   public close(): Promise<void> {
     this.closeCalls += 1;
+    this.lifecycle.push('close');
     this.unlocked = false;
     return Promise.resolve();
   }

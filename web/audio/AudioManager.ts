@@ -5,6 +5,7 @@ import {
 import type {
   BattleSoundPhase,
   BattleSoundPort,
+  TrainMotionSoundState,
 } from '../battle/BattleSoundPort';
 import type {
   BattleEvent,
@@ -20,6 +21,13 @@ import type {
 
 const MUSIC_GAIN = 0.34;
 const SFX_GAIN = 0.55;
+const TRAIN_MOTION_INTERVAL_MS = 125;
+const TRAIN_SPEED_MAX = 1.5;
+
+function clamp(value: number, minimum: number, maximum: number): number {
+  if (!Number.isFinite(value)) return minimum;
+  return Math.max(minimum, Math.min(maximum, value));
+}
 
 export interface AudioManagerDebugState {
   readonly musicCue: MusicCue;
@@ -34,6 +42,9 @@ export class AudioManager implements BattleSoundPort {
   private settings = defaultGameSettings();
   private musicCue: MusicCue = 'silent';
   private readonly recentSoundCues: SoundCue[] = [];
+  private trainMotion: TrainMotionSoundState | null = null;
+  private lastTrainMotionUpdateMs = Number.NEGATIVE_INFINITY;
+  private closed = false;
 
   public constructor(private readonly backend: AudioBackend) {
     this.score = new ProceduralScore(backend);
@@ -81,9 +92,19 @@ export class AudioManager implements BattleSoundPort {
     return this.sfx.play(cue, this.backend.nowSeconds());
   }
 
-  public update(_nowMs: number): void {
-    if (!this.settings.musicEnabled) return;
-    this.score.update(this.backend.nowSeconds());
+  public update(nowMs: number): void {
+    this.updateTrainMotion(nowMs);
+    if (this.settings.musicEnabled) {
+      this.score.update(this.backend.nowSeconds());
+    }
+  }
+
+  public setTrainMotion(state: TrainMotionSoundState): void {
+    this.trainMotion = {
+      active: state.active,
+      speed: clamp(state.speed, 0, TRAIN_SPEED_MAX),
+      power: clamp(state.power, 0, 1),
+    };
   }
 
   public consume(
@@ -172,9 +193,33 @@ export class AudioManager implements BattleSoundPort {
   }
 
   public async close(): Promise<void> {
+    if (this.closed) return;
+    this.closed = true;
     this.score.reset();
     this.sfx.reset();
+    this.backend.setContinuousTone('train-engine', null);
     await this.backend.close();
+  }
+
+  private updateTrainMotion(nowMs: number): void {
+    if (
+      this.closed
+      || !this.trainMotion
+      || !Number.isFinite(nowMs)
+      || nowMs - this.lastTrainMotionUpdateMs < TRAIN_MOTION_INTERVAL_MS
+    ) {
+      return;
+    }
+    this.lastTrainMotionUpdateMs = nowMs;
+    const { active, speed, power } = this.trainMotion;
+    this.backend.setContinuousTone('train-engine', {
+      bus: 'sfx',
+      waveform: 'triangle',
+      frequencyHz: 46 + speed * 22,
+      gain: active ? (0.018 + speed * 0.018) * power : 0,
+      filterHz: 180 + speed * 220,
+      rampSeconds: 0.12,
+    });
   }
 
   private applyBusGains(rampSeconds: number): void {

@@ -42,6 +42,8 @@ const GROUP_BY_CUE: Readonly<Record<SoundCue, SfxGroup>> = {
   'boss-alarm': 'major',
   'boss-charge': 'major',
   'boss-down': 'major',
+  'train-charge': 'major',
+  'train-depart': 'major',
   loot: 'loot',
   'upgrade-open': 'ui',
   'upgrade-select': 'ui',
@@ -168,6 +170,24 @@ export class SfxSynth {
         return;
       case 'boss-down':
         this.arpeggio(nowSeconds, [196, 146.83, 98, 62, 48], 0.065, 0.25, 0.23, 'triangle');
+        return;
+      case 'train-charge':
+        [110, 146.83, 180, 220].forEach((frequency, index) => {
+          this.tone(
+            nowSeconds,
+            index * 0.04,
+            frequency,
+            0.13,
+            0.09,
+            'triangle',
+            0,
+            520 + index * 360,
+          );
+        });
+        return;
+      case 'train-depart':
+        this.arpeggio(nowSeconds, [90, 180, 360], 0.06, 0.18, 0.12);
+        this.tone(nowSeconds, 0, 70, 0.24, 0.14, 'sine', 0, 360);
         return;
       case 'loot':
         this.arpeggio(nowSeconds, [740, 932.33, 1174.66], 0.022, 0.055, 0.05);

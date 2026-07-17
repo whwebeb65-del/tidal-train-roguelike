@@ -160,6 +160,11 @@ const BROWSER_TIMER_SCHEDULER: TimerScheduler = {
   },
 };
 
+function clamp(value: number, minimum: number, maximum: number): number {
+  if (!Number.isFinite(value)) return minimum;
+  return Math.max(minimum, Math.min(maximum, value));
+}
+
 export class BattleScene implements GameScene {
   public readonly id = 'battle' as const;
 
@@ -500,6 +505,12 @@ export class BattleScene implements GameScene {
 
   private renderBattle(): void {
     if (!this.host || !this.canvas || !this.renderer || !this.hud) return;
+    const trainMotion = this.motion.view;
+    this.sound.setTrainMotion({
+      active: true,
+      speed: trainMotion.speed,
+      power: clamp(trainMotion.engineGlow, 0.35, 1),
+    });
     this.sound.update?.(this.lastFrameTimeMs);
     this.refreshViewport();
     const viewport = this.viewport;

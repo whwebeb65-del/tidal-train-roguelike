@@ -1,6 +1,7 @@
 import type { AudioBackend } from './AudioBackend';
 import type {
   AudioBus,
+  ContinuousToneInstruction,
   ToneInstruction,
 } from './AudioTypes';
 
@@ -10,6 +11,12 @@ export interface WebAudioBackendOptions {
 
 interface WebkitAudioWindow extends Window {
   readonly webkitAudioContext?: typeof AudioContext;
+}
+
+interface ContinuousToneEntry {
+  readonly oscillator: OscillatorNode;
+  readonly filter: BiquadFilterNode;
+  readonly gain: GainNode;
 }
 
 const DEFAULT_BUS_GAIN: Readonly<Record<AudioBus, number>> = {
@@ -44,6 +51,7 @@ class WebAudioBackend implements AudioBackend {
     music: DEFAULT_BUS_GAIN.music,
     sfx: DEFAULT_BUS_GAIN.sfx,
   };
+  private readonly continuousTones = new Map<string, ContinuousToneEntry>();
   private permanentlyClosed = false;
   private usable: boolean;
 
@@ -196,6 +204,68 @@ class WebAudioBackend implements AudioBackend {
     }
   }
 
+  public setContinuousTone(
+    id: string,
+    instruction: ContinuousToneInstruction | null,
+  ): void {
+    if (instruction === null) {
+      this.releaseContinuousTone(id);
+      return;
+    }
+    if (this.permanentlyClosed) return;
+    const context = this.context;
+    const bus = this.buses[instruction.bus];
+    if (!context || !bus || context.state === 'closed') return;
+
+    const now = context.currentTime;
+    const frequencyHz = clamp(instruction.frequencyHz, 20, 20_000);
+    const gain = clamp(instruction.gain, 0, 1);
+    const filterHz = clamp(instruction.filterHz, 20, 20_000);
+    const rampSeconds = clamp(instruction.rampSeconds, 0, 2);
+    const current = this.continuousTones.get(id);
+    if (current) {
+      this.safeRampParameter(
+        current.oscillator.frequency,
+        frequencyHz,
+        now,
+        rampSeconds,
+      );
+      this.safeRampParameter(
+        current.filter.frequency,
+        filterHz,
+        now,
+        rampSeconds,
+      );
+      this.safeRampParameter(current.gain.gain, gain, now, rampSeconds);
+      return;
+    }
+
+    let oscillator: OscillatorNode | null = null;
+    let filter: BiquadFilterNode | null = null;
+    let gainNode: GainNode | null = null;
+    try {
+      oscillator = context.createOscillator();
+      filter = context.createBiquadFilter();
+      gainNode = context.createGain();
+      oscillator.type = instruction.waveform;
+      filter.type = 'lowpass';
+      oscillator.frequency.setValueAtTime(frequencyHz, now);
+      filter.frequency.setValueAtTime(filterHz, now);
+      gainNode.gain.setValueAtTime(gain, now);
+      oscillator.connect(filter);
+      filter.connect(gainNode);
+      gainNode.connect(bus);
+      oscillator.start(now);
+      this.continuousTones.set(id, {
+        oscillator,
+        filter,
+        gain: gainNode,
+      });
+    } catch {
+      this.releaseNodes(oscillator, filter, gainNode);
+    }
+  }
+
   public setBusGain(
     bus: AudioBus,
     value: number,
@@ -241,17 +311,17 @@ class WebAudioBackend implements AudioBackend {
   public async close(): Promise<void> {
     if (this.permanentlyClosed) return;
     this.permanentlyClosed = true;
+    this.releaseAllContinuousTones();
     const context = this.context;
     this.context = null;
-    if (!context || context.state === 'closed') return;
     try {
-      await context.close();
+      if (context && context.state !== 'closed') await context.close();
     } catch {
       // Closing is best-effort during application teardown.
     } finally {
-      this.master?.disconnect();
-      this.buses.music?.disconnect();
-      this.buses.sfx?.disconnect();
+      this.safeDisconnect(this.master);
+      this.safeDisconnect(this.buses.music ?? null);
+      this.safeDisconnect(this.buses.sfx ?? null);
       this.master = null;
       delete this.buses.music;
       delete this.buses.sfx;
@@ -271,5 +341,74 @@ class WebAudioBackend implements AudioBackend {
     this.master = master;
     this.buses.music = music;
     this.buses.sfx = sfx;
+  }
+
+  private rampParameter(
+    parameter: AudioParam,
+    value: number,
+    now: number,
+    rampSeconds: number,
+  ): void {
+    parameter.cancelScheduledValues(now);
+    parameter.setValueAtTime(parameter.value, now);
+    parameter.linearRampToValueAtTime(value, now + rampSeconds);
+  }
+
+  private safeRampParameter(
+    parameter: AudioParam,
+    value: number,
+    now: number,
+    rampSeconds: number,
+  ): void {
+    try {
+      this.rampParameter(parameter, value, now, rampSeconds);
+    } catch {
+      // One failing parameter must not prevent the other ramps.
+    }
+  }
+
+  private releaseAllContinuousTones(): void {
+    const entries = [...this.continuousTones.values()];
+    this.continuousTones.clear();
+    for (const entry of entries) {
+      try {
+        this.releaseNodes(entry.oscillator, entry.filter, entry.gain);
+      } catch {
+        // Every remaining id still receives its own release attempt.
+      }
+    }
+  }
+
+  private releaseContinuousTone(id: string): void {
+    const entry = this.continuousTones.get(id);
+    if (!entry) return;
+    this.continuousTones.delete(id);
+    this.releaseNodes(entry.oscillator, entry.filter, entry.gain);
+  }
+
+  private releaseNodes(
+    oscillator: OscillatorNode | null,
+    filter: BiquadFilterNode | null,
+    gain: GainNode | null,
+  ): void {
+    if (oscillator) {
+      try {
+        oscillator.stop();
+      } catch {
+        // A stopped or failed oscillator is already safe to release.
+      }
+    }
+    this.safeDisconnect(oscillator);
+    this.safeDisconnect(filter);
+    this.safeDisconnect(gain);
+  }
+
+  private safeDisconnect(node: AudioNode | null): void {
+    if (!node) return;
+    try {
+      node.disconnect();
+    } catch {
+      // Disconnect is best-effort at the backend boundary.
+    }
   }
 }
