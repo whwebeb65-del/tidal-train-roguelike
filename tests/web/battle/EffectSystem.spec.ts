@@ -93,13 +93,12 @@ describe('EffectSystem', () => {
     expect(effects.view.particles.find((item) => item.kind === 'defeat-squash')!.progress).toBeGreaterThan(0);
   });
 
-  it('retains the defeat squash when the low-quality particle budget trims decoration', () => {
+  it('retains the first squash when later combat decoration exceeds the particle budget', () => {
     const effects = new EffectSystem({
-      particleLimit: 8,
+      particleLimit: 7,
       damageNumberLimit: 4,
       reducedMotion: false,
     });
-    effects.consume([{ type: 'battle-won' }], createFrameFixture());
     effects.consume([{
       type: 'enemy-killed',
       enemyId: 9,
@@ -107,8 +106,35 @@ describe('EffectSystem', () => {
       x: 195,
       y: 260,
     }], createFrameFixture());
+    const firstSquash = effects.view.particles.find(
+      (item) => item.kind === 'defeat-squash',
+    );
+    expect(firstSquash).toBeDefined();
 
-    expect(effects.view.particles.some((item) => item.kind === 'defeat-squash')).toBe(true);
+    effects.consume([
+      {
+        type: 'weapon-fired',
+        projectileId: 3,
+        source: 'main',
+      },
+      {
+        type: 'enemy-killed',
+        enemyId: 10,
+        kind: 'bubble-fin',
+        x: 205,
+        y: 270,
+      },
+      {
+        type: 'enemy-armour-broken',
+        enemyId: 1,
+      },
+    ], createFrameFixture());
+
+    expect(effects.poolStats.particles.created).toBe(27);
+    expect(effects.view.particles).toHaveLength(7);
+    expect(effects.view.particles.filter((item) => item.kind === 'defeat-squash')).toHaveLength(2);
+    expect(effects.view.particles.filter((item) => item.kind === 'ink-bubble')).toHaveLength(5);
+    expect(effects.view.particles.some((item) => item.id === firstSquash!.id)).toBe(true);
   });
 
   it('creates bounded hit, kill, loot and camera feedback', () => {
@@ -167,6 +193,104 @@ describe('EffectSystem', () => {
 
     expect(effects.view.particles).toHaveLength(5);
     expect(effects.view.camera.amplitude).toBe(0);
+  });
+
+  it('keeps new impact semantics deterministic while reduced motion suppresses camera shake', () => {
+    const animated = new EffectSystem({
+      particleLimit: 32,
+      damageNumberLimit: 8,
+      reducedMotion: false,
+    });
+    const reduced = new EffectSystem({
+      particleLimit: 32,
+      damageNumberLimit: 8,
+      reducedMotion: true,
+    });
+    const events = [{
+      type: 'enemy-killed' as const,
+      enemyId: 7,
+      kind: 'bubble-fin' as const,
+      x: 120,
+      y: 260,
+    }];
+
+    animated.consume(events, createFrameFixture());
+    reduced.consume(events, createFrameFixture());
+
+    expect(reduced.view.particles).toEqual(animated.view.particles);
+    expect(reduced.view.rings).toEqual(animated.view.rings);
+    expect(reduced.view.particles.filter((item) => item.kind === 'defeat-squash')).toHaveLength(1);
+    expect(reduced.view.particles.filter((item) => item.kind === 'ink-bubble')).toHaveLength(6);
+    expect(animated.view.camera.amplitude).toBeGreaterThan(0);
+    expect(reduced.view.camera).toMatchObject({ x: 0, y: 0, rotation: 0, amplitude: 0 });
+
+    animated.update(120);
+    reduced.update(120);
+    expect(reduced.view.particles).toEqual(animated.view.particles);
+    expect(reduced.view.particles.find((item) => item.kind === 'defeat-squash')!.progress)
+      .toBeGreaterThan(0);
+    expect(reduced.view.camera.amplitude).toBe(0);
+  });
+
+  it('clears pooled squash, ink and emphasized-ring state before reuse', () => {
+    const effects = new EffectSystem({
+      particleLimit: 32,
+      damageNumberLimit: 8,
+      impactLimit: 1,
+      reducedMotion: false,
+    });
+    effects.consume([{
+      type: 'enemy-killed',
+      enemyId: 11,
+      kind: 'deep-echo-boss',
+      x: 160,
+      y: 240,
+    }], createFrameFixture());
+    expect(effects.view.particles.filter((item) => item.kind === 'defeat-squash')).toHaveLength(1);
+    expect(effects.view.particles.filter((item) => item.kind === 'ink-bubble')).toHaveLength(14);
+    expect(effects.view.rings[0]!.secondaryColor).toBe('#17344c');
+
+    const createdParticles = effects.poolStats.particles.created;
+    const createdRings = effects.poolStats.rings.created;
+    effects.update(2000);
+    expect(effects.view.particles).toHaveLength(0);
+    expect(effects.view.rings).toHaveLength(0);
+
+    effects.consume([
+      {
+        type: 'weapon-fired',
+        projectileId: 3,
+        source: 'main',
+      },
+      {
+        type: 'projectile-hit',
+        enemyId: 1,
+        damage: 25,
+        critical: false,
+        source: 'main',
+      },
+    ], createFrameFixture());
+
+    expect(effects.poolStats.particles.created).toBe(createdParticles);
+    expect(effects.poolStats.rings.created).toBe(createdRings);
+    expect(effects.poolStats.particles.reused).toBeGreaterThanOrEqual(8);
+    expect(effects.poolStats.rings.reused).toBeGreaterThanOrEqual(1);
+    expect(effects.view.particles).toHaveLength(8);
+    expect(effects.view.particles.every((item) => (
+      item.kind === 'brush-smear' || item.kind === 'muzzle'
+    ))).toBe(true);
+    expect(effects.view.particles.every((item) => item.progress === 0)).toBe(true);
+    expect(effects.view.particles.some((item) => (
+      item.kind === 'defeat-squash'
+      || item.kind === 'ink-bubble'
+      || item.color === '#243f67'
+      || item.color === '#b9f6ff'
+    ))).toBe(false);
+    expect(effects.view.rings).toHaveLength(1);
+    expect(effects.view.rings[0]).toMatchObject({
+      color: '#fff2d2',
+      secondaryColor: undefined,
+    });
   });
 
   it('reuses expired effects and releases every active object on reset', () => {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { BattleRenderer } from '../../../web/battle/BattleRenderer';
-import { EffectSystem } from '../../../web/battle/EffectSystem';
+import type { EffectFrameView } from '../../../web/battle/EffectSystem';
 import { TrainMotionController } from '../../../web/battle/TrainMotionController';
 import type {
   BattleDrawCommand,
@@ -65,71 +65,157 @@ function pointPairs(command: LineDrawCommand): readonly (readonly number[])[] {
 }
 
 describe('BattleRenderer', () => {
-  it('draws matte hand-made combat impacts and dark emphasized ring lines', () => {
-    const effects = new EffectSystem({
-      particleLimit: 80,
-      damageNumberLimit: 8,
-      reducedMotion: false,
-    });
-    effects.consume([
-      {
-        type: 'projectile-hit',
-        enemyId: 1,
-        damage: 50,
+  it('draws exact matte impacts before emphasized rings and damage numbers', () => {
+    const effects: EffectFrameView = {
+      particles: [
+        {
+          id: 1,
+          kind: 'defeat-squash',
+          layer: 'front-effects',
+          x: 120,
+          y: 260,
+          size: 20,
+          color: '#315c70',
+          alpha: 0.72,
+          rotation: 0.25,
+          progress: 0.5,
+        },
+        {
+          id: 2,
+          kind: 'brush-smear',
+          layer: 'front-effects',
+          x: 140,
+          y: 280,
+          size: 10,
+          color: '#fff2d2',
+          alpha: 0.64,
+          rotation: 0.75,
+          progress: 0.25,
+        },
+        {
+          id: 3,
+          kind: 'ink-bubble',
+          layer: 'front-effects',
+          x: 160,
+          y: 300,
+          size: 6,
+          color: '#b9f6ff',
+          alpha: 0.56,
+          rotation: 0.5,
+          progress: 0.4,
+        },
+      ],
+      rings: [{
+        id: 4,
+        x: 180,
+        y: 320,
+        radius: 30,
+        color: '#fff2d2',
+        alpha: 0.48,
+        secondaryColor: '#17344c',
+      }],
+      damageNumbers: [{
+        id: 5,
+        x: 200,
+        y: 340,
+        value: 50,
         critical: true,
-        source: 'main',
-      },
-      {
-        type: 'enemy-killed',
-        enemyId: 1,
-        kind: 'bubble-fin',
-        x: 120,
-        y: 260,
-      },
-    ], createFrameFixture());
-    effects.update(120);
+        alpha: 0.4,
+      }],
+      camera: { x: 0, y: 0, rotation: 0, amplitude: 0 },
+      cinematic: { darken: 0, title: null, slowMotion: 0 },
+    };
 
-    const commands = renderCommands({ effects: effects.view });
+    const commands = renderCommands({ effects });
     const squash = findCommand<EllipseDrawCommand>(
       commands,
       (item) => item.kind === 'effect-defeat-squash',
     );
     expect(squash).toMatchObject({
+      x: 120,
+      y: 262.2,
+      radiusX: 29,
+      radiusY: 11,
       fill: '#315c70',
       stroke: '#17344c',
       lineWidth: 3,
+      alpha: 0.72,
       blendMode: 'source-over',
     });
-    expect(squash.radiusX).toBeGreaterThan(squash.radiusY);
 
     const smear = findCommand<EllipseDrawCommand>(
       commands,
       (item) => item.kind === 'effect-brush-smear',
     );
-    expect(smear.radiusX).toBeCloseTo(2.2 * (smear.radiusY / 0.42), 6);
-    expect(smear.blendMode).toBe('source-over');
+    expect(smear).toMatchObject({
+      x: 140,
+      y: 280,
+      radiusX: 22,
+      radiusY: 4.2,
+      rotation: 0.75,
+      alpha: 0.64,
+      blendMode: 'source-over',
+    });
 
     const bubble = findCommand<EllipseDrawCommand>(
       commands,
       (item) => item.kind === 'effect-ink-bubble',
     );
     expect(bubble).toMatchObject({
+      x: 160,
+      y: 300,
+      radiusX: 6,
+      radiusY: 6,
       stroke: '#17344c',
+      lineWidth: 1.5,
+      alpha: 0.56,
       blendMode: 'source-over',
     });
-    expect(bubble.radiusX).toBe(bubble.radiusY);
+    for (const command of [squash, smear, bubble]) {
+      expect(command.blendMode).toBe('source-over');
+      expect(command).not.toHaveProperty('shadowBlur');
+      expect(command).not.toHaveProperty('shadowColor');
+    }
 
-    const primaryRings = commands.filter(
-      (item): item is EllipseDrawCommand => item.kind === 'impact-ring',
+    const primaryRing = findCommand<EllipseDrawCommand>(
+      commands,
+      (item) => item.kind === 'impact-ring',
     );
-    expect(primaryRings.every((item) => (
-      item.stroke === '#fff2d2' && item.blendMode === 'source-over'
-    ))).toBe(true);
-    const secondaryRings = commands.filter(
-      (item): item is EllipseDrawCommand => item.kind === 'impact-ring-secondary',
+    expect(primaryRing).toMatchObject({
+      radiusX: 30,
+      stroke: '#fff2d2',
+      alpha: 0.48,
+      blendMode: 'source-over',
+    });
+    expect(primaryRing.radiusY).toBeCloseTo(21.6, 6);
+    const secondaryRing = findCommand<EllipseDrawCommand>(
+      commands,
+      (item) => item.kind === 'impact-ring-secondary',
     );
-    expect(secondaryRings).toHaveLength(2);
-    expect(secondaryRings.every((item) => item.stroke === '#17344c')).toBe(true);
+    expect(secondaryRing).toMatchObject({
+      radiusX: 27,
+      radiusY: 19.5,
+      stroke: '#17344c',
+      lineWidth: 1.5,
+      alpha: 0.48,
+      blendMode: 'source-over',
+    });
+
+    expect(commands.filter((item) => (
+      item.kind === 'effect-defeat-squash'
+      || item.kind === 'effect-brush-smear'
+      || item.kind === 'effect-ink-bubble'
+      || item.kind === 'impact-ring'
+      || item.kind === 'impact-ring-secondary'
+      || item.kind === 'damage-number'
+    )).map((item) => item.kind)).toEqual([
+      'effect-defeat-squash',
+      'effect-brush-smear',
+      'effect-ink-bubble',
+      'impact-ring',
+      'impact-ring-secondary',
+      'damage-number',
+    ]);
   });
 
   it('draws ordered hand-drawn background layers with adjacent repeats', () => {
