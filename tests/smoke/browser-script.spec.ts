@@ -12,5 +12,10 @@ describe('browser smoke script', () => {
     expect(source).toContain('430');
     expect(source).toContain('__TIDAL_TRAIN_E2E__');
     expect(source).toContain('timeoutMs: 45_000');
+    expect(source).toContain('inspectHandDrawnStation');
+    expect(source).toContain('data-station-layer');
+    expect(source).toContain('captain-greeting');
+    expect(source).toContain('background-foreground');
+    expect(source).toContain('data-ambient-event');
   });
 });

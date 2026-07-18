@@ -152,6 +152,192 @@ async function assertNoHorizontalOverflow(client, label) {
   );
 }
 
+function assertWarmOpaqueColor(color, label) {
+  const components = color.match(/[\d.]+/g)?.map(Number) ?? [];
+  assert.ok(components.length >= 3, `${label} must resolve to an RGB color`);
+  const [red, green, blue, alpha = 1] = components;
+  assert.ok(alpha > 0, `${label} must be non-transparent`);
+  assert.ok(
+    red >= blue + 10 && green >= blue,
+    `${label} must resolve to a warm paper color, received ${color}`,
+  );
+}
+
+async function inspectHandDrawnStation(client, label) {
+  const station = await evaluate(
+    client,
+    `(() => {
+      const ticket = document.querySelector('.station-ticket');
+      if (!(ticket instanceof HTMLElement)) {
+        throw new Error('station ticket is missing');
+      }
+      const ticketStyle = getComputedStyle(ticket);
+      return {
+        layerIds: [...document.querySelectorAll('[data-station-layer]')]
+          .map((node) => node.getAttribute('data-station-layer')),
+        ambientReady:
+          Boolean(document.querySelector('[data-ambient-role="mail-fish"]'))
+          && Boolean(document.querySelector('[data-ambient-role="distant-train"]')),
+        captainButtonSize: (() => {
+          const rect = document.querySelector('[data-action="captain-greeting"]')
+            ?.getBoundingClientRect();
+          return rect ? { width: rect.width, height: rect.height } : null;
+        })(),
+        ticketBackground: ticketStyle.backgroundColor,
+        backdropFilter: ticketStyle.backdropFilter,
+      };
+    })()`,
+  );
+
+  assert.deepEqual(
+    station.layerIds,
+    ['sky', 'horizon', 'platform', 'foreground'],
+    `${label} station layers must retain their exact authored order`,
+  );
+  assert.equal(station.ambientReady, true, `${label} ambient actors must exist`);
+  assert.ok(station.captainButtonSize, `${label} captain greeting target is missing`);
+  assert.ok(
+    station.captainButtonSize.width >= 44
+      && station.captainButtonSize.height >= 44,
+    `${label} captain greeting target must be at least 44x44 CSS pixels`,
+  );
+  assertWarmOpaqueColor(station.ticketBackground, `${label} ticket background`);
+  assert.equal(
+    station.backdropFilter,
+    'none',
+    `${label} ticket must be paper rather than glass`,
+  );
+
+  const clicked = await evaluate(
+    client,
+    `(() => {
+      const button = document.querySelector('[data-action="captain-greeting"]');
+      if (!(button instanceof HTMLButtonElement)) return false;
+      button.click();
+      return true;
+    })()`,
+  );
+  assert.equal(clicked, true, `${label} captain greeting must be clickable`);
+  await waitForEvaluation(
+    client,
+    `Boolean(document.querySelector(
+      '.station-hero[data-ambient-event="captain-greeting"]'
+    ))`,
+    { label: `${label} captain greeting event`, timeoutMs: 500 },
+  );
+  const greeting = await evaluate(
+    client,
+    `document.querySelector('[data-ambient-role="dialogue"][aria-live]')
+      ?.textContent?.trim() ?? ''`,
+  );
+  assert.match(greeting, /末班车/, `${label} greeting must remain in aria-live text`);
+  await waitForEvaluation(
+    client,
+    `!document.querySelector(
+      '.station-hero[data-ambient-event="captain-greeting"]'
+    )`,
+    { label: `${label} captain greeting completion`, timeoutMs: 2_000 },
+  );
+  assert.notEqual(
+    await evaluate(
+      client,
+      `document.querySelector('.station-hero')?.dataset.ambientEvent ?? null`,
+    ),
+    'captain-greeting',
+    `${label} greeting must be cleared before departure`,
+  );
+}
+
+async function setDisplaySettings(
+  client,
+  { qualityPreference, reducedMotion },
+  label,
+) {
+  assert.equal(
+    await evaluate(
+      client,
+      `(() => {
+        const button = document.querySelector('[data-action="open-settings"]');
+        if (!(button instanceof HTMLButtonElement)) return false;
+        button.click();
+        return true;
+      })()`,
+    ),
+    true,
+    `${label} settings button must be clickable`,
+  );
+  await waitForEvaluation(
+    client,
+    `Boolean(document.querySelector('[data-settings-panel]'))`,
+    { label: `${label} settings panel` },
+  );
+
+  if (qualityPreference != null) {
+    await evaluate(
+      client,
+      `(() => {
+        const select = document.querySelector(
+          'select[data-setting="qualityPreference"]'
+        );
+        if (!(select instanceof HTMLSelectElement)) return false;
+        if (select.value !== ${JSON.stringify(qualityPreference)}) {
+          select.value = ${JSON.stringify(qualityPreference)};
+          select.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+        return true;
+      })()`,
+    );
+    await waitForEvaluation(
+      client,
+      `document.querySelector('select[data-setting="qualityPreference"]')
+        ?.value === ${JSON.stringify(qualityPreference)}`,
+      { label: `${label} quality ${qualityPreference}` },
+    );
+  }
+
+  if (reducedMotion != null) {
+    await evaluate(
+      client,
+      `(() => {
+        const input = document.querySelector(
+          'input[data-setting="reducedMotion"]'
+        );
+        if (!(input instanceof HTMLInputElement)) return false;
+        if (input.checked !== ${Boolean(reducedMotion)}) {
+          input.checked = ${Boolean(reducedMotion)};
+          input.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+        return true;
+      })()`,
+    );
+    await waitForEvaluation(
+      client,
+      `document.querySelector('input[data-setting="reducedMotion"]')
+        ?.checked === ${Boolean(reducedMotion)}`,
+      { label: `${label} reduced motion ${Boolean(reducedMotion)}` },
+    );
+  }
+
+  assert.equal(
+    await evaluate(
+      client,
+      `(() => {
+        const button = document.querySelector('[data-action="close-settings"]');
+        if (!(button instanceof HTMLButtonElement)) return false;
+        button.click();
+        return true;
+      })()`,
+    ),
+    true,
+    `${label} settings close button must be clickable`,
+  );
+  await waitForEvaluation(
+    client,
+    `document.querySelector('#settings-host')?.hasAttribute('hidden') === true`,
+    { label: `${label} settings close` },
+  );
+}
+
 async function measureStationDeparturePose(client, label) {
   const measurement = await evaluate(
     client,
@@ -210,10 +396,39 @@ async function measureStationDeparturePose(client, label) {
         }
         await new Promise((resolve) => setTimeout(resolve, 20));
       }
-      await new Promise((resolve) => setTimeout(resolve, 350));
+      if (hero.dataset.ambientEvent === 'captain-greeting') {
+        throw new Error('captain greeting overlapped station departure');
+      }
+      const departureStartedAt = performance.now();
+      const choreographyDeadline = departureStartedAt + 1_000;
+      let during = readBoxes();
+      let sampleReady = false;
+      while (performance.now() < choreographyDeadline) {
+        await new Promise((resolve) => requestAnimationFrame(() => resolve()));
+        during = readBoxes();
+        const trainDisplacement = during.train.centerX - before.train.centerX;
+        const sharedRelativeDriftReady = ['captain', 'otter', 'jellyfish']
+          .every((role) => {
+            const drift = (during[role].centerX - during.train.centerX)
+              - (before[role].centerX - before.train.centerX);
+            return Number.isFinite(drift)
+              && Math.abs(drift) <= ${stationRelativeXTolerancePx};
+          });
+        if (trainDisplacement >= 12 && sharedRelativeDriftReady) {
+          sampleReady = true;
+          break;
+        }
+      }
+      if (!sampleReady) {
+        throw new Error(
+          'station departure did not reach measurable shared displacement '
+            + 'inside the 1200ms choreography safe window'
+        );
+      }
       return {
         before,
-        during: readBoxes(),
+        during,
+        sampleElapsedMs: performance.now() - departureStartedAt,
         departureState: hero.dataset.departureState ?? null,
         sameHero: hero.isConnected
           && document.querySelector('.station-hero') === hero,
@@ -253,6 +468,7 @@ async function measureStationDeparturePose(client, label) {
     vehicleRoles: measurement.vehicleRoles,
     departureState: measurement.departureState,
     tolerancePx: stationRelativeXTolerancePx,
+    sampleElapsedMs: rounded(measurement.sampleElapsedMs),
     displacementX: Object.fromEntries(Object.entries(displacementX).map(
       ([role, value]) => [role, rounded(value)],
     )),
@@ -264,6 +480,7 @@ async function measureStationDeparturePose(client, label) {
     `[smoke] ${label} station pose ${passed ? 'PASS' : 'FAIL'} - `
       + `displacementX=${JSON.stringify(result.displacementX)}; `
       + `relativeXDrift=${JSON.stringify(result.relativeXDrift)}; `
+      + `sampleElapsedMs=${result.sampleElapsedMs}; `
       + `tolerance=±${stationRelativeXTolerancePx}px; `
       + `sameHero=${measurement.sameHero}; `
       + `sharedVehicleAncestor=${measurement.sharedVehicleAncestor}; `
@@ -285,6 +502,250 @@ async function advanceBattle(client, durationMs) {
   await callHook(
     client,
     `hook.advanceBattle(${durationMs}); return hook.snapshot();`,
+  );
+}
+
+async function inspectBattleCanvas(client) {
+  return evaluate(
+    client,
+    `(() => {
+      const canvas = document.querySelector('[data-battle-canvas]');
+      if (!(canvas instanceof HTMLCanvasElement)) {
+        throw new Error('battle canvas is missing');
+      }
+      const context = canvas.getContext('2d');
+      if (!context) throw new Error('battle canvas context is missing');
+      const startY = Math.floor(canvas.height * 0.55);
+      const pixels = context.getImageData(
+        0,
+        startY,
+        canvas.width,
+        Math.max(1, canvas.height - startY),
+      ).data;
+      const colors = new Set();
+      let sampled = 0;
+      let opaque = 0;
+      for (let index = 0; index < pixels.length; index += 64) {
+        sampled += 1;
+        if (pixels[index + 3] > 0) opaque += 1;
+        colors.add(
+          (pixels[index] >> 4) + ':'
+            + (pixels[index + 1] >> 4) + ':'
+            + (pixels[index + 2] >> 4) + ':'
+            + (pixels[index + 3] >> 4)
+        );
+      }
+      return {
+        width: canvas.width,
+        height: canvas.height,
+        opaqueRatio: sampled > 0 ? opaque / sampled : 0,
+        colorBuckets: colors.size,
+      };
+    })()`,
+  );
+}
+
+async function assertLowQualityResilience(client, label) {
+  await setDisplaySettings(
+    client,
+    { qualityPreference: 'low', reducedMotion: false },
+    `${label} low quality`,
+  );
+  await waitForEvaluation(
+    client,
+    `document.querySelector('.station-hero')?.dataset.lowPerformance === 'true'`,
+    { label: `${label} low-performance station state` },
+  );
+  const station = await evaluate(
+    client,
+    `(() => {
+      const hero = document.querySelector('.station-hero');
+      const distant = document.querySelector('[data-ambient-role="distant-train"]');
+      const foreground = document.querySelector('[data-station-layer="foreground"]');
+      return {
+        lowPerformance: hero?.dataset.lowPerformance ?? null,
+        distantDisplay: distant ? getComputedStyle(distant).display : null,
+        foregroundDisplay: foreground ? getComputedStyle(foreground).display : null,
+      };
+    })()`,
+  );
+  assert.deepEqual(station, {
+    lowPerformance: 'true',
+    distantDisplay: 'none',
+    foregroundDisplay: 'none',
+  });
+
+  const baseline = await snapshot(client);
+  await startNormalBattle(client);
+  await waitForEvaluation(
+    client,
+    `${hookExpression}?.snapshot().diagnostics.qualityLevel === 'low'`,
+    { label: `${label} low battle quality` },
+  );
+
+  let enemySeen = false;
+  let defeatCueSeen = false;
+  for (let index = 0; index < 160; index += 1) {
+    const state = await snapshot(client);
+    const battle = state.battle;
+    assert.ok(battle, `${label} low-quality battle snapshot must exist`);
+    enemySeen ||= battle.enemies.some((enemy) => enemy.alive);
+    if (battle.kills > 0 && state.diagnostics.effects > 0) {
+      defeatCueSeen = true;
+      break;
+    }
+    if (battle.status === 'upgrade') {
+      await callHook(client, 'return hook.chooseFirstUpgrade();');
+    }
+    if (battle.status === 'defeat' || battle.status === 'victory') break;
+    await advanceBattle(client, 100);
+  }
+  const state = await snapshot(client);
+  assert.equal(state.diagnostics.qualityLevel, 'low');
+  assert.ok(state.trainMotion, `${label} low quality must retain the train`);
+  assert.equal(enemySeen, true, `${label} low quality must retain enemies`);
+  assert.equal(
+    defeatCueSeen,
+    true,
+    `${label} low quality must retain the pooled defeat cue`,
+  );
+  const canvas = await inspectBattleCanvas(client);
+  assert.ok(canvas.width > 0 && canvas.height > 0);
+  assert.ok(
+    canvas.opaqueRatio > 0.9 && canvas.colorBuckets > 8,
+    `${label} low quality must retain a painted track and readable battle canvas`,
+  );
+  // Detailed background-horizon/background-foreground command omission remains
+  // locked by BattleRenderer.spec.ts; browser smoke asserts the real low state.
+  const stateText = await evaluate(
+    client,
+    `[
+      document.querySelector('[data-hud-wave]')?.textContent?.trim(),
+      document.querySelector('[data-hud-hp-label]')?.textContent?.trim(),
+    ]`,
+  );
+  assert.ok(stateText.every(Boolean), `${label} low quality must retain state text`);
+  await returnToStation(client, baseline.diagnostics.activeListeners);
+  await setDisplaySettings(
+    client,
+    { qualityPreference: 'high', reducedMotion: false },
+    `${label} restore high quality`,
+  );
+}
+
+async function assertReducedMotionResilience(client, label) {
+  await setDisplaySettings(
+    client,
+    { qualityPreference: 'high', reducedMotion: true },
+    `${label} reduced motion`,
+  );
+  await waitForEvaluation(
+    client,
+    `document.querySelector('.station-hero')?.dataset.reducedMotion === 'true'`,
+    { label: `${label} reduced-motion station state` },
+  );
+  const greetingButton = await evaluate(
+    client,
+    `(() => {
+      const button = document.querySelector('[data-action="captain-greeting"]');
+      if (!(button instanceof HTMLButtonElement)) return false;
+      button.click();
+      return true;
+    })()`,
+  );
+  assert.equal(greetingButton, true);
+  await waitForEvaluation(
+    client,
+    `document.querySelector('[data-ambient-role="dialogue"]')
+      ?.textContent?.includes('末班车') === true`,
+    { label: `${label} reduced-motion state text`, timeoutMs: 500 },
+  );
+  const stationMotion = await evaluate(
+    client,
+    `(() => {
+      const selectors = [
+        '[data-station-layer="foreground"]',
+        '[data-ambient-role="distant-train"]',
+        '[data-motion-role="vehicle"]',
+      ];
+      return {
+        styles: selectors.map((selector) => {
+          const node = document.querySelector(selector);
+          const style = node ? getComputedStyle(node) : null;
+          return style ? {
+            animationName: style.animationName,
+            transform: style.transform,
+          } : null;
+        }),
+        stateText: document.querySelector('[data-ambient-role="dialogue"]')
+          ?.textContent?.trim() ?? '',
+      };
+    })()`,
+  );
+  assert.match(stationMotion.stateText, /末班车/);
+  assert.ok(
+    stationMotion.styles.every((style) => (
+      style?.animationName === 'none' && style.transform === 'none'
+    )),
+    `${label} reduced motion must disable continuous station drift`,
+  );
+  await waitForEvaluation(
+    client,
+    `!document.querySelector(
+      '.station-hero[data-ambient-event="captain-greeting"]'
+    )`,
+    { label: `${label} reduced greeting completion`, timeoutMs: 2_000 },
+  );
+
+  const baseline = await snapshot(client);
+  await startNormalBattle(client);
+  const before = requireTrainMotion((await snapshot(client)).trainMotion);
+  await advanceBattle(client, 500);
+  await callHook(client, `return hook.useSkill('tidal-volley');`);
+  await advanceBattle(client, 120);
+  const afterState = await snapshot(client);
+  const after = requireTrainMotion(afterState.trainMotion);
+  assert.notEqual(
+    after.laneOffset,
+    before.laneOffset,
+    `${label} reduced motion must retain route progress`,
+  );
+  assert.deepEqual(
+    {
+      offsetX: after.offsetX,
+      offsetY: after.offsetY,
+      rotation: after.rotation,
+      cannonRecoil: after.cannonRecoil,
+      surge: after.surge,
+      damagePulse: after.damagePulse,
+    },
+    {
+      offsetX: 0,
+      offsetY: 0,
+      rotation: 0,
+      cannonRecoil: 0,
+      surge: 0,
+      damagePulse: 0,
+    },
+    `${label} reduced motion must suppress drift, recoil and camera-driving motion`,
+  );
+  const stateText = await evaluate(
+    client,
+    `[
+      document.querySelector('[data-hud-wave]')?.textContent?.trim(),
+      document.querySelector('[data-hud-time]')?.textContent?.trim(),
+      document.querySelector('[data-hud-hp-label]')?.textContent?.trim(),
+    ]`,
+  );
+  assert.ok(
+    stateText.every(Boolean),
+    `${label} reduced motion must preserve battle state text`,
+  );
+  await returnToStation(client, baseline.diagnostics.activeListeners);
+  await setDisplaySettings(
+    client,
+    { qualityPreference: 'high', reducedMotion: false },
+    `${label} restore motion`,
   );
 }
 
@@ -688,6 +1149,11 @@ async function runViewport(client, viewport, smokeId, browserErrors) {
   await loadViewport(client, viewport, smokeId);
   await assertNoHorizontalOverflow(client, `${label} launch`);
   await exerciseScenes(client, label);
+  await inspectHandDrawnStation(client, label);
+  if (viewport.full) {
+    await assertLowQualityResilience(client, label);
+    await assertReducedMotionResilience(client, label);
+  }
   const stationPose = await measureStationDeparturePose(client, label);
 
   let detail;

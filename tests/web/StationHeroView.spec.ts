@@ -388,6 +388,7 @@ describe('StationHeroView', () => {
       stationCss,
       '.station-hero[data-low-performance="true"] .station-layer--foreground',
     );
+    expect(foregroundRule).toContain('display: none;');
     expect(foregroundRule).toContain('animation: none;');
     expect(foregroundRule).toContain('transform: none;');
   });

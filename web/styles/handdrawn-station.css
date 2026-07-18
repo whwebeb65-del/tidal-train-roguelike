@@ -546,6 +546,7 @@
 }
 
 .station-hero[data-low-performance="true"] .station-layer--foreground {
+  display: none;
   animation: none;
   transform: none;
 }
