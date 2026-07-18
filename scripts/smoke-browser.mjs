@@ -167,6 +167,42 @@ async function advanceBattle(client, durationMs) {
   );
 }
 
+function requireTrainMotion(motion) {
+  assert.ok(motion, 'battle must expose train motion');
+  return motion;
+}
+
+function motionPose(motion) {
+  const trainMotion = requireTrainMotion(motion);
+  return {
+    motionTimeMs: trainMotion.motionTimeMs,
+    laneOffset: trainMotion.laneOffset,
+    offsetX: trainMotion.offsetX,
+    offsetY: trainMotion.offsetY,
+    rotation: trainMotion.rotation,
+  };
+}
+
+async function assertTravelMotion(client) {
+  const before = requireTrainMotion((await snapshot(client)).trainMotion);
+  await advanceBattle(client, 500);
+  const after = requireTrainMotion((await snapshot(client)).trainMotion);
+  assert.notEqual(
+    after.laneOffset,
+    before.laneOffset,
+    'train lane offset should advance after 500 ms',
+  );
+  assert.ok(after.speed >= 0.95, 'train cruise speed should be at least 0.95');
+  assert.ok(
+    Number.isFinite(after.offsetX) && Number.isFinite(after.offsetY),
+    'train offsets should remain finite',
+  );
+  assert.ok(
+    after.phase === 'cruise' || after.phase === 'elite',
+    `initial train phase should be cruise or elite, received ${after.phase}`,
+  );
+}
+
 async function probeAutomaticFire(client) {
   let maxProjectiles = 0;
   let maxKills = 0;
@@ -191,7 +227,17 @@ async function probeAutomaticFire(client) {
 
 async function exercisePauseAndSkills(client) {
   await callHook(client, 'hook.requestPause(); return hook.snapshot();');
-  assert.equal((await snapshot(client)).battle?.status, 'paused');
+  const pausedBefore = await snapshot(client);
+  assert.equal(pausedBefore.battle?.status, 'paused');
+  const pausedPose = motionPose(pausedBefore.trainMotion);
+  await advanceBattle(client, 500);
+  const pausedAfter = await snapshot(client);
+  assert.equal(pausedAfter.battle?.status, 'paused');
+  assert.deepEqual(
+    motionPose(pausedAfter.trainMotion),
+    pausedPose,
+    'paused train motion must not advance or catch up',
+  );
   await callHook(client, 'await hook.requestResume(); return true;');
   assert.equal((await snapshot(client)).battle?.status, 'running');
 
@@ -216,6 +262,7 @@ async function exercisePauseAndSkills(client) {
 
 function assertDisposedBattle(state, listenerBaseline) {
   assert.equal(state.battle, null, 'battle snapshot must be released');
+  assert.equal(state.trainMotion, null, 'station return must release train motion');
   assert.equal(state.diagnostics.activeFrameLoops, 0);
   assert.equal(state.diagnostics.activeListeners, listenerBaseline);
   assert.ok(state.diagnostics.activeAudioSchedulers <= 1);
@@ -242,6 +289,7 @@ async function returnToStation(client, listenerBaseline) {
 async function runBriefBattle(client, label) {
   const baseline = await snapshot(client);
   await startNormalBattle(client);
+  await assertTravelMotion(client);
   const fire = await probeAutomaticFire(client);
   const skills = await exercisePauseAndSkills(client);
   await assertNoHorizontalOverflow(client, `${label} battle`);
@@ -310,6 +358,7 @@ async function finishFullBattle(client, { claimSalvage }) {
   const listenerBaseline = before.diagnostics.activeListeners;
   const settlementBaseline = before.settlementCount;
   await startNormalBattle(client);
+  await assertTravelMotion(client);
   const fire = await probeAutomaticFire(client);
   const initialSkills = await exercisePauseAndSkills(client);
 
@@ -317,6 +366,8 @@ async function finishFullBattle(client, { claimSalvage }) {
   let normalKillSeen = fire.maxKills > 0;
   let eliteSeen = false;
   let bossIntroSeen = false;
+  let bossMotionSeen = false;
+  let maxTrainSpeed = 0;
   let extremeTideUsed = false;
   let salvageClaimed = false;
   let reviveUsed = false;
@@ -327,6 +378,9 @@ async function finishFullBattle(client, { claimSalvage }) {
     let state = await snapshot(client);
     const battle = state.battle;
     assert.ok(battle, 'full battle must retain a battle snapshot');
+    const trainMotion = requireTrainMotion(state.trainMotion);
+    maxTrainSpeed = Math.max(maxTrainSpeed, trainMotion.speed);
+    bossMotionSeen ||= trainMotion.phase === 'boss';
     normalKillSeen ||= battle.kills > 0;
     eliteSeen ||= battle.enemies.some(
       (enemy) => enemy.kind === 'storm-ray-elite',
@@ -423,6 +477,11 @@ async function finishFullBattle(client, { claimSalvage }) {
   assert.ok(
     bossIntroSeen,
     `full battle should reach the boss intro (${terminalDetail})`,
+  );
+  assert.ok(bossMotionSeen, 'full battle should enter the boss motion phase');
+  assert.ok(
+    maxTrainSpeed >= 1.18,
+    `full battle should reach boss train speed >= 1.18, received ${maxTrainSpeed}`,
   );
   assert.ok(upgrades >= 3, `expected 3 upgrades, received ${upgrades}`);
   assert.ok(

@@ -41,15 +41,18 @@ function createController(): BattleE2EController {
 }
 
 describe('BattleE2EHooks', () => {
-  it('does not expose hooks on ordinary URLs', () => {
-    const target = {
-      location: { search: '' },
-      __TIDAL_TRAIN_E2E__: undefined as TidalTrainE2EHooks | undefined,
-    };
+  it.each(['', '?e2e=0', '?e2e=true', '?mode=e2e%3D1'])(
+    'does not expose hooks without the exact e2e=1 gate (%s)',
+    (search) => {
+      const target = {
+        location: { search },
+        __TIDAL_TRAIN_E2E__: undefined as TidalTrainE2EHooks | undefined,
+      };
 
-    expect(installBattleE2EHooks(target, createController())).toBe(false);
-    expect(target.__TIDAL_TRAIN_E2E__).toBeUndefined();
-  });
+      expect(installBattleE2EHooks(target, createController())).toBe(false);
+      expect(target.__TIDAL_TRAIN_E2E__).toBeUndefined();
+    },
+  );
 
   it('installs bounded controls only for e2e=1 and removes them cleanly', async () => {
     const controller = createController();
