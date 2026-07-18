@@ -140,7 +140,7 @@ describe('AudioManager', () => {
 
     audio.setTrainMotion({ active: true, speed: -4, power: 9 });
     audio.update(0);
-    audio.setTrainMotion({ active: false, speed: 99, power: -2 });
+    audio.setTrainMotion({ active: true, speed: 99, power: -2 });
     audio.update(125);
 
     expect(backend.continuousTones[0]?.instruction).toMatchObject({
@@ -152,6 +152,17 @@ describe('AudioManager', () => {
       frequencyHz: 79,
       gain: 0,
       filterHz: 510,
+    });
+
+    audio.setTrainMotion({ active: false, speed: 99, power: -2 });
+    expect(backend.continuousToneState('train-engine')).toEqual({
+      active: false,
+      gain: 0,
+    });
+    audio.update(250);
+    expect(backend.continuousTones.at(-1)).toEqual({
+      id: 'train-engine',
+      instruction: null,
     });
   });
 

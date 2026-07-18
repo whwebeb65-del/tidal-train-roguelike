@@ -15,6 +15,10 @@ export class RecordingAudioBackend implements AudioBackend {
     readonly id: string;
     readonly instruction: ContinuousToneInstruction | null;
   }[] = [];
+  private readonly activeContinuousTones = new Map<
+    string,
+    ContinuousToneInstruction
+  >();
   public readonly lifecycle: string[] = [];
   public readonly busGains: {
     readonly bus: AudioBus;
@@ -47,7 +51,20 @@ export class RecordingAudioBackend implements AudioBackend {
       id,
       instruction: instruction ? { ...instruction } : null,
     });
+    if (instruction) this.activeContinuousTones.set(id, { ...instruction });
+    else this.activeContinuousTones.delete(id);
     this.lifecycle.push(`continuous:${id}:${instruction ? 'set' : 'stop'}`);
+  }
+
+  public continuousToneState(id: string): {
+    readonly active: boolean;
+    readonly gain: number;
+  } {
+    const instruction = this.activeContinuousTones.get(id);
+    return {
+      active: instruction !== undefined,
+      gain: instruction?.gain ?? 0,
+    };
   }
 
   public setBusGain(

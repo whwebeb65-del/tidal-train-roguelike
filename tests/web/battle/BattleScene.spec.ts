@@ -1,4 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
+import { AudioManager } from '../../../web/audio/AudioManager';
+import { FIXED_STEP_MS } from '../../../web/battle/BattleConfig';
 import type {
   BattleEvent,
   BattleFrameView,
@@ -19,6 +21,7 @@ import {
   createFrameFixture,
   createTrainMotionFixture,
 } from './helpers/BattleFixtures';
+import { RecordingAudioBackend } from '../audio/helpers/RecordingAudioBackend';
 
 class ManualFrameScheduler implements FrameScheduler {
   private nextId = 1;
@@ -54,6 +57,7 @@ interface TestEngine extends BattleEnginePort {
   updateCalls: number;
   events: BattleEvent[];
   setOutcome(next: BattleEnginePort['outcome']): void;
+  setFrame(next: BattleFrameView): void;
 }
 
 function createEngine(
@@ -89,6 +93,9 @@ function createEngine(
     },
     setOutcome(next: BattleEnginePort['outcome']) {
       outcome = next;
+    },
+    setFrame(next: BattleFrameView) {
+      frame = next;
     },
   };
 }
@@ -434,6 +441,61 @@ describe('BattleScene', () => {
       expect(setTrainMotion).toHaveBeenLastCalledWith(terminal.expected);
       scene.unmount();
     }
+  });
+
+  it('stops real propulsion at the exact 900 ms defeat endpoint', () => {
+    const scheduler = new ManualFrameScheduler();
+    const engine = createEngine();
+    const backend = new RecordingAudioBackend();
+    const sound = new AudioManager(backend);
+    let defeatStarted = false;
+    engine.update = () => {
+      engine.updateCalls += 1;
+      if (defeatStarted) return;
+      defeatStarted = true;
+      engine.setFrame(createFrameFixture({ status: 'defeat' }));
+    };
+    const { host } = createHost();
+    const scene = new BattleScene({
+      engine,
+      effects: {
+        view: EMPTY_EFFECT_FRAME_VIEW,
+        consume: vi.fn(),
+        update: vi.fn(),
+        reset: vi.fn(),
+      },
+      assets: { failedIds: [], get: () => null },
+      callbacks: createCallbacks(),
+      createRenderer: () => ({ render: vi.fn() }),
+      createHud: () => ({
+        mount: vi.fn(), update: vi.fn(), dispose: vi.fn(),
+      }),
+      sound,
+      scheduler,
+      captainArtId: 'captainFemaleBase',
+      reducedMotion: false,
+      eventTarget: new EventTarget(),
+      getDevicePixelRatio: () => 1,
+    });
+
+    scene.mount(host);
+    scheduler.fire(0);
+    for (let frame = 1; frame <= 54; frame += 1) {
+      scheduler.fire(frame * FIXED_STEP_MS + 0.000001);
+    }
+
+    const terminalMotion = scene.snapshotTrainMotion();
+    expect(terminalMotion).toMatchObject({
+      phase: 'defeat',
+      speed: 0,
+      engineGlow: 0,
+    });
+    expect(terminalMotion.motionTimeMs).toBeCloseTo(900, 8);
+    expect(backend.continuousToneState('train-engine')).toEqual({
+      active: false,
+      gain: 0,
+    });
+    scene.unmount();
   });
 
   it('settles a victory event only once', () => {

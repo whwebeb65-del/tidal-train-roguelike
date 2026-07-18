@@ -100,11 +100,15 @@ export class AudioManager implements BattleSoundPort {
   }
 
   public setTrainMotion(state: TrainMotionSoundState): void {
+    const wasActive = this.trainMotion?.active === true;
     this.trainMotion = {
       active: state.active,
       speed: clamp(state.speed, 0, TRAIN_SPEED_MAX),
       power: clamp(state.power, 0, 1),
     };
+    if (!this.closed && wasActive && !this.trainMotion.active) {
+      this.backend.setContinuousTone('train-engine', null);
+    }
   }
 
   public consume(
@@ -212,11 +216,15 @@ export class AudioManager implements BattleSoundPort {
     }
     this.lastTrainMotionUpdateMs = nowMs;
     const { active, speed, power } = this.trainMotion;
+    if (!active) {
+      this.backend.setContinuousTone('train-engine', null);
+      return;
+    }
     this.backend.setContinuousTone('train-engine', {
       bus: 'sfx',
       waveform: 'triangle',
       frequencyHz: 46 + speed * 22,
-      gain: active ? (0.018 + speed * 0.018) * power : 0,
+      gain: (0.018 + speed * 0.018) * power,
       filterHz: 180 + speed * 220,
       rampSeconds: 0.12,
     });
