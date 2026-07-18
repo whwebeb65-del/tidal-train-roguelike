@@ -30,40 +30,94 @@
     align-items: center;
     flex-direction: row;
     justify-content: space-between;
+    gap: 6px;
     min-height: 68px;
+    padding-inline: 8px;
   }
 
   .brand small { display: none; }
-  .brand strong { max-width: 108px; }
+  .brand {
+    flex: 0 0 auto;
+    gap: 6px;
+  }
+  .brand-mark {
+    width: 34px;
+    height: 34px;
+  }
+  .brand strong {
+    width: max-content;
+    max-width: none;
+    overflow: visible;
+    font-size: 13px;
+    text-overflow: clip;
+    white-space: nowrap;
+  }
   .currencies {
+    flex: 1 1 auto;
     justify-content: flex-end;
+    min-width: 0;
     max-width: none;
     flex-wrap: nowrap;
-    gap: 4px;
+    gap: 2px;
   }
-  .currency { padding-inline: 8px; }
+  .currency {
+    gap: 3px;
+    min-width: 34px;
+    padding-inline: 5px;
+  }
   .currency span { display: none; }
+  .app-shell__reset,
+  .app-shell__settings {
+    flex: 0 0 34px;
+    width: 34px;
+    min-height: 32px;
+    padding: 4px 2px;
+    font-size: 9px;
+  }
 
   main { padding-inline: 12px; }
 
   .station-hero {
-    min-height: 620px;
+    min-height: 680px;
     border-radius: 20px;
   }
 
   .station-ticket {
-    top: 14px;
+    top: 10px;
     right: 12px;
     left: 12px;
     width: auto;
-    padding: 14px;
+    padding: 10px 12px;
   }
 
-  .station-ticket h1 { font-size: 30px; }
-  .station-hero__train { right: -8%; bottom: 2%; width: 96%; }
-  .station-hero__captain-button { left: 2%; width: 41%; }
-  .station-hero__otter { left: 34%; width: 20%; }
-  .station-hero__jellyfish { top: 43%; right: 5%; width: 18%; }
+  .station-ticket__stamp {
+    padding: 2px 6px;
+    font-size: 10px;
+  }
+  .station-ticket h1 {
+    margin: 4px 0 2px;
+    font-size: 24px;
+    font-weight: 800;
+    letter-spacing: -.03em;
+  }
+  .station-ticket p {
+    font-size: 12px;
+    line-height: 1.25;
+  }
+  .station-ticket__facts {
+    margin: 7px 0 8px;
+    font-size: 11px;
+  }
+  .station-departure {
+    min-width: 176px;
+    min-height: 44px;
+    padding-inline: 18px;
+    font-size: 14px;
+  }
+  .station-hero__train { right: -7%; bottom: 1%; width: 88%; }
+  .station-hero__captain-button { left: 2%; bottom: 4%; width: 54%; }
+  .station-hero__otter { left: 41%; width: 18%; }
+  .station-hero__jellyfish { top: 41%; right: 5%; width: 17%; }
 
   .captain-choice-grid {
     grid-template-columns: 1fr;

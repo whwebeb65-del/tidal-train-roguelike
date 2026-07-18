@@ -17,5 +17,9 @@ describe('browser smoke script', () => {
     expect(source).toContain('captain-greeting');
     expect(source).toContain('background-foreground');
     expect(source).toContain('data-ambient-event');
+    expect(source).toContain('assertMobileReadingSafety');
+    expect(source).toContain('visibleRouteContent');
+    expect(source).toContain('brandTextFullyVisible');
+    expect(source).toContain('captainProminence');
   });
 });

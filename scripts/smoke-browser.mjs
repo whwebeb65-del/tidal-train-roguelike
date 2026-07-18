@@ -152,6 +152,184 @@ async function assertNoHorizontalOverflow(client, label) {
   );
 }
 
+async function inspectSafeReadingTarget(client, selector, index) {
+  return evaluate(
+    client,
+    `(async () => {
+      const targets = [...document.querySelectorAll(${JSON.stringify(selector)})];
+      const target = targets[${index}] ?? null;
+      if (!(target instanceof HTMLElement)) {
+        throw new Error('route reading target is missing');
+      }
+      target.scrollIntoView({ block: 'center', inline: 'nearest' });
+      await new Promise((resolve) => requestAnimationFrame(() => (
+        requestAnimationFrame(() => resolve())
+      )));
+      const rect = target.getBoundingClientRect();
+      const notice = document.querySelector('.app-notice.is-visible');
+      const nav = document.querySelector('.app-hub-nav:not([hidden])');
+      const topbar = document.querySelector('.app-topbar');
+      const noticeRect = notice?.getBoundingClientRect() ?? null;
+      const navRect = nav?.getBoundingClientRect() ?? null;
+      const topbarRect = topbar?.getBoundingClientRect() ?? null;
+      const safeTop = Math.max(
+        0,
+        topbarRect?.bottom ?? 0,
+        noticeRect?.bottom ?? 0,
+      ) + 8;
+      const safeBottom = Math.min(
+        innerHeight,
+        navRect?.top ?? innerHeight,
+      ) - 8;
+      const overlaps = (first, second) => first && second
+        && first.left < second.right
+        && first.right > second.left
+        && first.top < second.bottom
+        && first.bottom > second.top;
+      return {
+        text: target.textContent?.trim() ?? '',
+        top: rect.top,
+        bottom: rect.bottom,
+        safeTop,
+        safeBottom,
+        overlapsNotice: overlaps(rect, noticeRect),
+        overlapsNav: overlaps(rect, navRect),
+        fullyReadable: rect.top >= safeTop
+          && rect.bottom <= safeBottom
+          && !overlaps(rect, noticeRect)
+          && !overlaps(rect, navRect),
+      };
+    })()`,
+  );
+}
+
+async function assertMobileReadingSafety(client, label) {
+  const shellAndHierarchy = await evaluate(
+    client,
+    `(() => {
+      const rect = (selector) => {
+        const node = document.querySelector(selector);
+        if (!(node instanceof HTMLElement)) return null;
+        const box = node.getBoundingClientRect();
+        return {
+          top: box.top,
+          right: box.right,
+          bottom: box.bottom,
+          left: box.left,
+          width: box.width,
+          height: box.height,
+        };
+      };
+      const brand = document.querySelector('.brand strong');
+      const reset = document.querySelector('[data-action="reset-save"]');
+      const settings = document.querySelector('[data-action="open-settings"]');
+      const title = document.querySelector('.station-ticket h1');
+      const captain = rect('[data-action="captain-greeting"]');
+      const train = rect('[data-motion-role="train"]');
+      const ticket = rect('.station-ticket');
+      const departure = rect('[data-action="start-run"]');
+      if (
+        !(brand instanceof HTMLElement)
+        || !(reset instanceof HTMLButtonElement)
+        || !(settings instanceof HTMLButtonElement)
+        || !(title instanceof HTMLElement)
+        || !captain
+        || !train
+        || !ticket
+        || !departure
+      ) {
+        throw new Error('mobile shell or station hierarchy nodes are missing');
+      }
+      const brandBox = brand.getBoundingClientRect();
+      const resetBox = reset.getBoundingClientRect();
+      const settingsBox = settings.getBoundingClientRect();
+      const brandTextFullyVisible = brand.textContent?.trim() === '最后一班'
+        && brand.scrollWidth <= brand.clientWidth + 1
+        && brandBox.left >= 0
+        && brandBox.right <= innerWidth;
+      const controlsUsable = [resetBox, settingsBox].every((box) => (
+        box.width >= 32
+        && box.height >= 32
+        && box.left >= 0
+        && box.right <= innerWidth
+      ));
+      const captainProminence = captain.height > train.height
+        && captain.top < train.top
+        && train.width > departure.width
+        && ticket.height <= 190
+        && Number.parseFloat(getComputedStyle(title).fontSize) <= 26
+        && ticket.bottom + 8 <= captain.top;
+      return {
+        brandTextFullyVisible,
+        controlsUsable,
+        captainProminence,
+        brandText: brand.textContent?.trim() ?? '',
+        titleFontSize: getComputedStyle(title).fontSize,
+        captain,
+        train,
+        ticket,
+        departure,
+      };
+    })()`,
+  );
+  assert.equal(
+    shellAndHierarchy.brandTextFullyVisible,
+    true,
+    `${label} must show the full 最后一班 brand`,
+  );
+  assert.equal(
+    shellAndHierarchy.controlsUsable,
+    true,
+    `${label} reset and settings controls must remain usable`,
+  );
+  assert.equal(
+    shellAndHierarchy.captainProminence,
+    true,
+    `${label} hierarchy must be captain, train, then departure without overlap: `
+      + JSON.stringify(shellAndHierarchy),
+  );
+
+  await evaluate(client, 'scrollTo({ top: 0, behavior: "instant" }); true;');
+
+  const routeButtonClicked = await evaluate(
+    client,
+    `(() => {
+      const button = document.querySelector('[data-action="select-map"]');
+      if (!(button instanceof HTMLButtonElement)) return false;
+      button.click();
+      return true;
+    })()`,
+  );
+  assert.equal(routeButtonClicked, true, `${label} route selection must be available`);
+  await waitForEvaluation(
+    client,
+    `document.querySelector('.app-notice')?.classList.contains('is-visible')
+      === true`,
+    { label: `${label} visible route notice` },
+  );
+
+  for (const [selector, index] of [
+    ['.section-title', 0],
+    ['.map-card', 0],
+    ['.map-card', 3],
+  ]) {
+    const visibleRouteContent = await inspectSafeReadingTarget(client, selector, index);
+    assert.equal(
+      visibleRouteContent.overlapsNotice || visibleRouteContent.overlapsNav,
+      false,
+      `${label} current visible route content must not overlap notice/nav: `
+        + JSON.stringify(visibleRouteContent),
+    );
+    assert.equal(
+      visibleRouteContent.fullyReadable,
+      true,
+      `${label} route content must scroll fully into the mobile safe area: `
+        + JSON.stringify(visibleRouteContent),
+    );
+  }
+  await evaluate(client, 'scrollTo({ top: 0, behavior: "instant" }); true;');
+}
+
 function assertWarmOpaqueColor(color, label) {
   const components = color.match(/[\d.]+/g)?.map(Number) ?? [];
   assert.ok(components.length >= 3, `${label} must resolve to an RGB color`);
@@ -1149,6 +1327,7 @@ async function runViewport(client, viewport, smokeId, browserErrors) {
   await loadViewport(client, viewport, smokeId);
   await assertNoHorizontalOverflow(client, `${label} launch`);
   await exerciseScenes(client, label);
+  await assertMobileReadingSafety(client, label);
   await inspectHandDrawnStation(client, label);
   if (viewport.full) {
     await assertLowQualityResilience(client, label);

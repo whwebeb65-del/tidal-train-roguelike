@@ -19,6 +19,10 @@
   overflow: clip;
 }
 
+.scene-viewport:has(.app-notice.is-visible) {
+  padding-top: 82px;
+}
+
 .scene-host {
   position: relative;
   min-height: calc(100dvh - 184px);
@@ -72,20 +76,23 @@
 }
 
 .app-notice {
-  position: sticky;
+  position: fixed;
   z-index: 35;
-  bottom: calc(86px + env(safe-area-inset-bottom));
-  width: min(620px, 100%);
-  margin: 14px auto 0;
+  top: calc(68px + env(safe-area-inset-top));
+  right: auto;
+  bottom: auto;
+  left: 50%;
+  width: min(620px, calc(100% - 24px));
+  margin: 8px auto 0;
   opacity: 0;
   pointer-events: none;
-  transform: translateY(8px);
+  transform: translate(-50%, -8px);
   transition: opacity 180ms ease, transform 180ms ease;
 }
 
 .app-notice.is-visible {
   opacity: 1;
-  transform: translateY(0);
+  transform: translate(-50%, 0);
 }
 
 .app-hub-nav {
@@ -122,5 +129,10 @@
 
   .scene-viewport {
     padding: 16px 12px;
+    padding-bottom: calc(150px + env(safe-area-inset-bottom));
+  }
+
+  .scene-viewport:has(.app-notice.is-visible) {
+    padding-top: 72px;
   }
 }

@@ -65,6 +65,34 @@ function pointPairs(command: LineDrawCommand): readonly (readonly number[])[] {
 }
 
 describe('BattleRenderer', () => {
+  it.each([
+    ['bubble-fin', 78, 78],
+    ['needle-jelly', 72, 84],
+    ['reef-crab', 84, 72],
+  ] as const)(
+    'keeps the ordinary %s enemy readable at mobile gameplay scale',
+    (kind, minimumWidth, minimumHeight) => {
+      const baseEnemy = createFrameFixture().enemies[0];
+      expect(baseEnemy).toBeDefined();
+      const commands = renderCommands({
+        frame: {
+          enemies: [{
+            ...baseEnemy!,
+            kind,
+            alive: true,
+          }],
+        },
+      });
+      const enemy = findCommand<ImageDrawCommand>(
+        commands,
+        (item) => item.kind === 'enemy' && item.enemyKind === kind,
+      );
+
+      expect(enemy.width).toBeGreaterThanOrEqual(minimumWidth);
+      expect(enemy.height).toBeGreaterThanOrEqual(minimumHeight);
+    },
+  );
+
   it('draws exact matte impacts before emphasized rings and damage numbers', () => {
     const effects: EffectFrameView = {
       particles: [

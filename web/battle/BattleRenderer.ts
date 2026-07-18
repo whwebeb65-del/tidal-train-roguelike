@@ -51,9 +51,9 @@ const ENEMY_SIZE: Readonly<Record<EnemyKind, {
   readonly height: number;
   readonly fallback: string;
 }>> = {
-  'bubble-fin': { width: 62, height: 62, fallback: '#7bd4de' },
-  'needle-jelly': { width: 54, height: 66, fallback: '#77cbe9' },
-  'reef-crab': { width: 68, height: 58, fallback: '#77cbd2' },
+  'bubble-fin': { width: 78, height: 78, fallback: '#7bd4de' },
+  'needle-jelly': { width: 72, height: 84, fallback: '#77cbe9' },
+  'reef-crab': { width: 84, height: 72, fallback: '#77cbd2' },
   'storm-ray-elite': { width: 158, height: 114, fallback: '#516ec7' },
   'deep-echo-boss': { width: 238, height: 178, fallback: '#304f9a' },
 };

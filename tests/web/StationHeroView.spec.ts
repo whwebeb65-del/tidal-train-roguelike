@@ -399,11 +399,18 @@ describe('StationHeroView', () => {
     expect(ticketRule).toContain('left: 12px;');
     expect(ticketRule).toContain('right: 12px;');
     expect(ticketRule).toContain('width: auto;');
-    expect(mobileCss).toMatch(
-      /\.station-hero__captain-button\s*\{[^}]*width:\s*(?:39|40|41|42|43)%/s,
+    expect(ticketRule).toContain('padding: 10px 12px;');
+    expect(extractCssBlock(mobileCss, '.station-ticket h1')).toContain(
+      'font-size: 24px;',
+    );
+    expect(extractCssBlock(mobileCss, '.station-ticket__facts')).toContain(
+      'margin: 7px 0 8px;',
     );
     expect(mobileCss).toMatch(
-      /\.station-hero__train\s*\{[^}]*bottom:[^;}]+;[^}]*width:\s*(?:9\d|100)%/s,
+      /\.station-hero__captain-button\s*\{[^}]*bottom:\s*4%;[^}]*width:\s*54%/s,
+    );
+    expect(mobileCss).toMatch(
+      /\.station-hero__train\s*\{[^}]*bottom:\s*1%;[^}]*width:\s*88%/s,
     );
   });
 });
