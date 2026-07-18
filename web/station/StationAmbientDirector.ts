@@ -87,7 +87,7 @@ export class StationAmbientDirector implements StationAmbientController {
   public start(): void {
     if (this.disposed || this.started) return;
     this.started = true;
-    this.schedule(firstDelay(this.random));
+    this.schedule(firstDelay);
   }
 
   public pause(): void {
@@ -99,7 +99,7 @@ export class StationAmbientDirector implements StationAmbientController {
   public resume(): void {
     if (this.disposed || !this.paused) return;
     this.paused = false;
-    if (this.started) this.schedule(firstDelay(this.random));
+    if (this.started) this.schedule(firstDelay);
   }
 
   public setReducedMotion(reducedMotion: boolean): void {
@@ -115,7 +115,7 @@ export class StationAmbientDirector implements StationAmbientController {
     }
 
     if (this.started && !this.paused) {
-      this.schedule(firstDelay(this.random));
+      this.schedule(firstDelay);
     }
   }
 
@@ -135,7 +135,7 @@ export class StationAmbientDirector implements StationAmbientController {
     this.clearTimersAndPresentation();
   }
 
-  private schedule(delayMs: number): void {
+  private schedule(delay: (random: () => number) => number): void {
     if (
       this.disposed ||
       this.paused ||
@@ -145,6 +145,7 @@ export class StationAmbientDirector implements StationAmbientController {
       return;
     }
 
+    const delayMs = delay(this.random);
     let timerId!: ReturnType<typeof setTimeout>;
     timerId = this.timer.set(() => {
       if (this.timerId !== timerId) return;
@@ -194,7 +195,7 @@ export class StationAmbientDirector implements StationAmbientController {
       this.activeTimerId = null;
       this.activeEventId = null;
       delete this.root.dataset.ambientEvent;
-      this.schedule(nextDelay(this.random));
+      this.schedule(nextDelay);
     }, durationMs);
     this.activeTimerId = timerId;
   }

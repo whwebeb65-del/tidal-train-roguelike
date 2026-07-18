@@ -157,6 +157,41 @@ describe('StationAmbientDirector', () => {
     expect(fixture.lines.at(-1)).toContain('末班车');
   });
 
+  it('preserves the random sequence when start is suppressed by reduced motion', () => {
+    const fixture = createFixture([0.25, 0.75], true);
+
+    fixture.director.start();
+    expect(fixture.timer.delays).toEqual([]);
+    expect(fixture.timer.pendingCount).toBe(0);
+
+    fixture.director.setReducedMotion(false);
+    expect(fixture.timer.delays).toEqual([2500]);
+    expect(fixture.timer.pendingCount).toBe(1);
+
+    fixture.timer.fireNext();
+    expect(fixture.root.dataset.ambientEvent).toBe('distant-train');
+    expect(fixture.events).toEqual(['distant-train']);
+  });
+
+  it('preserves the random sequence when resume is suppressed by reduced motion', () => {
+    const fixture = createFixture([0.5, 0.25, 0.75]);
+    fixture.director.start();
+    fixture.director.pause();
+    fixture.director.setReducedMotion(true);
+
+    fixture.director.resume();
+    expect(fixture.timer.delays).toEqual([3000]);
+    expect(fixture.timer.pendingCount).toBe(0);
+
+    fixture.director.setReducedMotion(false);
+    expect(fixture.timer.delays).toEqual([3000, 2500]);
+    expect(fixture.timer.pendingCount).toBe(1);
+
+    fixture.timer.fireNext();
+    expect(fixture.root.dataset.ambientEvent).toBe('distant-train');
+    expect(fixture.events).toEqual(['distant-train']);
+  });
+
   it('rejects a second captain greeting without replacing the active greeting', () => {
     const fixture = createFixture([0.5], true);
 
