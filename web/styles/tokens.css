@@ -22,6 +22,15 @@
   --radius-md: 18px;
   --radius-lg: 26px;
   --shadow-soft: 0 18px 50px rgb(0 8 15 / 38%);
+  --ink-drawn: #17344c;
+  --paper-warm: #fff2d2;
+  --paper-shadow: #e8c99a;
+  --sunset-coral: #ef785f;
+  --sunset-gold: #f3bb66;
+  --twilight-blue: #234f72;
+  --deep-shadow: #102a40;
+  --line-drawn: rgb(23 52 76 / 76%);
+  --paper-grain: radial-gradient(circle at 20% 10%, rgb(23 52 76 / 5%) 0 1px, transparent 1.5px);
 }
 
 * { box-sizing: border-box; }

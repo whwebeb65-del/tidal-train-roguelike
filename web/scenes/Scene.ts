@@ -1,4 +1,5 @@
 import type { SceneId } from '../app/AppTypes';
+import type { StationAmbientController } from '../station/StationAmbientDirector';
 
 export interface GameScene {
   readonly id: SceneId;
@@ -19,5 +20,6 @@ export interface FeatureSceneContext {
   renderEquipment(): string;
   renderLegion(): string;
   renderStore(): string;
+  createStationAmbient(host: HTMLElement): StationAmbientController;
   dispatch(command: SceneAction): void | Promise<void>;
 }

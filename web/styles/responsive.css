@@ -51,17 +51,17 @@
     border-radius: 20px;
   }
 
-  .station-hero__copy {
+  .station-ticket {
     top: 14px;
-    right: 14px;
-    left: 14px;
+    right: 12px;
+    left: 12px;
     width: auto;
     padding: 14px;
   }
 
-  .station-hero__copy h1 { font-size: 32px; }
-  .station-hero__train { right: -16%; bottom: 4%; width: 100%; }
-  .station-hero__captain { left: 2%; width: 43%; }
+  .station-ticket h1 { font-size: 30px; }
+  .station-hero__train { right: -8%; bottom: 2%; width: 96%; }
+  .station-hero__captain-button { left: 2%; width: 41%; }
   .station-hero__otter { left: 34%; width: 20%; }
   .station-hero__jellyfish { top: 43%; right: 5%; width: 18%; }
 

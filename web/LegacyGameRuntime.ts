@@ -166,8 +166,9 @@ import { createCaptainScene } from './scenes/CaptainScene';
 import { createEquipmentScene } from './scenes/EquipmentScene';
 import { createLegionScene } from './scenes/LegionScene';
 import type { FeatureSceneContext, SceneFactory } from './scenes/Scene';
-import { createStationScene } from './scenes/StationScene';
+import { createStationScene, type StationScene } from './scenes/StationScene';
 import { createStoreScene } from './scenes/StoreScene';
+import { StationAmbientDirector } from './station/StationAmbientDirector';
 
 export interface LegacyGameRuntime extends BattleE2EController {
   start(): Promise<void>;
@@ -247,6 +248,7 @@ let activeBattleEngine: BattleEngine | null = null;
 let activeBattleProgression: ProgressionSnapshot | null = null;
 let activeBattleSettlement: BattleSettlementPresentation | null = null;
 let activeBattleScene: BattleScene | null = null;
+let activeStationScene: StationScene | null = null;
 let activeStationDeparture: StationDepartureController | null = null;
 let battleStartPending = false;
 let effectiveReducedMotion = reducedMotion;
@@ -263,10 +265,23 @@ const featureContext: FeatureSceneContext = {
   renderEquipment: () => renderEquipmentScene(),
   renderLegion: () => renderLegionScene(),
   renderStore: () => renderStoreScene(),
+  createStationAmbient: (host) => new StationAmbientDirector(host, {
+    reducedMotion: effectiveReducedMotion,
+    announce: (message) => {
+      const dialogue = host.querySelector<HTMLElement>(
+        '[data-ambient-role="dialogue"]',
+      );
+      if (dialogue) dialogue.textContent = message;
+    },
+  }),
   dispatch: () => undefined,
 };
 const sceneFactory: SceneFactory = (sceneId) => {
-  if (sceneId === 'station') return createStationScene(featureContext);
+  if (sceneId === 'station') {
+    const scene = createStationScene(featureContext);
+    activeStationScene = scene;
+    return scene;
+  }
   if (sceneId === 'captain') return createCaptainScene(featureContext);
   if (sceneId === 'equipment') return createEquipmentScene(featureContext);
   if (sceneId === 'legion') return createLegionScene(featureContext);
@@ -402,8 +417,9 @@ function scheduleDeferredBattleAssets(): void {
 function handlePageHidden(): void {
   pageHidden = true;
   stopStationAudioLoop();
-  if (activeBattleScene) {
-    activeBattleScene.pauseForVisibility();
+  activeStationScene?.pauseForVisibility();
+  if (router.currentSceneId === 'battle') {
+    activeBattleScene?.pauseForVisibility();
     return;
   }
   audio.pause();
@@ -411,10 +427,13 @@ function handlePageHidden(): void {
 
 function handlePageVisible(): void {
   pageHidden = false;
-  if (activeBattleScene) return;
+  if (router.currentSceneId === 'battle') return;
   void audio.resume()
     .catch(() => undefined)
-    .then(() => startStationAudioLoop());
+    .then(() => {
+      activeStationScene?.resumeForVisibility();
+      startStationAudioLoop();
+    });
 }
 
 function openSettingsPanel(): void {
@@ -436,6 +455,7 @@ function applyRuntimeSettings(
   effectiveReducedMotion = nextReducedMotion;
   qualityPreference = settings.qualityPreference;
   router.setReducedMotion(nextReducedMotion);
+  activeStationScene?.setReducedMotion(nextReducedMotion);
   activeBattleScene?.setReducedMotion(nextReducedMotion);
   activeBattleScene?.setQualityPreference(qualityPreference);
   if (shell.isSettingsOpen()) {
@@ -1786,6 +1806,10 @@ const onClick = async (event: Event): Promise<void> => {
     shell.closeSettings();
     return;
   }
+  if (action === 'captain-greeting') {
+    activeStationScene?.requestCaptainGreeting();
+    return;
+  }
   if (action === 'select-captain' && button.dataset.captainId) {
     const profile = selectCaptain(save, button.dataset.captainId as CaptainId);
     commit({ ...save, ...profile });
@@ -2006,6 +2030,7 @@ return {
     app.removeEventListener('keydown', onKeyDown);
     shell.closeSettings();
     router.destroy();
+    activeStationScene = null;
     app.replaceChildren();
   },
 };
