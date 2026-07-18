@@ -97,7 +97,7 @@ export class StationAmbientDirector implements StationAmbientController {
   }
 
   public resume(): void {
-    if (this.disposed) return;
+    if (this.disposed || !this.paused) return;
     this.paused = false;
     if (this.started) this.schedule(firstDelay(this.random));
   }
