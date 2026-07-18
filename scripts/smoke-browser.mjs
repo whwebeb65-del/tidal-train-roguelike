@@ -27,6 +27,7 @@ const viewports = [
   { width: 412, height: 915, full: false },
   { width: 430, height: 932, full: false },
 ];
+const stationRelativeXTolerancePx = 4;
 
 function captureChildOutput(child, label) {
   let output = '';
@@ -149,6 +150,100 @@ async function assertNoHorizontalOverflow(client, label) {
     `${label} overflows horizontally: ${dimensions.scrollWidth}`
       + ` > ${dimensions.innerWidth}`,
   );
+}
+
+async function measureStationDeparturePose(client, label) {
+  const measurement = await evaluate(
+    client,
+    `(async () => {
+      const hero = document.querySelector('.station-hero');
+      const startButton = hero?.querySelector('[data-action="start-run"]');
+      const roleNames = ['train', 'captain', 'otter', 'jellyfish'];
+      const roleElements = Object.fromEntries(roleNames.map((role) => [
+        role,
+        hero?.querySelector('[data-motion-role="' + role + '"]') ?? null,
+      ]));
+      if (
+        !(hero instanceof HTMLElement)
+        || !(startButton instanceof HTMLButtonElement)
+        || Object.values(roleElements).some((element) => !(element instanceof HTMLElement))
+      ) {
+        throw new Error('station departure pose elements are missing');
+      }
+      const readBoxes = () => Object.fromEntries(roleNames.map((role) => {
+        const rect = roleElements[role].getBoundingClientRect();
+        return [role, {
+          left: rect.left,
+          top: rect.top,
+          width: rect.width,
+          height: rect.height,
+          centerX: rect.left + rect.width / 2,
+        }];
+      }));
+
+      await new Promise((resolve) => requestAnimationFrame(() => resolve()));
+      const before = readBoxes();
+      startButton.click();
+      const deadline = performance.now() + 5_000;
+      while (hero.dataset.departureState !== 'departing') {
+        if (performance.now() >= deadline) {
+          throw new Error('station departure state did not begin');
+        }
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      }
+      await new Promise((resolve) => setTimeout(resolve, 350));
+      return {
+        before,
+        during: readBoxes(),
+        departureState: hero.dataset.departureState ?? null,
+        sameHero: hero.isConnected
+          && document.querySelector('.station-hero') === hero,
+      };
+    })()`,
+  );
+
+  const displacementX = {};
+  const relativeXDrift = {};
+  for (const role of ['train', 'captain', 'otter', 'jellyfish']) {
+    displacementX[role] = measurement.during[role].centerX
+      - measurement.before[role].centerX;
+    relativeXDrift[role] = role === 'train'
+      ? 0
+      : (measurement.during[role].centerX
+          - measurement.during.train.centerX)
+        - (measurement.before[role].centerX
+          - measurement.before.train.centerX);
+  }
+  const enoughDepartureMotion = displacementX.train >= 12;
+  const stableRelativeOffsets = ['captain', 'otter', 'jellyfish'].every(
+    (role) => Math.abs(relativeXDrift[role]) <= stationRelativeXTolerancePx,
+  );
+  const passed = measurement.sameHero
+    && measurement.departureState === 'departing'
+    && enoughDepartureMotion
+    && stableRelativeOffsets;
+  const rounded = (value) => Number(value.toFixed(2));
+  const result = {
+    label,
+    passed,
+    sameHero: measurement.sameHero,
+    departureState: measurement.departureState,
+    tolerancePx: stationRelativeXTolerancePx,
+    displacementX: Object.fromEntries(Object.entries(displacementX).map(
+      ([role, value]) => [role, rounded(value)],
+    )),
+    relativeXDrift: Object.fromEntries(Object.entries(relativeXDrift).map(
+      ([role, value]) => [role, rounded(value)],
+    )),
+  };
+  console.log(
+    `[smoke] ${label} station pose ${passed ? 'PASS' : 'FAIL'} - `
+      + `displacementX=${JSON.stringify(result.displacementX)}; `
+      + `relativeXDrift=${JSON.stringify(result.relativeXDrift)}; `
+      + `tolerance=±${stationRelativeXTolerancePx}px; `
+      + `sameHero=${measurement.sameHero}`,
+  );
+  return result;
 }
 
 async function startNormalBattle(client) {
@@ -567,6 +662,7 @@ async function runViewport(client, viewport, smokeId, browserErrors) {
   await loadViewport(client, viewport, smokeId);
   await assertNoHorizontalOverflow(client, `${label} launch`);
   await exerciseScenes(client, label);
+  const stationPose = await measureStationDeparturePose(client, label);
 
   let detail;
   if (viewport.full) {
@@ -581,6 +677,7 @@ async function runViewport(client, viewport, smokeId, browserErrors) {
   const newErrors = browserErrors.slice(errorBaseline);
   assert.deepEqual(newErrors, [], `${label} browser errors:\n${newErrors.join('\n')}`);
   console.log(`[smoke] ${label} PASS - ${detail}`);
+  return stationPose;
 }
 
 async function assertOrdinaryUrlHasNoHook(client, smokeId) {
@@ -695,12 +792,24 @@ async function main() {
       }
     });
 
+    const stationPoseResults = [];
     for (const viewport of viewports) {
-      await runViewport(client, viewport, smokeId, browserErrors);
+      stationPoseResults.push(
+        await runViewport(client, viewport, smokeId, browserErrors),
+      );
     }
     await assertOrdinaryUrlHasNoHook(client, smokeId);
     assert.deepEqual(browserErrors, [], browserErrors.join('\n'));
     console.log('[smoke] ordinary URL PASS - no E2E global');
+    const stationPoseFailures = stationPoseResults.filter(
+      (result) => !result.passed,
+    );
+    assert.deepEqual(
+      stationPoseFailures,
+      [],
+      'station train and crew must share one departure X displacement at '
+        + `every viewport (tolerance ±${stationRelativeXTolerancePx}px)`,
+    );
     console.log('[smoke] browser smoke ok');
   } catch (error) {
     if (error instanceof Error) {

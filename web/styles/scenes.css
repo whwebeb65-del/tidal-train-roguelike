@@ -31,6 +31,12 @@
   pointer-events: none;
 }
 
+.station-hero__vehicle {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
 .station-hero__train {
   position: absolute;
   z-index: 1;
@@ -163,8 +169,12 @@
   animation: station-background-drift 18s ease-in-out infinite alternate;
 }
 
+.station-hero [data-motion-role="vehicle"] {
+  animation: station-vehicle-float 3.8s ease-in-out infinite;
+}
+
 .station-hero [data-motion-role="train"] {
-  animation: station-train-float 3.8s ease-in-out infinite;
+  animation: station-train-glow 3.8s ease-in-out infinite;
 }
 
 .station-hero [data-motion-role="captain"] {
@@ -184,6 +194,10 @@
   animation: station-engine-idle 3.8s ease-in-out infinite;
 }
 
+.station-hero[data-departure-state="charging"] [data-motion-role="vehicle"] {
+  animation: station-vehicle-charging 400ms ease-out both;
+}
+
 .station-hero[data-departure-state="charging"] [data-motion-role="train"] {
   animation: station-train-charging 400ms ease-out both;
 }
@@ -196,13 +210,12 @@
   animation: station-engine-charging 400ms ease-out both;
 }
 
-.station-hero[data-departure-state="departing"] [data-motion-role="train"] {
-  animation: station-train-departing 700ms cubic-bezier(.3, .04, .26, 1) both;
+.station-hero[data-departure-state="departing"] [data-motion-role="vehicle"] {
+  animation: station-vehicle-departing 700ms cubic-bezier(.3, .04, .26, 1) both;
 }
 
-.station-hero[data-departure-state="departing"] [data-motion-role="captain"],
-.station-hero[data-departure-state="departing"] [data-motion-role="otter"] {
-  animation: station-party-departing 700ms cubic-bezier(.3, .04, .26, 1) both;
+.station-hero[data-departure-state="departing"] [data-motion-role="train"] {
+  animation: station-train-departing 700ms cubic-bezier(.3, .04, .26, 1) both;
 }
 
 .station-hero[data-departure-state="departing"] [data-motion-role="wake"] {
@@ -223,15 +236,24 @@
   }
 }
 
-@keyframes station-train-float {
+@keyframes station-vehicle-float {
   0%,
   100% {
     transform: translate3d(0, 0, 0);
-    filter: drop-shadow(0 24px 22px rgb(0 20 30 / 28%));
   }
 
   50% {
     transform: translate3d(0, -4px, 0);
+  }
+}
+
+@keyframes station-train-glow {
+  0%,
+  100% {
+    filter: drop-shadow(0 24px 22px rgb(0 20 30 / 28%));
+  }
+
+  50% {
     filter: drop-shadow(0 28px 24px rgb(0 20 30 / 34%));
   }
 }
@@ -285,14 +307,22 @@
   }
 }
 
+@keyframes station-vehicle-charging {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+
+  to {
+    transform: translate3d(-4px, 2px, 0);
+  }
+}
+
 @keyframes station-train-charging {
   from {
-    transform: translate3d(0, 0, 0) scale(1);
     filter: brightness(1) drop-shadow(0 24px 22px rgb(0 20 30 / 28%));
   }
 
   to {
-    transform: translate3d(-4px, 2px, 0) scale(.998);
     filter: brightness(1.08) drop-shadow(0 27px 24px rgb(0 20 30 / 34%));
   }
 }
@@ -307,27 +337,23 @@
   to { opacity: .68; }
 }
 
+@keyframes station-vehicle-departing {
+  from {
+    transform: translate3d(-4px, 2px, 0);
+  }
+
+  to {
+    transform: translate3d(27%, -2%, 0);
+  }
+}
+
 @keyframes station-train-departing {
   from {
-    transform: translate3d(-4px, 2px, 0) scale(.998);
     filter: brightness(1.08) drop-shadow(0 27px 24px rgb(0 20 30 / 34%));
   }
 
   to {
-    transform: translate3d(42%, -2%, 0) scale(1.045);
     filter: brightness(1.14) drop-shadow(-26px 30px 28px rgb(0 20 30 / 22%));
-  }
-}
-
-@keyframes station-party-departing {
-  from {
-    transform: translate3d(0, 0, 0) scale(1);
-    opacity: 1;
-  }
-
-  to {
-    transform: translate3d(18%, -1%, 0) scale(1.02);
-    opacity: .28;
   }
 }
 
