@@ -19,6 +19,12 @@ describe('battle art catalog', () => {
   it('keeps the first battle stage separate from elite and boss art', () => {
     const critical = getCriticalBattleArtIds('captainFemaleBase');
 
+    expect(critical).toEqual(expect.arrayContaining([
+      'backgroundSky',
+      'backgroundHorizon',
+      'backgroundTrack',
+      'backgroundForeground',
+    ]));
     expect(critical).toContain('captainFemaleBase');
     expect(critical).toContain('needleJelly');
     expect(critical).not.toContain('stormRayElite');

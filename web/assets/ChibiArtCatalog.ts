@@ -1,5 +1,18 @@
+const stationSky = new URL('./chibi/station-sky-dusk.webp', import.meta.url).href;
+const stationHorizon = new URL('./chibi/station-horizon-dusk.webp', import.meta.url).href;
+const stationPlatform = new URL('./chibi/station-platform-dusk.webp', import.meta.url).href;
+const stationForeground = new URL('./chibi/station-foreground-dusk.webp', import.meta.url).href;
+
 export const CHIBI_ART = {
-  stationBackground: new URL('./chibi/station-ocean-bg.webp', import.meta.url).href,
+  station: {
+    sky: stationSky,
+    horizon: stationHorizon,
+    platform: stationPlatform,
+    foreground: stationForeground,
+    mailFish: new URL('./chibi/flying-fish-post.webp', import.meta.url).href,
+    distantTrain: new URL('./chibi/station-distant-train.webp', import.meta.url).href,
+  },
+  stationBackground: stationPlatform,
   train: new URL('./chibi/bubble-train.webp', import.meta.url).href,
   captains: {
     'captain-tide-female': {

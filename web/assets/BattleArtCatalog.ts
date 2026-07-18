@@ -1,7 +1,13 @@
 import { CHIBI_ART } from './ChibiArtCatalog';
 
+const battleTrack = new URL('./chibi/battle-track-dusk.webp', import.meta.url).href;
+
 export const BATTLE_ART_URLS = {
-  background: new URL('./chibi/battle-ocean-bg.webp', import.meta.url).href,
+  background: battleTrack,
+  backgroundSky: new URL('./chibi/battle-sky-dusk.webp', import.meta.url).href,
+  backgroundHorizon: new URL('./chibi/battle-horizon-dusk.webp', import.meta.url).href,
+  backgroundTrack: battleTrack,
+  backgroundForeground: new URL('./chibi/battle-foreground-dusk.webp', import.meta.url).href,
   train: CHIBI_ART.train,
   captainFemaleBase:
     CHIBI_ART.captains['captain-tide-female']['skin-tide-base'],
@@ -46,6 +52,10 @@ export function getCriticalBattleArtIds(
 ): readonly BattleArtId[] {
   return [
     'background',
+    'backgroundSky',
+    'backgroundHorizon',
+    'backgroundTrack',
+    'backgroundForeground',
     'train',
     captainArtId,
     'otter',

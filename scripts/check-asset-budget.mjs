@@ -11,10 +11,8 @@ const root = path.resolve(
 );
 
 const limits = {
-  'station-ocean-bg.webp': 350 * 1024,
   'captain-female-base.webp': 450 * 1024,
   'captain-male-base.webp': 450 * 1024,
-  'battle-ocean-bg.webp': 700 * 1024,
   'needle-jelly-enemy.webp': 450 * 1024,
   'storm-ray-elite.webp': 550 * 1024,
   'tidal-boss.webp': 450 * 1024,
@@ -41,14 +39,22 @@ for (const [name, limit] of Object.entries(limits)) {
 }
 
 const firstScreen = [
-  'station-ocean-bg.webp',
+  'station-sky-dusk.webp',
+  'station-horizon-dusk.webp',
+  'station-platform-dusk.webp',
+  'station-foreground-dusk.webp',
   'bubble-train.webp',
   'captain-female-base.webp',
   'otter-mechanic.webp',
   'jellyfish-medic.webp',
+  'flying-fish-post.webp',
+  'station-distant-train.webp',
 ];
 const battleScreen = [
-  'battle-ocean-bg.webp',
+  'battle-sky-dusk.webp',
+  'battle-horizon-dusk.webp',
+  'battle-track-dusk.webp',
+  'battle-foreground-dusk.webp',
   'bubble-train.webp',
   'captain-female-aurora.webp',
   'otter-mechanic.webp',
