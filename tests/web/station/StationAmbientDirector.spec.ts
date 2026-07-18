@@ -52,20 +52,28 @@ function createFixture(
   randomValues: number[],
   reducedMotion = false,
   throwOnEvent = false,
+  lowPerformance = false,
 ): {
   readonly director: StationAmbientDirector;
   readonly events: string[];
   readonly lines: string[];
   readonly root: HTMLElement;
   readonly timer: ManualTimer;
+  readonly randomCalls: number[];
 } {
   const root = { dataset: {} } as HTMLElement;
   const timer = new ManualTimer();
   const events: string[] = [];
   const lines: string[] = [];
-  const random = (): number => randomValues.shift() ?? 0;
+  const randomCalls: number[] = [];
+  const random = (): number => {
+    const value = randomValues.shift() ?? 0;
+    randomCalls.push(value);
+    return value;
+  };
   const director = new StationAmbientDirector(root, {
     reducedMotion,
+    lowPerformance,
     timer,
     random,
     announce: (message) => lines.push(message),
@@ -75,7 +83,7 @@ function createFixture(
     },
   });
 
-  return { director, events, lines, root, timer };
+  return { director, events, lines, root, timer, randomCalls };
 }
 
 describe('StationAmbientDirector', () => {
@@ -117,6 +125,57 @@ describe('StationAmbientDirector', () => {
     fixture.timer.fireNext();
     fixture.timer.fireNext();
     expect(fixture.root.dataset.ambientEvent).not.toBe(first);
+  });
+
+  it('excludes distant trains deterministically at initial low performance without repeats', () => {
+    const fixture = createFixture([0, 0.75, 0, 0.75], false, false, true);
+
+    expect(fixture.root.dataset.lowPerformance).toBe('true');
+    fixture.director.start();
+    fixture.timer.fireNext();
+    const first = fixture.root.dataset.ambientEvent;
+    expect(first).toBe('captain-idle');
+    expect(fixture.events).not.toContain('distant-train');
+
+    fixture.timer.fireNext();
+    fixture.timer.fireNext();
+    expect(fixture.root.dataset.ambientEvent).toBe('mail-drop');
+    expect(fixture.root.dataset.ambientEvent).not.toBe(first);
+    expect(fixture.events).toEqual(['captain-idle', 'mail-drop']);
+    expect(fixture.randomCalls).toEqual([0, 0.75, 0, 0.75]);
+  });
+
+  it('switches scheduled selection to low performance without consuming extra randomness', () => {
+    const fixture = createFixture([0.25, 0.75]);
+
+    fixture.director.start();
+    expect(fixture.randomCalls).toEqual([0.25]);
+    expect(fixture.director.setLowPerformance).toBeTypeOf('function');
+    fixture.director.setLowPerformance(true);
+    expect(fixture.root.dataset.lowPerformance).toBe('true');
+    expect(fixture.randomCalls).toEqual([0.25]);
+
+    fixture.timer.fireNext();
+    expect(fixture.root.dataset.ambientEvent).toBe('captain-idle');
+    expect(fixture.events).toEqual(['captain-idle']);
+
+    fixture.director.setLowPerformance(false);
+    expect(fixture.root.dataset.lowPerformance).toBe('false');
+  });
+
+  it('removes an active distant train when low performance is enabled', () => {
+    const fixture = createFixture([0, 0.75, 0]);
+    fixture.director.start();
+    fixture.timer.fireNext();
+    expect(fixture.root.dataset.ambientEvent).toBe('distant-train');
+
+    expect(fixture.director.setLowPerformance).toBeTypeOf('function');
+    fixture.director.setLowPerformance(true);
+
+    expect(fixture.root.dataset.ambientEvent).toBeUndefined();
+    expect(fixture.root.dataset.lowPerformance).toBe('true');
+    expect(fixture.timer.pendingCount).toBe(1);
+    expect(fixture.timer.delays.at(-1)).toBe(5000);
   });
 
   it('clears timers and active state on pause and dispose', () => {

@@ -26,6 +26,20 @@ const responsiveCss = readFileSync(
   'utf8',
 );
 
+function extractCssBlock(source: string, marker: string): string {
+  const markerIndex = source.indexOf(marker);
+  expect(markerIndex, marker).toBeGreaterThanOrEqual(0);
+  const openIndex = source.indexOf('{', markerIndex);
+  expect(openIndex, marker).toBeGreaterThan(markerIndex);
+  let depth = 0;
+  for (let index = openIndex; index < source.length; index += 1) {
+    if (source[index] === '{') depth += 1;
+    if (source[index] === '}') depth -= 1;
+    if (depth === 0) return source.slice(openIndex + 1, index);
+  }
+  throw new Error(`Unclosed CSS block: ${marker}`);
+}
+
 function renderHero(): string {
   return renderStationHero({
     captainId: 'captain-tide-female',
@@ -159,6 +173,7 @@ describe('StationHeroView', () => {
       /data-departure-state="departing"[^}]*data-motion-role="vehicle"[^}]*{[^}]*animation:\s*station-vehicle-departing 700ms cubic-bezier\(\.3, \.04, \.26, 1\) both;/s,
     );
     expect(scenesCss).not.toContain('station-party-departing');
+    expect(scenesCss).not.toContain('will-change:');
   });
 
   it('exposes effective reduced motion on the station hero', () => {
@@ -239,16 +254,33 @@ describe('StationHeroView', () => {
     );
   });
 
+  it('hides the distant train and disables low-priority transforms in low performance', () => {
+    const distantTrainRule = extractCssBlock(
+      stationCss,
+      '.station-hero[data-low-performance="true"] [data-ambient-role="distant-train"]',
+    );
+    expect(distantTrainRule).toContain('display: none;');
+    expect(distantTrainRule).toContain('animation: none;');
+    expect(distantTrainRule).toContain('transform: none;');
+
+    const foregroundRule = extractCssBlock(
+      stationCss,
+      '.station-hero[data-low-performance="true"] .station-layer--foreground',
+    );
+    expect(foregroundRule).toContain('animation: none;');
+    expect(foregroundRule).toContain('transform: none;');
+  });
+
   it('adapts the paper ticket and shared vehicle composition at 430px', () => {
-    expect(responsiveCss).toMatch(/@media \(max-width:\s*430px\)/);
-    const ticketRule = responsiveCss.match(/\.station-ticket\s*\{([^}]*)\}/s)?.[1] ?? '';
+    const mobileCss = extractCssBlock(responsiveCss, '@media (max-width: 430px)');
+    const ticketRule = extractCssBlock(mobileCss, '.station-ticket');
     expect(ticketRule).toContain('left: 12px;');
     expect(ticketRule).toContain('right: 12px;');
     expect(ticketRule).toContain('width: auto;');
-    expect(responsiveCss).toMatch(
+    expect(mobileCss).toMatch(
       /\.station-hero__captain-button\s*\{[^}]*width:\s*(?:39|40|41|42|43)%/s,
     );
-    expect(responsiveCss).toMatch(
+    expect(mobileCss).toMatch(
       /\.station-hero__train\s*\{[^}]*bottom:[^;}]+;[^}]*width:\s*(?:9\d|100)%/s,
     );
   });

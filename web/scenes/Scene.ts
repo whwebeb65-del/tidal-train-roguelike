@@ -21,5 +21,7 @@ export interface FeatureSceneContext {
   renderLegion(): string;
   renderStore(): string;
   createStationAmbient(host: HTMLElement): StationAmbientController;
+  isPageHidden(): boolean;
+  isStationLowPerformance(): boolean;
   dispatch(command: SceneAction): void | Promise<void>;
 }

@@ -5,6 +5,7 @@ export interface StationScene extends GameScene {
   pauseForVisibility(): void;
   resumeForVisibility(): void;
   setReducedMotion(value: boolean): void;
+  setLowPerformance(value: boolean): void;
   requestCaptainGreeting(): boolean;
   pauseAmbient(): void;
 }
@@ -13,6 +14,7 @@ export function createStationScene(
   context: FeatureSceneContext,
 ): StationScene {
   let host: HTMLElement | null = null;
+  let hero: HTMLElement | null = null;
   let ambient: StationAmbientController | null = null;
   let errorListener: EventListener | null = null;
 
@@ -23,6 +25,7 @@ export function createStationScene(
     errorListener = null;
     ambient?.dispose();
     ambient = null;
+    hero = null;
   };
 
   return {
@@ -38,9 +41,11 @@ export function createStationScene(
         }
       };
       host.addEventListener('error', errorListener, true);
-      const hero = host.querySelector<HTMLElement>('.station-hero');
+      hero = host.querySelector<HTMLElement>('.station-hero');
       if (!hero) return;
+      hero.dataset.lowPerformance = String(context.isStationLowPerformance());
       ambient = context.createStationAmbient(hero);
+      if (context.isPageHidden()) ambient.pause();
       ambient.start();
     },
     unmount(): void {
@@ -51,10 +56,16 @@ export function createStationScene(
       ambient?.pause();
     },
     resumeForVisibility(): void {
+      if (context.isPageHidden()) return;
       ambient?.resume();
     },
     setReducedMotion(value: boolean): void {
+      if (hero) hero.dataset.reducedMotion = String(value);
       ambient?.setReducedMotion(value);
+    },
+    setLowPerformance(value: boolean): void {
+      if (hero) hero.dataset.lowPerformance = String(value);
+      ambient?.setLowPerformance(value);
     },
     requestCaptainGreeting(): boolean {
       return ambient?.requestCaptainGreeting() ?? false;

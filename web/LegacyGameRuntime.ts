@@ -253,6 +253,7 @@ let activeStationDeparture: StationDepartureController | null = null;
 let battleStartPending = false;
 let effectiveReducedMotion = reducedMotion;
 let qualityPreference = settingsBridge.getSettings().qualityPreference;
+let pageHidden = false;
 let notice = '欢迎登车，先选择一条可以活着回来的路线。';
 const shell = mountAppShell(app, {
   gears: save.gears,
@@ -265,8 +266,11 @@ const featureContext: FeatureSceneContext = {
   renderEquipment: () => renderEquipmentScene(),
   renderLegion: () => renderLegionScene(),
   renderStore: () => renderStoreScene(),
+  isPageHidden: () => pageHidden,
+  isStationLowPerformance: () => qualityPreference === 'low',
   createStationAmbient: (host) => new StationAmbientDirector(host, {
     reducedMotion: effectiveReducedMotion,
+    lowPerformance: qualityPreference === 'low',
     announce: (message) => {
       const dialogue = host.querySelector<HTMLElement>(
         '[data-ambient-role="dialogue"]',
@@ -282,6 +286,7 @@ const sceneFactory: SceneFactory = (sceneId) => {
     activeStationScene = scene;
     return scene;
   }
+  activeStationScene = null;
   if (sceneId === 'captain') return createCaptainScene(featureContext);
   if (sceneId === 'equipment') return createEquipmentScene(featureContext);
   if (sceneId === 'legion') return createLegionScene(featureContext);
@@ -347,7 +352,6 @@ const router = new SceneRouter(shell.sceneHost, sceneFactory, {
 let renderQueue = Promise.resolve();
 let started = false;
 let stationAudioFrameId: number | null = null;
-let pageHidden = false;
 
 function setStationIdleMotion(): void {
   audio.setTrainMotion({ active: true, speed: 0.18, power: 0.55 });
@@ -456,6 +460,7 @@ function applyRuntimeSettings(
   qualityPreference = settings.qualityPreference;
   router.setReducedMotion(nextReducedMotion);
   activeStationScene?.setReducedMotion(nextReducedMotion);
+  activeStationScene?.setLowPerformance(qualityPreference === 'low');
   activeBattleScene?.setReducedMotion(nextReducedMotion);
   activeBattleScene?.setQualityPreference(qualityPreference);
   if (shell.isSettingsOpen()) {

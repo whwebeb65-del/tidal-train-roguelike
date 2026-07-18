@@ -22,12 +22,14 @@ export interface StationAmbientController {
   pause(): void;
   resume(): void;
   setReducedMotion(reducedMotion: boolean): void;
+  setLowPerformance(lowPerformance: boolean): void;
   requestCaptainGreeting(): boolean;
   dispose(): void;
 }
 
 export interface StationAmbientDirectorOptions {
   readonly reducedMotion: boolean;
+  readonly lowPerformance?: boolean;
   readonly timer?: StationAmbientTimer;
   readonly random?: () => number;
   readonly playSound?: (cue: StationAmbientCue) => void;
@@ -71,12 +73,15 @@ export class StationAmbientDirector implements StationAmbientController {
   private paused = false;
   private disposed = false;
   private reducedMotion: boolean;
+  private lowPerformance: boolean;
 
   public constructor(
     private readonly root: HTMLElement,
     options: StationAmbientDirectorOptions,
   ) {
     this.reducedMotion = options.reducedMotion;
+    this.lowPerformance = options.lowPerformance ?? false;
+    this.root.dataset.lowPerformance = String(this.lowPerformance);
     this.timer = options.timer ?? defaultTimer;
     this.random = options.random ?? Math.random;
     this.playSound = options.playSound;
@@ -119,6 +124,19 @@ export class StationAmbientDirector implements StationAmbientController {
     }
   }
 
+  public setLowPerformance(lowPerformance: boolean): void {
+    if (this.disposed || this.lowPerformance === lowPerformance) return;
+    this.lowPerformance = lowPerformance;
+    this.root.dataset.lowPerformance = String(lowPerformance);
+
+    if (lowPerformance && this.activeEventId === 'distant-train') {
+      this.clearActivePresentation();
+      if (this.started && !this.paused && !this.reducedMotion) {
+        this.schedule(nextDelay);
+      }
+    }
+  }
+
   public requestCaptainGreeting(): boolean {
     if (this.disposed || this.activeEventId === 'captain-greeting') return false;
 
@@ -156,7 +174,10 @@ export class StationAmbientDirector implements StationAmbientController {
   }
 
   private chooseEvent(): typeof EVENTS[number] {
-    const candidates = EVENTS.filter((event) => event.id !== this.lastAutomaticId);
+    const candidates = EVENTS.filter((event) => (
+      event.id !== this.lastAutomaticId
+      && (!this.lowPerformance || event.id !== 'distant-train')
+    ));
     const index = Math.min(
       candidates.length - 1,
       Math.floor(this.random() * candidates.length),

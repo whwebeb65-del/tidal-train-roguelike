@@ -386,6 +386,17 @@
   100% { opacity: 1; }
 }
 
+.station-hero[data-low-performance="true"] [data-ambient-role="distant-train"] {
+  display: none;
+  animation: none;
+  transform: none;
+}
+
+.station-hero[data-low-performance="true"] .station-layer--foreground {
+  animation: none;
+  transform: none;
+}
+
 .station-hero[data-reduced-motion="true"] [data-station-layer],
 .station-hero[data-reduced-motion="true"] [data-ambient-role],
 .station-hero[data-reduced-motion="true"] [data-action="captain-greeting"] {

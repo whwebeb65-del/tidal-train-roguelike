@@ -144,10 +144,6 @@
 
 .station-hero__start { min-width: 210px; }
 
-.station-hero [data-motion-role] {
-  will-change: transform, opacity, filter;
-}
-
 .station-hero [data-motion-role="vehicle"] {
   animation: station-vehicle-float 3.8s ease-in-out infinite;
 }
@@ -275,7 +271,6 @@
 
 .station-hero[data-reduced-motion="true"] [data-motion-role] {
   animation: none;
-  will-change: auto;
 }
 
 .station-hero[data-reduced-motion="true"][data-departure-state="charging"] {
@@ -301,7 +296,6 @@
   .station-hero [data-motion-role],
   .station-hero [data-station-layer] {
     animation: none;
-    will-change: auto;
   }
 
   .station-hero[data-departure-state="charging"] [data-motion-role],
