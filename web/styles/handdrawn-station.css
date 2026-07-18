@@ -302,6 +302,153 @@
   pointer-events: none;
 }
 
+.station-hero[data-departure-state="charging"] .station-ticket__stamp {
+  animation: station-stamp-charging 360ms ease-in-out infinite alternate;
+}
+
+.station-hero[data-departure-state="charging"] [data-ambient-role="lamp-left"],
+.station-hero[data-departure-state="charging"] [data-ambient-role="lamp-right"] {
+  animation: station-lamps-charging 520ms ease-in-out infinite alternate;
+}
+
+.station-hero[data-departure-state="charging"] [data-motion-role="otter"] {
+  animation: station-otter-charging 640ms ease-in-out infinite alternate;
+}
+
+.station-hero[data-departure-state="charging"] [data-motion-role="engine"] {
+  animation: station-engine-charging-drawn 480ms ease-in-out infinite alternate;
+}
+
+.station-hero[data-departure-state="departing"] [data-motion-role="vehicle"] {
+  animation: station-vehicle-departing 1200ms cubic-bezier(.3, .04, .26, 1) both;
+  transform-origin: 72% 72%;
+}
+
+.station-hero[data-departure-state="departing"] .station-service-hatch {
+  animation: station-door-closing 220ms ease-in both;
+}
+
+.station-hero[data-departure-state="departing"] [data-motion-role="otter"] {
+  animation: station-otter-boarding 300ms ease-in 120ms both;
+}
+
+.station-hero[data-departure-state="departing"] [data-motion-role="wake"] {
+  animation: station-wake-departing-drawn 940ms ease-out 260ms both;
+}
+
+.station-hero[data-departure-state="departing"] .station-layer--foreground {
+  animation: station-foreground-departing 940ms ease-out 260ms both;
+}
+
+.station-hero[data-departure-state="departing"] [data-motion-role="train"],
+.station-hero[data-departure-state="departing"] [data-motion-role="captain"],
+.station-hero[data-departure-state="departing"] [data-motion-role="jellyfish"],
+.station-hero[data-departure-state="departing"] [data-motion-role="engine"] {
+  animation: none;
+}
+
+.station-hero[data-departure-state="departing"] [data-motion-role="engine"] {
+  opacity: .92;
+}
+
+@keyframes station-stamp-charging {
+  from { transform: translateY(0) rotate(-1deg); }
+  to { transform: translateY(3px) rotate(.5deg) scale(.96); }
+}
+
+@keyframes station-lamps-charging {
+  from { opacity: .65; }
+  to { opacity: 1; }
+}
+
+@keyframes station-otter-charging {
+  from { transform: translate3d(0, 0, 0) rotate(0deg); }
+  to { transform: translate3d(0, -12%, 0) rotate(-4deg); }
+}
+
+@keyframes station-engine-charging-drawn {
+  from {
+    transform: scale(1);
+    opacity: .72;
+  }
+
+  to {
+    transform: scale(1.16);
+    opacity: .96;
+  }
+}
+
+@keyframes station-door-closing {
+  from {
+    transform: scaleY(1) rotate(0deg);
+    opacity: 1;
+  }
+
+  to {
+    transform: scaleY(.08) rotate(-8deg);
+    opacity: .82;
+  }
+}
+
+@keyframes station-otter-boarding {
+  from {
+    transform: translate3d(0, -12%, 0) rotate(-4deg);
+    opacity: 1;
+  }
+
+  to {
+    transform: translate3d(0, -42%, 0) rotate(5deg);
+    opacity: 0;
+  }
+}
+
+@keyframes station-vehicle-departing {
+  0% {
+    transform: translate3d(-4px, 2px, 0) scaleY(1);
+  }
+
+  21.6667% {
+    transform: translate3d(-8px, 3px, 0) scaleY(.94);
+  }
+
+  30% {
+    transform: translate3d(24px, 2px, 0) scaleY(.96);
+  }
+
+  100% {
+    transform: translate3d(120vw, -2%, 0) scaleY(1);
+  }
+}
+
+@keyframes station-wake-departing-drawn {
+  from {
+    transform: scaleX(1);
+    opacity: .38;
+  }
+
+  to {
+    transform: scaleX(1.46);
+    opacity: .9;
+  }
+}
+
+@keyframes station-foreground-departing {
+  from {
+    transform: translate3d(0, 0, 0);
+    opacity: 1;
+  }
+
+  to {
+    transform: translate3d(-9%, 0, 0);
+    opacity: .58;
+  }
+}
+
+@keyframes station-departing-opacity-drawn {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
 .station-hero[data-ambient-event="mechanic-check"] [data-ambient-role="otter"],
 .station-hero[data-ambient-event="mechanic-check"] [data-ambient-role="service-hatch"] {
   animation: station-event-mechanic-check 1800ms ease-in-out both;
@@ -397,6 +544,7 @@
   transform: none;
 }
 
+.station-hero[data-reduced-motion="true"] [data-motion-role],
 .station-hero[data-reduced-motion="true"] [data-station-layer],
 .station-hero[data-reduced-motion="true"] [data-ambient-role],
 .station-hero[data-reduced-motion="true"] [data-action="captain-greeting"] {
@@ -404,14 +552,23 @@
   transform: none;
 }
 
+.station-hero[data-reduced-motion="true"][data-departure-state="departing"] {
+  animation: station-departing-opacity-drawn 80ms linear both;
+}
+
 .station-hero[data-reduced-motion="true"] .station-dialogue { opacity: 1; }
 
 @media (prefers-reduced-motion: reduce) {
+  .station-hero [data-motion-role],
   .station-hero [data-station-layer],
   .station-hero [data-ambient-role],
   .station-hero [data-action="captain-greeting"] {
     animation: none;
     transform: none;
+  }
+
+  .station-hero[data-departure-state="departing"] {
+    animation: station-departing-opacity-drawn 80ms linear both;
   }
 
   .station-hero .station-dialogue { opacity: 1; }

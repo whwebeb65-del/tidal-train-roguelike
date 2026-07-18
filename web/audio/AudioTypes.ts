@@ -9,6 +9,11 @@ export type MusicCue =
 export type SoundCue =
   | 'ui-tap'
   | 'scene-open'
+  | 'ticket-stamp'
+  | 'station-tool'
+  | 'station-chime'
+  | 'station-mail'
+  | 'station-whistle'
   | 'cannon'
   | 'companion-cannon'
   | 'hit'

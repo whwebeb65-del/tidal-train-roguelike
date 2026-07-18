@@ -100,7 +100,7 @@ describe('StationDepartureController', () => {
     expect(buttons.every((button) => button.disabled)).toBe(true);
   });
 
-  it('plays a normal departure for exactly 700 ms and resolves true', async () => {
+  it('plays a normal departure for exactly 1200 ms and resolves true', async () => {
     const { controller, hero, timer } = createFixture();
     controller.beginCharging();
 
@@ -110,7 +110,7 @@ describe('StationDepartureController', () => {
     await Promise.resolve();
 
     expect(hero.dataset.departureState).toBe('departing');
-    expect(timer.delays).toEqual([700]);
+    expect(timer.delays).toEqual([1200]);
     expect(settled).toBe(false);
 
     timer.fireNext();
@@ -165,7 +165,7 @@ describe('StationDepartureController', () => {
     const second = controller.playDeparture();
 
     expect(second).toBe(first);
-    expect(timer.delays).toEqual([700]);
+    expect(timer.delays).toEqual([1200]);
     timer.fireNext();
     await expect(Promise.all([first, second])).resolves.toEqual([true, true]);
   });

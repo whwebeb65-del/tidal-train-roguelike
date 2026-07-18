@@ -63,7 +63,7 @@ export class StationDepartureController {
 
     this.hero.dataset.departureState = 'departing';
     const token = ++this.token;
-    const durationMs = this.reducedMotion ? 80 : 700;
+    const durationMs = this.reducedMotion ? 80 : 1200;
     const completion = new Promise<boolean>((resolve) => {
       this.completionResolver = resolve;
       this.timerId = this.timer.set(() => {

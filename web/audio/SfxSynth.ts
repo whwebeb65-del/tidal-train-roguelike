@@ -31,6 +31,11 @@ const GROUP_POLICIES: Readonly<Record<SfxGroup, GroupPolicy>> = {
 const GROUP_BY_CUE: Readonly<Record<SoundCue, SfxGroup>> = {
   'ui-tap': 'ui',
   'scene-open': 'ui',
+  'ticket-stamp': 'ui',
+  'station-tool': 'other',
+  'station-chime': 'ui',
+  'station-mail': 'other',
+  'station-whistle': 'major',
   cannon: 'cannon',
   'companion-cannon': 'cannon',
   hit: 'hit',
@@ -126,6 +131,23 @@ export class SfxSynth {
         return;
       case 'scene-open':
         this.arpeggio(nowSeconds, [293.66, 369.99], 0.06, 0.08, 0.12);
+        return;
+      case 'ticket-stamp':
+        this.tone(nowSeconds, 0, 180, 0.035, 0.12, 'square', 0, 900);
+        this.tone(nowSeconds, 0.025, 92, 0.055, 0.1, 'triangle', 0, 480);
+        return;
+      case 'station-tool':
+        this.arpeggio(nowSeconds, [620, 410], 0.055, 0.07, 0.055, 'triangle');
+        return;
+      case 'station-chime':
+        this.arpeggio(nowSeconds, [523.25, 659.25, 783.99], 0.09, 0.18, 0.07, 'sine');
+        return;
+      case 'station-mail':
+        this.arpeggio(nowSeconds, [392, 493.88], 0.045, 0.08, 0.06, 'triangle');
+        return;
+      case 'station-whistle':
+        this.tone(nowSeconds, 0, 293.66, 0.5, 0.055, 'sine', -0.35, 1700);
+        this.tone(nowSeconds, 0.08, 440, 0.42, 0.035, 'sine', 0.35, 2200);
         return;
       case 'cannon': {
         const base = [82.41, 92.5, 98][variation % 3] ?? 82.41;

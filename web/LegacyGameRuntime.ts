@@ -271,6 +271,9 @@ const featureContext: FeatureSceneContext = {
   createStationAmbient: (host) => new StationAmbientDirector(host, {
     reducedMotion: effectiveReducedMotion,
     lowPerformance: qualityPreference === 'low',
+    playSound: (cue) => {
+      audio.playSound(cue);
+    },
     announce: (message) => {
       const dialogue = host.querySelector<HTMLElement>(
         '[data-ambient-role="dialogue"]',
@@ -385,10 +388,18 @@ function stopStationAudioLoop(): void {
   diagnostics.audioSchedulerStopped();
 }
 
+function restoreStationAfterDepartureAbort(): void {
+  setStationIdleMotion();
+  if (phase === 'station' && !pageHidden) {
+    activeStationScene?.resumeForVisibility();
+  }
+}
+
 function cancelActiveStationDeparture(): void {
   const departure = activeStationDeparture;
   activeStationDeparture = null;
   departure?.dispose();
+  if (departure) restoreStationAfterDepartureAbort();
 }
 
 async function loadCriticalBattleAssets(
@@ -916,30 +927,31 @@ async function startRun(
   activeStationDeparture = departure;
   try {
     const audioReady = await audio.unlockFromGesture();
-    if (audioReady) audio.playSound('ui-tap');
+    if (audioReady) audio.playSound('ticket-stamp');
     notice = audioReady
       ? '正在装载列车、潮兽与战斗特效……'
       : '当前浏览器未启用声音，游戏仍可正常游玩。正在装载战斗……';
     shell.setNotice(notice);
     if (!departure.beginCharging()) {
-      setStationIdleMotion();
+      restoreStationAfterDepartureAbort();
       notice = stationNotice;
       return;
     }
+    activeStationScene?.pauseAmbient();
     audio.setTrainMotion({ active: true, speed: 0.18, power: 0.9 });
     audio.playSound('train-charge');
     const currentBattleAssets = await loadCriticalBattleAssets(
       getActiveCaptainArtId(),
     );
     if (activeStationDeparture !== departure) {
-      setStationIdleMotion();
+      restoreStationAfterDepartureAbort();
       notice = stationNotice;
       return;
     }
     audio.setTrainMotion({ active: true, speed: 1, power: 0.9 });
     audio.playSound('train-depart');
     if (!await departure.playDeparture()) {
-      setStationIdleMotion();
+      restoreStationAfterDepartureAbort();
       notice = stationNotice;
       return;
     }
@@ -998,12 +1010,12 @@ async function startRun(
     }
   } catch (error) {
     departure.cancel();
-    setStationIdleMotion();
     console.error(error);
     activeBattleEngine = null;
     activeBattleProgression = null;
     activeBattleSettlement = null;
     phase = 'station';
+    restoreStationAfterDepartureAbort();
     notice = '战斗资源初始化失败，请稍后重试。';
   } finally {
     departure.dispose();

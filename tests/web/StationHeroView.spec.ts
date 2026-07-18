@@ -25,6 +25,18 @@ const responsiveCss = readFileSync(
   new URL('../../web/styles/responsive.css', import.meta.url),
   'utf8',
 );
+const runtimeSource = readFileSync(
+  new URL('../../web/LegacyGameRuntime.ts', import.meta.url),
+  'utf8',
+);
+
+function sourceSection(start: string, end: string): string {
+  const startIndex = runtimeSource.indexOf(start);
+  const endIndex = runtimeSource.indexOf(end, startIndex);
+  expect(startIndex, start).toBeGreaterThanOrEqual(0);
+  expect(endIndex, end).toBeGreaterThan(startIndex);
+  return runtimeSource.slice(startIndex, endIndex);
+}
 
 function extractCssBlock(source: string, marker: string): string {
   const markerIndex = source.indexOf(marker);
@@ -169,11 +181,175 @@ describe('StationHeroView', () => {
     expect(scenesCss).toMatch(
       /data-departure-state="charging"[^}]*data-motion-role="vehicle"[^}]*{[^}]*animation:\s*station-vehicle-charging 400ms ease-out both;/s,
     );
-    expect(scenesCss).toMatch(
-      /data-departure-state="departing"[^}]*data-motion-role="vehicle"[^}]*{[^}]*animation:\s*station-vehicle-departing 700ms cubic-bezier\(\.3, \.04, \.26, 1\) both;/s,
+    expect(stationCss).toMatch(
+      /data-departure-state="departing"[^}]*data-motion-role="vehicle"[^}]*{[^}]*animation:\s*station-vehicle-departing 1200ms cubic-bezier\(\.3, \.04, \.26, 1\) both;/s,
     );
     expect(scenesCss).not.toContain('station-party-departing');
     expect(scenesCss).not.toContain('will-change:');
+  });
+
+  it('stages charging indefinitely and keeps the 1200 ms departure transform-and-opacity only', () => {
+    expect(stationCss).toMatch(
+      /data-departure-state="charging"[^}]*station-ticket__stamp[^}]*{[^}]*animation:\s*station-stamp-charging 360ms ease-in-out infinite alternate;/s,
+    );
+    expect(stationCss).toMatch(
+      /data-departure-state="charging"[^}]*lamp-left[^}]*lamp-right[^}]*{[^}]*animation:\s*station-lamps-charging 520ms ease-in-out infinite alternate;/s,
+    );
+    expect(stationCss).toMatch(
+      /data-departure-state="charging"[^}]*data-motion-role="otter"[^}]*{[^}]*animation:\s*station-otter-charging 640ms ease-in-out infinite alternate;/s,
+    );
+    expect(stationCss).toMatch(
+      /data-departure-state="charging"[^}]*data-motion-role="engine"[^}]*{[^}]*animation:\s*station-engine-charging-drawn 480ms ease-in-out infinite alternate;/s,
+    );
+
+    expect(stationCss).toMatch(
+      /data-departure-state="departing"[^}]*service-hatch[^}]*{[^}]*animation:\s*station-door-closing 220ms ease-in both;/s,
+    );
+    expect(stationCss).toMatch(
+      /data-departure-state="departing"[^}]*data-motion-role="otter"[^}]*{[^}]*animation:\s*station-otter-boarding 300ms ease-in 120ms both;/s,
+    );
+    expect(stationCss).toMatch(
+      /data-departure-state="departing"[^}]*data-motion-role="wake"[^}]*{[^}]*animation:\s*station-wake-departing-drawn 940ms ease-out 260ms both;/s,
+    );
+    expect(stationCss).toMatch(
+      /data-departure-state="departing"[^}]*station-layer--foreground[^}]*{[^}]*animation:\s*station-foreground-departing 940ms ease-out 260ms both;/s,
+    );
+
+    const vehicleDeparture = extractCssBlock(
+      stationCss,
+      '@keyframes station-vehicle-departing',
+    );
+    expect(vehicleDeparture).toMatch(/21\.6667%\s*{[^}]*transform:/s);
+    expect(vehicleDeparture).toMatch(
+      /30%\s*{[^}]*translate3d\(24px,/s,
+    );
+    expect(vehicleDeparture).toMatch(/100%\s*{[^}]*translate3d\(120vw,/s);
+    expect(vehicleDeparture).not.toContain('scaleX(');
+
+    for (const keyframes of [
+      'station-otter-charging',
+      'station-otter-boarding',
+    ]) {
+      const horizontalOffsets = [
+        ...extractCssBlock(stationCss, `@keyframes ${keyframes}`).matchAll(
+          /transform:\s*translate3d\(([^,]+),/g,
+        ),
+      ].map((match) => match[1]);
+      expect(horizontalOffsets.length, keyframes).toBeGreaterThan(0);
+      expect(horizontalOffsets, keyframes).toEqual(
+        horizontalOffsets.map(() => '0'),
+      );
+    }
+
+    for (const keyframes of [
+      'station-door-closing',
+      'station-otter-boarding',
+      'station-vehicle-departing',
+      'station-wake-departing-drawn',
+      'station-foreground-departing',
+    ]) {
+      const declarations = [
+        ...extractCssBlock(stationCss, `@keyframes ${keyframes}`).matchAll(
+          /([a-z-]+)\s*:/g,
+        ),
+      ].map((match) => match[1]);
+      expect(declarations.length, keyframes).toBeGreaterThan(0);
+      expect(
+        declarations.every((property) => (
+          property === 'transform' || property === 'opacity'
+        )),
+        keyframes,
+      ).toBe(true);
+    }
+
+    expect(stationCss).toMatch(
+      /data-reduced-motion="true"[^}]*data-departure-state="departing"[^}]*{[^}]*animation:\s*station-departing-opacity-drawn 80ms linear both;/s,
+    );
+    const reducedDeparture = extractCssBlock(
+      stationCss,
+      '@keyframes station-departing-opacity-drawn',
+    );
+    expect(reducedDeparture).toMatch(/from\s*{\s*opacity:\s*1;/s);
+    expect(reducedDeparture).toMatch(/to\s*{\s*opacity:\s*0;/s);
+    expect(reducedDeparture).not.toContain('transform:');
+  });
+
+  it('wires station sound and preserves the bounded startRun cue order', () => {
+    const contextSection = sourceSection(
+      'const featureContext: FeatureSceneContext = {',
+      'const sceneFactory: SceneFactory =',
+    );
+    expect(contextSection).toContain('playSound: (cue) => {');
+    expect(contextSection).toContain('audio.playSound(cue);');
+
+    const startSection = sourceSection(
+      'async function startRun(',
+      'function settleBattleOutcome(',
+    );
+    const unlockIndex = startSection.indexOf('await audio.unlockFromGesture()');
+    const stampIndex = startSection.indexOf("audio.playSound('ticket-stamp')");
+    const chargingIndex = startSection.indexOf('departure.beginCharging()');
+    const pauseIndex = startSection.indexOf('activeStationScene?.pauseAmbient();');
+    const chargeCueIndex = startSection.indexOf("audio.playSound('train-charge')");
+    const departCueIndex = startSection.indexOf("audio.playSound('train-depart')");
+    const playDepartureIndex = startSection.indexOf('departure.playDeparture()');
+
+    expect(unlockIndex).toBeGreaterThanOrEqual(0);
+    expect(stampIndex).toBeGreaterThan(unlockIndex);
+    expect(chargingIndex).toBeGreaterThan(stampIndex);
+    expect(pauseIndex).toBeGreaterThan(chargingIndex);
+    expect(chargeCueIndex).toBeGreaterThan(pauseIndex);
+    expect(departCueIndex).toBeGreaterThan(chargeCueIndex);
+    expect(playDepartureIndex).toBeGreaterThan(departCueIndex);
+    expect(startSection).not.toContain("audio.playSound('ui-tap')");
+  });
+
+  it('restores cancelled station departures only while visible and still at station', () => {
+    const cancelSection = sourceSection(
+      'function cancelActiveStationDeparture(): void {',
+      'async function loadCriticalBattleAssets(',
+    );
+    expect(cancelSection.indexOf('departure?.dispose();')).toBeLessThan(
+      cancelSection.indexOf('restoreStationAfterDepartureAbort();'),
+    );
+
+    const restoreSection = sourceSection(
+      'function restoreStationAfterDepartureAbort(): void {',
+      'function cancelActiveStationDeparture(): void {',
+    );
+    const idleIndex = restoreSection.indexOf('setStationIdleMotion();');
+    const visibleStationGuard = restoreSection.indexOf(
+      "if (phase === 'station' && !pageHidden)",
+    );
+    const resumeIndex = restoreSection.indexOf(
+      'activeStationScene?.resumeForVisibility();',
+    );
+    expect(idleIndex).toBeGreaterThanOrEqual(0);
+    expect(visibleStationGuard).toBeGreaterThan(idleIndex);
+    expect(resumeIndex).toBeGreaterThan(visibleStationGuard);
+  });
+
+  it('does not resume after battle success and rejects repeated startRun entry', () => {
+    const startSection = sourceSection(
+      'async function startRun(',
+      'function settleBattleOutcome(',
+    );
+    const pendingGuard = startSection.indexOf('if (battleStartPending) return;');
+    const pendingSet = startSection.indexOf('battleStartPending = true;');
+    const departureCreation = startSection.indexOf(
+      'const departure = new StationDepartureController(',
+    );
+    expect(pendingGuard).toBeGreaterThanOrEqual(0);
+    expect(pendingGuard).toBeLessThan(pendingSet);
+    expect(pendingSet).toBeLessThan(departureCreation);
+
+    const combatIndex = startSection.indexOf("phase = 'combat';");
+    const catchIndex = startSection.indexOf('} catch (error) {');
+    expect(combatIndex).toBeGreaterThanOrEqual(0);
+    expect(catchIndex).toBeGreaterThan(combatIndex);
+    expect(startSection.slice(combatIndex, catchIndex)).not.toContain(
+      'resumeForVisibility',
+    );
   });
 
   it('exposes effective reduced motion on the station hero', () => {
