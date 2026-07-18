@@ -449,6 +449,12 @@
   to { opacity: 0; }
 }
 
+@keyframes station-charging-opacity-drawn {
+  0%,
+  100% { opacity: 1; }
+  50% { opacity: .92; }
+}
+
 .station-hero[data-ambient-event="mechanic-check"] [data-ambient-role="otter"],
 .station-hero[data-ambient-event="mechanic-check"] [data-ambient-role="service-hatch"] {
   animation: station-event-mechanic-check 1800ms ease-in-out both;
@@ -552,6 +558,15 @@
   transform: none;
 }
 
+.station-hero[data-reduced-motion="true"] .station-ticket__stamp {
+  animation: none;
+  transform: none;
+}
+
+.station-hero[data-reduced-motion="true"][data-departure-state="charging"] {
+  animation: station-charging-opacity-drawn 80ms linear both;
+}
+
 .station-hero[data-reduced-motion="true"][data-departure-state="departing"] {
   animation: station-departing-opacity-drawn 80ms linear both;
 }
@@ -565,6 +580,16 @@
   .station-hero [data-action="captain-greeting"] {
     animation: none;
     transform: none;
+  }
+
+  .station-hero[data-departure-state="charging"] .station-ticket__stamp,
+  .station-hero .station-ticket__stamp {
+    animation: none;
+    transform: none;
+  }
+
+  .station-hero[data-departure-state="charging"] {
+    animation: station-charging-opacity-drawn 80ms linear both;
   }
 
   .station-hero[data-departure-state="departing"] {

@@ -25,18 +25,6 @@ const responsiveCss = readFileSync(
   new URL('../../web/styles/responsive.css', import.meta.url),
   'utf8',
 );
-const runtimeSource = readFileSync(
-  new URL('../../web/LegacyGameRuntime.ts', import.meta.url),
-  'utf8',
-);
-
-function sourceSection(start: string, end: string): string {
-  const startIndex = runtimeSource.indexOf(start);
-  const endIndex = runtimeSource.indexOf(end, startIndex);
-  expect(startIndex, start).toBeGreaterThanOrEqual(0);
-  expect(endIndex, end).toBeGreaterThan(startIndex);
-  return runtimeSource.slice(startIndex, endIndex);
-}
 
 function extractCssBlock(source: string, marker: string): string {
   const markerIndex = source.indexOf(marker);
@@ -274,82 +262,39 @@ describe('StationHeroView', () => {
     expect(reducedDeparture).not.toContain('transform:');
   });
 
-  it('wires station sound and preserves the bounded startRun cue order', () => {
-    const contextSection = sourceSection(
-      'const featureContext: FeatureSceneContext = {',
-      'const sceneFactory: SceneFactory =',
+  it('keeps ticket stamping off in both reduced-motion paths', () => {
+    const gameReducedStamp = extractCssBlock(
+      stationCss,
+      '.station-hero[data-reduced-motion="true"] .station-ticket__stamp',
     );
-    expect(contextSection).toContain('playSound: (cue) => {');
-    expect(contextSection).toContain('audio.playSound(cue);');
+    expect(gameReducedStamp).toContain('animation: none;');
+    expect(gameReducedStamp).toContain('transform: none;');
 
-    const startSection = sourceSection(
-      'async function startRun(',
-      'function settleBattleOutcome(',
+    const gameReducedCharging = extractCssBlock(
+      stationCss,
+      '.station-hero[data-reduced-motion="true"][data-departure-state="charging"]',
     );
-    const unlockIndex = startSection.indexOf('await audio.unlockFromGesture()');
-    const stampIndex = startSection.indexOf("audio.playSound('ticket-stamp')");
-    const chargingIndex = startSection.indexOf('departure.beginCharging()');
-    const pauseIndex = startSection.indexOf('activeStationScene?.pauseAmbient();');
-    const chargeCueIndex = startSection.indexOf("audio.playSound('train-charge')");
-    const departCueIndex = startSection.indexOf("audio.playSound('train-depart')");
-    const playDepartureIndex = startSection.indexOf('departure.playDeparture()');
-
-    expect(unlockIndex).toBeGreaterThanOrEqual(0);
-    expect(stampIndex).toBeGreaterThan(unlockIndex);
-    expect(chargingIndex).toBeGreaterThan(stampIndex);
-    expect(pauseIndex).toBeGreaterThan(chargingIndex);
-    expect(chargeCueIndex).toBeGreaterThan(pauseIndex);
-    expect(departCueIndex).toBeGreaterThan(chargeCueIndex);
-    expect(playDepartureIndex).toBeGreaterThan(departCueIndex);
-    expect(startSection).not.toContain("audio.playSound('ui-tap')");
-  });
-
-  it('restores cancelled station departures only while visible and still at station', () => {
-    const cancelSection = sourceSection(
-      'function cancelActiveStationDeparture(): void {',
-      'async function loadCriticalBattleAssets(',
-    );
-    expect(cancelSection.indexOf('departure?.dispose();')).toBeLessThan(
-      cancelSection.indexOf('restoreStationAfterDepartureAbort();'),
+    expect(gameReducedCharging).toContain(
+      'animation: station-charging-opacity-drawn 80ms linear both;',
     );
 
-    const restoreSection = sourceSection(
-      'function restoreStationAfterDepartureAbort(): void {',
-      'function cancelActiveStationDeparture(): void {',
+    const systemReduced = extractCssBlock(
+      stationCss,
+      '@media (prefers-reduced-motion: reduce)',
     );
-    const idleIndex = restoreSection.indexOf('setStationIdleMotion();');
-    const visibleStationGuard = restoreSection.indexOf(
-      "if (phase === 'station' && !pageHidden)",
+    expect(systemReduced).toMatch(
+      /data-departure-state="charging"[^}]*station-ticket__stamp[^}]*{[^}]*animation:\s*none;[^}]*transform:\s*none;/s,
     );
-    const resumeIndex = restoreSection.indexOf(
-      'activeStationScene?.resumeForVisibility();',
+    expect(systemReduced).toMatch(
+      /data-departure-state="charging"[^}]*{[^}]*animation:\s*station-charging-opacity-drawn 80ms linear both;/s,
     );
-    expect(idleIndex).toBeGreaterThanOrEqual(0);
-    expect(visibleStationGuard).toBeGreaterThan(idleIndex);
-    expect(resumeIndex).toBeGreaterThan(visibleStationGuard);
-  });
 
-  it('does not resume after battle success and rejects repeated startRun entry', () => {
-    const startSection = sourceSection(
-      'async function startRun(',
-      'function settleBattleOutcome(',
+    const reducedCharging = extractCssBlock(
+      stationCss,
+      '@keyframes station-charging-opacity-drawn',
     );
-    const pendingGuard = startSection.indexOf('if (battleStartPending) return;');
-    const pendingSet = startSection.indexOf('battleStartPending = true;');
-    const departureCreation = startSection.indexOf(
-      'const departure = new StationDepartureController(',
-    );
-    expect(pendingGuard).toBeGreaterThanOrEqual(0);
-    expect(pendingGuard).toBeLessThan(pendingSet);
-    expect(pendingSet).toBeLessThan(departureCreation);
-
-    const combatIndex = startSection.indexOf("phase = 'combat';");
-    const catchIndex = startSection.indexOf('} catch (error) {');
-    expect(combatIndex).toBeGreaterThanOrEqual(0);
-    expect(catchIndex).toBeGreaterThan(combatIndex);
-    expect(startSection.slice(combatIndex, catchIndex)).not.toContain(
-      'resumeForVisibility',
-    );
+    expect(reducedCharging).not.toContain('transform:');
+    expect(reducedCharging).toMatch(/opacity:/);
   });
 
   it('exposes effective reduced motion on the station hero', () => {

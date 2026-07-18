@@ -160,6 +160,7 @@ import { renderLaunchCampaignView } from './views/LaunchCampaignView';
 import { renderSocialHubView } from './views/SocialHubView';
 import { mountAppShell } from './app/AppShell';
 import { StationDepartureController } from './app/StationDepartureController';
+import { StationRunCoordinator } from './app/StationRunCoordinator';
 import { SceneRouter } from './app/SceneRouter';
 import { BattleScene } from './scenes/BattleScene';
 import { createCaptainScene } from './scenes/CaptainScene';
@@ -249,7 +250,7 @@ let activeBattleProgression: ProgressionSnapshot | null = null;
 let activeBattleSettlement: BattleSettlementPresentation | null = null;
 let activeBattleScene: BattleScene | null = null;
 let activeStationScene: StationScene | null = null;
-let activeStationDeparture: StationDepartureController | null = null;
+let activeStationRunToken: symbol | null = null;
 let battleStartPending = false;
 let effectiveReducedMotion = reducedMotion;
 let qualityPreference = settingsBridge.getSettings().qualityPreference;
@@ -283,6 +284,40 @@ const featureContext: FeatureSceneContext = {
   }),
   dispatch: () => undefined,
 };
+const stationRunCoordinator = new StationRunCoordinator<
+  BattleAssetSet<BattleArtId>
+>({
+  unlockAudio: () => audio.unlockFromGesture(),
+  playSound: (cue) => {
+    audio.playSound(cue);
+  },
+  showLoadingNotice: (audioReady) => {
+    notice = audioReady
+      ? '正在装载列车、潮兽与战斗特效……'
+      : '当前浏览器未启用声音，游戏仍可正常游玩。正在装载战斗……';
+    shell.setNotice(notice);
+  },
+  pauseAmbient: () => {
+    activeStationScene?.pauseAmbient();
+  },
+  setChargeMotion: () => {
+    audio.setTrainMotion({ active: true, speed: 0.18, power: 0.9 });
+  },
+  setDepartureMotion: () => {
+    audio.setTrainMotion({ active: true, speed: 1, power: 0.9 });
+  },
+  setIdleMotion: () => {
+    setStationIdleMotion();
+  },
+  isVisibleStation: () => phase === 'station' && !pageHidden,
+  resumeAmbient: () => {
+    activeStationScene?.resumeForVisibility();
+  },
+  reportFailure: (error) => {
+    console.error(error);
+    notice = '战斗资源初始化失败，请稍后重试。';
+  },
+});
 const sceneFactory: SceneFactory = (sceneId) => {
   if (sceneId === 'station') {
     const scene = createStationScene(featureContext);
@@ -388,18 +423,11 @@ function stopStationAudioLoop(): void {
   diagnostics.audioSchedulerStopped();
 }
 
-function restoreStationAfterDepartureAbort(): void {
-  setStationIdleMotion();
-  if (phase === 'station' && !pageHidden) {
-    activeStationScene?.resumeForVisibility();
-  }
-}
-
 function cancelActiveStationDeparture(): void {
-  const departure = activeStationDeparture;
-  activeStationDeparture = null;
-  departure?.dispose();
-  if (departure) restoreStationAfterDepartureAbort();
+  if (activeStationRunToken === null) return;
+  activeStationRunToken = null;
+  battleStartPending = false;
+  stationRunCoordinator.cancel();
 }
 
 async function loadCriticalBattleAssets(
@@ -919,41 +947,37 @@ async function startRun(
   }
 
   battleStartPending = true;
+  const runToken = Symbol('station-runtime-run');
+  activeStationRunToken = runToken;
   const stationNotice = notice;
   const departure = new StationDepartureController(
     shell.sceneHost,
     effectiveReducedMotion,
   );
-  activeStationDeparture = departure;
   try {
-    const audioReady = await audio.unlockFromGesture();
-    if (audioReady) audio.playSound('ticket-stamp');
-    notice = audioReady
-      ? '正在装载列车、潮兽与战斗特效……'
-      : '当前浏览器未启用声音，游戏仍可正常游玩。正在装载战斗……';
-    shell.setNotice(notice);
-    if (!departure.beginCharging()) {
-      restoreStationAfterDepartureAbort();
-      notice = stationNotice;
-      return;
-    }
-    activeStationScene?.pauseAmbient();
-    audio.setTrainMotion({ active: true, speed: 0.18, power: 0.9 });
-    audio.playSound('train-charge');
-    const currentBattleAssets = await loadCriticalBattleAssets(
-      getActiveCaptainArtId(),
-    );
-    if (activeStationDeparture !== departure) {
-      restoreStationAfterDepartureAbort();
-      notice = stationNotice;
-      return;
-    }
-    audio.setTrainMotion({ active: true, speed: 1, power: 0.9 });
-    audio.playSound('train-depart');
-    if (!await departure.playDeparture()) {
-      restoreStationAfterDepartureAbort();
-      notice = stationNotice;
-      return;
+    const preparation = await stationRunCoordinator.prepare({
+      beginCharging: () => departure.beginCharging(),
+      loadAssets: () => loadCriticalBattleAssets(getActiveCaptainArtId()),
+      playDeparture: () => departure.playDeparture(),
+      cancelDeparture: () => departure.dispose(),
+    });
+    let currentBattleAssets: BattleAssetSet<BattleArtId>;
+    switch (preparation.status) {
+      case 'ready':
+        currentBattleAssets = preparation.assets;
+        break;
+      case 'local-abort':
+        notice = stationNotice;
+        return;
+      case 'failure':
+        activeBattleEngine = null;
+        activeBattleProgression = null;
+        activeBattleSettlement = null;
+        phase = 'station';
+        return;
+      case 'stale-cancel':
+      case 'busy':
+        return;
     }
     if (runId) {
       track('run_restart', { afterAdRevive: lastRunRecovery === 'ad' });
@@ -1015,15 +1039,16 @@ async function startRun(
     activeBattleProgression = null;
     activeBattleSettlement = null;
     phase = 'station';
-    restoreStationAfterDepartureAbort();
+    setStationIdleMotion();
+    if (!pageHidden) activeStationScene?.resumeForVisibility();
     notice = '战斗资源初始化失败，请稍后重试。';
   } finally {
     departure.dispose();
-    if (activeStationDeparture === departure) {
-      activeStationDeparture = null;
+    if (activeStationRunToken === runToken) {
+      activeStationRunToken = null;
+      battleStartPending = false;
+      render();
     }
-    battleStartPending = false;
-    render();
   }
 }
 
