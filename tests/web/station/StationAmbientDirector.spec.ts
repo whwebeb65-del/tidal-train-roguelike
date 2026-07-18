@@ -93,6 +93,21 @@ describe('StationAmbientDirector', () => {
     expect(fixture.timer.delays.at(-1)).toBe(6500);
   });
 
+  it('starts only once without replacing its timer or consuming extra random values', () => {
+    const fixture = createFixture([0.25, 0.75]);
+
+    fixture.director.start();
+    fixture.director.start();
+    fixture.director.start();
+    expect(fixture.timer.delays).toEqual([2500]);
+    expect(fixture.timer.pendingCount).toBe(1);
+
+    fixture.timer.fireNext();
+    expect(fixture.root.dataset.ambientEvent).toBe('distant-train');
+    expect(fixture.events).toEqual(['distant-train']);
+    expect(fixture.timer.delays.at(-1)).toBe(2200);
+  });
+
   it('never selects the same automatic event twice in a row', () => {
     const fixture = createFixture([0, 0, 0, 0]);
     fixture.director.start();
@@ -140,6 +155,68 @@ describe('StationAmbientDirector', () => {
     expect(fixture.timer.pendingCount).toBe(0);
     expect(fixture.director.requestCaptainGreeting()).toBe(true);
     expect(fixture.lines.at(-1)).toContain('末班车');
+  });
+
+  it('rejects a second captain greeting without replacing the active greeting', () => {
+    const fixture = createFixture([0.5], true);
+
+    expect(fixture.director.requestCaptainGreeting()).toBe(true);
+    expect(fixture.director.requestCaptainGreeting()).toBe(false);
+    expect(fixture.root.dataset.ambientEvent).toBe('captain-greeting');
+    expect(fixture.events).toEqual(['captain-greeting']);
+    expect(fixture.lines).toHaveLength(1);
+    expect(fixture.timer.delays).toEqual([1200]);
+    expect(fixture.timer.pendingCount).toBe(1);
+
+    fixture.timer.fireNext();
+    expect(fixture.root.dataset.ambientEvent).toBeUndefined();
+    expect(fixture.timer.pendingCount).toBe(0);
+  });
+
+  it('applies each reduced-motion transition only once while running', () => {
+    const fixture = createFixture([0.25, 0.75, 0.5]);
+    fixture.director.start();
+    expect(fixture.timer.delays).toEqual([2500]);
+
+    fixture.director.setReducedMotion(true);
+    fixture.director.setReducedMotion(true);
+    expect(fixture.timer.delays).toEqual([2500]);
+    expect(fixture.timer.pendingCount).toBe(0);
+
+    fixture.director.setReducedMotion(false);
+    fixture.director.setReducedMotion(false);
+    expect(fixture.timer.delays).toEqual([2500, 3500]);
+    expect(fixture.timer.pendingCount).toBe(1);
+
+    fixture.timer.fireNext();
+    expect(fixture.root.dataset.ambientEvent).toBe('mail-drop');
+  });
+
+  it('waits until start after reduced motion is disabled before start', () => {
+    const fixture = createFixture([0.25], true);
+
+    fixture.director.setReducedMotion(false);
+    expect(fixture.timer.delays).toEqual([]);
+    expect(fixture.timer.pendingCount).toBe(0);
+
+    fixture.director.start();
+    expect(fixture.timer.delays).toEqual([2500]);
+    expect(fixture.timer.pendingCount).toBe(1);
+  });
+
+  it('waits until resume after reduced motion is disabled while paused', () => {
+    const fixture = createFixture([0.25, 0.75]);
+    fixture.director.start();
+    fixture.director.pause();
+
+    fixture.director.setReducedMotion(true);
+    fixture.director.setReducedMotion(false);
+    expect(fixture.timer.delays).toEqual([2500]);
+    expect(fixture.timer.pendingCount).toBe(0);
+
+    fixture.director.resume();
+    expect(fixture.timer.delays).toEqual([2500, 3500]);
+    expect(fixture.timer.pendingCount).toBe(1);
   });
 
   it('recovers from presentation callback errors and continues scheduling', () => {
