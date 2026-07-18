@@ -19,6 +19,71 @@ function renderHero(): string {
   });
 }
 
+const vehicleRoles = [
+  'train',
+  'captain',
+  'otter',
+  'jellyfish',
+  'wake',
+  'engine',
+] as const;
+
+function findMatchingDivEnd(html: string, divStart: number): number {
+  const divTag = /<\/?div\b[^>]*>/g;
+  divTag.lastIndex = divStart;
+  let depth = 0;
+  let match = divTag.exec(html);
+
+  while (match) {
+    depth += match[0].startsWith('</') ? -1 : 1;
+    if (depth === 0) return match.index + match[0].length;
+    match = divTag.exec(html);
+  }
+
+  return -1;
+}
+
+function expectSharedVehicleOwnership(html: string): void {
+  const vehicleStart = html.indexOf(
+    '<div class="station-hero__vehicle" data-motion-role="vehicle">',
+  );
+
+  expect(vehicleStart).toBeGreaterThan(-1);
+  const vehicleEnd = findMatchingDivEnd(html, vehicleStart);
+  expect(vehicleEnd).toBeGreaterThan(vehicleStart);
+
+  const vehicle = html.slice(vehicleStart, vehicleEnd);
+  for (const role of vehicleRoles) {
+    const marker = `data-motion-role="${role}"`;
+    const roleStart = html.indexOf(marker);
+
+    expect(roleStart).toBeGreaterThan(vehicleStart);
+    expect(roleStart).toBeLessThan(vehicleEnd);
+    expect(html.indexOf(marker, roleStart + marker.length)).toBe(-1);
+  }
+  expect(vehicle).not.toContain('station-hero__copy');
+  expect(vehicle).not.toContain('data-action="start-run"');
+  expect(html.indexOf('station-hero__copy')).toBeLessThan(vehicleStart);
+  expect(html.indexOf('data-motion-role="background"')).toBeLessThan(
+    vehicleStart,
+  );
+}
+
+function moveWakeAndEngineOutsideVehicle(html: string): string {
+  const wake = '      <div class="station-hero__wake" data-motion-role="wake" aria-hidden="true"><i></i><i></i><i></i></div>\n';
+  const engine = '      <span class="station-hero__engine-glow" data-motion-role="engine" aria-hidden="true"></span>\n';
+  const vehicleClose = '    </div>\n  </section>';
+
+  expect(html).toContain(wake);
+  expect(html).toContain(engine);
+  expect(html).toContain(vehicleClose);
+
+  return html
+    .replace(wake, '')
+    .replace(engine, '')
+    .replace(vehicleClose, `    </div>\n${wake}${engine}  </section>`);
+}
+
 describe('StationHeroView', () => {
   it('renders the selected captain, train and real departure action', () => {
     const html = renderHero();
@@ -38,31 +103,13 @@ describe('StationHeroView', () => {
 
   it('keeps every vehicle layer in one shared frame and excludes station UI', () => {
     const html = renderHero();
-    const vehicleStart = html.indexOf(
-      '<div class="station-hero__vehicle" data-motion-role="vehicle">',
-    );
-    const vehicleEnd = html.indexOf('  </section>', vehicleStart);
+    expectSharedVehicleOwnership(html);
+  });
 
-    expect(vehicleStart).toBeGreaterThan(-1);
-    expect(vehicleEnd).toBeGreaterThan(vehicleStart);
+  it('rejects wake and engine moved immediately outside the vehicle frame', () => {
+    const invalidHtml = moveWakeAndEngineOutsideVehicle(renderHero());
 
-    const vehicle = html.slice(vehicleStart, vehicleEnd);
-    for (const role of [
-      'train',
-      'captain',
-      'otter',
-      'jellyfish',
-      'wake',
-      'engine',
-    ]) {
-      expect(vehicle).toContain(`data-motion-role="${role}"`);
-    }
-    expect(vehicle).not.toContain('station-hero__copy');
-    expect(vehicle).not.toContain('data-action="start-run"');
-    expect(html.indexOf('station-hero__copy')).toBeLessThan(vehicleStart);
-    expect(html.indexOf('data-motion-role="background"')).toBeLessThan(
-      vehicleStart,
-    );
+    expect(() => expectSharedVehicleOwnership(invalidHtml)).toThrow();
   });
 
   it('assigns idle, charging and departure base motion only to the vehicle frame', () => {

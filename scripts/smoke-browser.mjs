@@ -158,19 +158,38 @@ async function measureStationDeparturePose(client, label) {
     `(async () => {
       const hero = document.querySelector('.station-hero');
       const startButton = hero?.querySelector('[data-action="start-run"]');
-      const roleNames = ['train', 'captain', 'otter', 'jellyfish'];
-      const roleElements = Object.fromEntries(roleNames.map((role) => [
+      const vehicle = hero?.querySelector(
+        '.station-hero__vehicle[data-motion-role="vehicle"]'
+      );
+      const vehicleRoleNames = [
+        'train',
+        'captain',
+        'otter',
+        'jellyfish',
+        'wake',
+        'engine',
+      ];
+      const displacementRoleNames = ['train', 'captain', 'otter', 'jellyfish'];
+      const roleElements = Object.fromEntries(vehicleRoleNames.map((role) => [
         role,
         hero?.querySelector('[data-motion-role="' + role + '"]') ?? null,
       ]));
       if (
         !(hero instanceof HTMLElement)
         || !(startButton instanceof HTMLButtonElement)
+        || !(vehicle instanceof HTMLElement)
         || Object.values(roleElements).some((element) => !(element instanceof HTMLElement))
       ) {
         throw new Error('station departure pose elements are missing');
       }
-      const readBoxes = () => Object.fromEntries(roleNames.map((role) => {
+      const sharedVehicleAncestor = vehicleRoleNames.every((role) => (
+        roleElements[role].closest('.station-hero__vehicle') === vehicle
+        && roleElements[role].closest('[data-motion-role="vehicle"]') === vehicle
+      ));
+      if (!sharedVehicleAncestor) {
+        throw new Error('station vehicle roles do not share the exact closest vehicle ancestor');
+      }
+      const readBoxes = () => Object.fromEntries(displacementRoleNames.map((role) => {
         const rect = roleElements[role].getBoundingClientRect();
         return [role, {
           left: rect.left,
@@ -198,6 +217,8 @@ async function measureStationDeparturePose(client, label) {
         departureState: hero.dataset.departureState ?? null,
         sameHero: hero.isConnected
           && document.querySelector('.station-hero') === hero,
+        sharedVehicleAncestor,
+        vehicleRoles: vehicleRoleNames,
       };
     })()`,
   );
@@ -219,6 +240,7 @@ async function measureStationDeparturePose(client, label) {
     (role) => Math.abs(relativeXDrift[role]) <= stationRelativeXTolerancePx,
   );
   const passed = measurement.sameHero
+    && measurement.sharedVehicleAncestor
     && measurement.departureState === 'departing'
     && enoughDepartureMotion
     && stableRelativeOffsets;
@@ -227,6 +249,8 @@ async function measureStationDeparturePose(client, label) {
     label,
     passed,
     sameHero: measurement.sameHero,
+    sharedVehicleAncestor: measurement.sharedVehicleAncestor,
+    vehicleRoles: measurement.vehicleRoles,
     departureState: measurement.departureState,
     tolerancePx: stationRelativeXTolerancePx,
     displacementX: Object.fromEntries(Object.entries(displacementX).map(
@@ -241,7 +265,9 @@ async function measureStationDeparturePose(client, label) {
       + `displacementX=${JSON.stringify(result.displacementX)}; `
       + `relativeXDrift=${JSON.stringify(result.relativeXDrift)}; `
       + `tolerance=±${stationRelativeXTolerancePx}px; `
-      + `sameHero=${measurement.sameHero}`,
+      + `sameHero=${measurement.sameHero}; `
+      + `sharedVehicleAncestor=${measurement.sharedVehicleAncestor}; `
+      + `vehicleRoles=${measurement.vehicleRoles.join(',')}`,
   );
   return result;
 }
@@ -807,8 +833,9 @@ async function main() {
     assert.deepEqual(
       stationPoseFailures,
       [],
-      'station train and crew must share one departure X displacement at '
-        + `every viewport (tolerance ±${stationRelativeXTolerancePx}px)`,
+      'station train, crew, wake and engine must share one exact vehicle '
+        + 'ancestor, and train/crew must share one departure X displacement '
+        + `at every viewport (tolerance ±${stationRelativeXTolerancePx}px)`,
     );
     console.log('[smoke] browser smoke ok');
   } catch (error) {
