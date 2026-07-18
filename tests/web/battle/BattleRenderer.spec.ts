@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { BattleRenderer } from '../../../web/battle/BattleRenderer';
+import { EffectSystem } from '../../../web/battle/EffectSystem';
 import { TrainMotionController } from '../../../web/battle/TrainMotionController';
 import type {
   BattleDrawCommand,
@@ -64,6 +65,73 @@ function pointPairs(command: LineDrawCommand): readonly (readonly number[])[] {
 }
 
 describe('BattleRenderer', () => {
+  it('draws matte hand-made combat impacts and dark emphasized ring lines', () => {
+    const effects = new EffectSystem({
+      particleLimit: 80,
+      damageNumberLimit: 8,
+      reducedMotion: false,
+    });
+    effects.consume([
+      {
+        type: 'projectile-hit',
+        enemyId: 1,
+        damage: 50,
+        critical: true,
+        source: 'main',
+      },
+      {
+        type: 'enemy-killed',
+        enemyId: 1,
+        kind: 'bubble-fin',
+        x: 120,
+        y: 260,
+      },
+    ], createFrameFixture());
+    effects.update(120);
+
+    const commands = renderCommands({ effects: effects.view });
+    const squash = findCommand<EllipseDrawCommand>(
+      commands,
+      (item) => item.kind === 'effect-defeat-squash',
+    );
+    expect(squash).toMatchObject({
+      fill: '#315c70',
+      stroke: '#17344c',
+      lineWidth: 3,
+      blendMode: 'source-over',
+    });
+    expect(squash.radiusX).toBeGreaterThan(squash.radiusY);
+
+    const smear = findCommand<EllipseDrawCommand>(
+      commands,
+      (item) => item.kind === 'effect-brush-smear',
+    );
+    expect(smear.radiusX).toBeCloseTo(2.2 * (smear.radiusY / 0.42), 6);
+    expect(smear.blendMode).toBe('source-over');
+
+    const bubble = findCommand<EllipseDrawCommand>(
+      commands,
+      (item) => item.kind === 'effect-ink-bubble',
+    );
+    expect(bubble).toMatchObject({
+      stroke: '#17344c',
+      blendMode: 'source-over',
+    });
+    expect(bubble.radiusX).toBe(bubble.radiusY);
+
+    const primaryRings = commands.filter(
+      (item): item is EllipseDrawCommand => item.kind === 'impact-ring',
+    );
+    expect(primaryRings.every((item) => (
+      item.stroke === '#fff2d2' && item.blendMode === 'source-over'
+    ))).toBe(true);
+    const secondaryRings = commands.filter(
+      (item): item is EllipseDrawCommand => item.kind === 'impact-ring-secondary',
+    );
+    expect(secondaryRings).toHaveLength(2);
+    expect(secondaryRings.every((item) => item.stroke === '#17344c')).toBe(true);
+  });
+
   it('draws ordered hand-drawn background layers with adjacent repeats', () => {
     const commands = renderCommands().filter(
       (command): command is ImageDrawCommand => (

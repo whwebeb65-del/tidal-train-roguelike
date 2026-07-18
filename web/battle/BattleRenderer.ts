@@ -805,6 +805,53 @@ export class BattleRenderer {
   ): void {
     for (const particle of input.effects.particles) {
       if (particle.layer !== layer) continue;
+      if (particle.kind === 'defeat-squash') {
+        this.painter.ellipse({
+          kind: 'effect-defeat-squash',
+          layer,
+          x: particle.x,
+          y: particle.y + particle.size * particle.progress * 0.22,
+          radiusX: particle.size * (1 + particle.progress * 0.9),
+          radiusY: particle.size * (0.8 - particle.progress * 0.5),
+          fill: particle.color,
+          stroke: '#17344c',
+          lineWidth: 3,
+          alpha: particle.alpha,
+          blendMode: 'source-over',
+        });
+        continue;
+      }
+      if (particle.kind === 'brush-smear') {
+        this.painter.ellipse({
+          kind: 'effect-brush-smear',
+          layer,
+          x: particle.x,
+          y: particle.y,
+          radiusX: particle.size * 2.2,
+          radiusY: particle.size * 0.42,
+          rotation: particle.rotation,
+          fill: particle.color,
+          alpha: particle.alpha,
+          blendMode: 'source-over',
+        });
+        continue;
+      }
+      if (particle.kind === 'ink-bubble') {
+        this.painter.ellipse({
+          kind: 'effect-ink-bubble',
+          layer,
+          x: particle.x,
+          y: particle.y,
+          radiusX: particle.size,
+          radiusY: particle.size,
+          fill: particle.color,
+          stroke: '#17344c',
+          lineWidth: 1.5,
+          alpha: particle.alpha,
+          blendMode: 'source-over',
+        });
+        continue;
+      }
       const stretched = (
         particle.kind === 'armour-shard'
         || particle.kind === 'defeat-shard'
@@ -843,8 +890,22 @@ export class BattleRenderer {
         stroke: ring.color,
         lineWidth: 2.5,
         alpha: ring.alpha,
-        blendMode: 'screen',
+        blendMode: 'source-over',
       });
+      if (ring.secondaryColor) {
+        this.painter.ellipse({
+          kind: 'impact-ring-secondary',
+          layer: 'front-effects',
+          x: ring.x,
+          y: ring.y,
+          radiusX: ring.radius * 0.9,
+          radiusY: ring.radius * 0.65,
+          stroke: ring.secondaryColor,
+          lineWidth: 1.5,
+          alpha: ring.alpha,
+          blendMode: 'source-over',
+        });
+      }
     }
   }
 

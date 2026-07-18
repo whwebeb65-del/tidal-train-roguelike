@@ -4,6 +4,113 @@ import { getRenderBudget } from '../../../web/battle/QualityMonitor';
 import { createFrameFixture } from './helpers/BattleFixtures';
 
 describe('EffectSystem', () => {
+  it('adds brush smears to weapon fire and projectile impacts', () => {
+    const weaponEffects = new EffectSystem({
+      particleLimit: 80,
+      damageNumberLimit: 8,
+      reducedMotion: false,
+    });
+    weaponEffects.consume([{
+      type: 'weapon-fired',
+      projectileId: 3,
+      source: 'main',
+    }], createFrameFixture());
+
+    expect(weaponEffects.view.particles.filter((item) => item.kind === 'muzzle')).toHaveLength(3);
+    expect(weaponEffects.view.particles.filter((item) => item.kind === 'brush-smear')).toHaveLength(2);
+
+    const normalHit = new EffectSystem({
+      particleLimit: 80,
+      damageNumberLimit: 8,
+      reducedMotion: false,
+    });
+    normalHit.consume([{
+      type: 'projectile-hit',
+      enemyId: 1,
+      damage: 25,
+      critical: false,
+      source: 'main',
+    }], createFrameFixture());
+    expect(normalHit.view.particles.filter((item) => item.kind === 'brush-smear')).toHaveLength(3);
+
+    const criticalHit = new EffectSystem({
+      particleLimit: 80,
+      damageNumberLimit: 8,
+      reducedMotion: false,
+    });
+    criticalHit.consume([{
+      type: 'projectile-hit',
+      enemyId: 1,
+      damage: 50,
+      critical: true,
+      source: 'main',
+    }], createFrameFixture());
+    expect(criticalHit.view.particles.filter((item) => item.kind === 'brush-smear')).toHaveLength(6);
+  });
+
+  it.each([
+    ['bubble-fin', 6],
+    ['storm-ray-elite', 9],
+    ['deep-echo-boss', 14],
+  ] as const)('spawns one squash before %s ink bubbles', (kind, bubbleCount) => {
+    const effects = new EffectSystem({
+      particleLimit: 80,
+      damageNumberLimit: 8,
+      reducedMotion: false,
+    });
+    effects.consume([{
+      type: 'enemy-killed',
+      enemyId: 7,
+      kind,
+      x: 120,
+      y: 260,
+    }], createFrameFixture());
+
+    const kinds = effects.view.particles.map((item) => item.kind);
+    expect(kinds.filter((item) => item === 'defeat-squash')).toHaveLength(1);
+    expect(kinds.filter((item) => item === 'ink-bubble')).toHaveLength(bubbleCount);
+    expect(kinds.indexOf('defeat-squash')).toBeLessThan(kinds.indexOf('ink-bubble'));
+  });
+
+  it('turns an enemy kill into one high-priority squash followed by ink bubbles', () => {
+    const effects = new EffectSystem({
+      particleLimit: 80,
+      damageNumberLimit: 8,
+      reducedMotion: false,
+    });
+    effects.consume([{
+      type: 'enemy-killed',
+      enemyId: 7,
+      kind: 'bubble-fin',
+      x: 120,
+      y: 260,
+    }], createFrameFixture());
+
+    expect(effects.view.particles.filter((item) => item.kind === 'defeat-squash')).toHaveLength(1);
+    expect(effects.view.particles.filter((item) => item.kind === 'ink-bubble').length).toBeGreaterThanOrEqual(4);
+    expect(effects.view.particles.every((item) => item.progress >= 0 && item.progress <= 1)).toBe(true);
+    effects.update(120);
+    expect(effects.view.particles.find((item) => item.kind === 'defeat-squash')!.progress).toBeGreaterThan(0);
+  });
+
+  it('retains the defeat squash when the low-quality particle budget trims decoration', () => {
+    const effects = new EffectSystem({
+      particleLimit: 8,
+      damageNumberLimit: 4,
+      reducedMotion: false,
+    });
+    effects.consume([{ type: 'battle-won' }], createFrameFixture());
+    effects.consume([{
+      type: 'enemy-killed',
+      enemyId: 9,
+      kind: 'bubble-fin',
+      x: 195,
+      y: 260,
+    }], createFrameFixture());
+
+    expect(effects.view.particles.some((item) => item.kind === 'defeat-squash')).toBe(true);
+  });
+
   it('creates bounded hit, kill, loot and camera feedback', () => {
     const effects = new EffectSystem({
       particleLimit: 200,

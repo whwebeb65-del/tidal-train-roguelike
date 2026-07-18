@@ -11,9 +11,12 @@ import type { RenderBudget } from './QualityMonitor';
 
 export type EffectParticleKind =
   | 'muzzle'
+  | 'brush-smear'
   | 'splash'
   | 'armour-shard'
   | 'defeat-shard'
+  | 'defeat-squash'
+  | 'ink-bubble'
   | 'loot'
   | 'skill'
   | 'warning'
@@ -29,6 +32,7 @@ export interface EffectParticleView {
   readonly color: string;
   readonly alpha: number;
   readonly rotation: number;
+  readonly progress: number;
 }
 
 export interface DamageNumberView {
@@ -47,6 +51,7 @@ export interface ImpactRingView {
   readonly radius: number;
   readonly color: string;
   readonly alpha: number;
+  readonly secondaryColor?: string;
 }
 
 export interface EffectCameraView {
@@ -126,6 +131,7 @@ interface MutableImpactRing {
   x: number;
   y: number;
   color: string;
+  secondaryColor?: string;
   startRadius: number;
   endRadius: number;
   lifetimeMs: number;
@@ -235,6 +241,10 @@ export class EffectSystem {
         color: particle.color,
         alpha: fade(particle.ageMs, particle.lifetimeMs),
         rotation: particle.rotation,
+        progress: Math.min(
+          1,
+          Math.max(0, particle.ageMs / Math.max(1, particle.lifetimeMs)),
+        ),
       })),
       damageNumbers: this.damageNumbers.map((number) => ({
         id: number.id,
@@ -254,6 +264,7 @@ export class EffectSystem {
             + (ring.endRadius - ring.startRadius) * progress,
           color: ring.color,
           alpha: 1 - progress,
+          secondaryColor: ring.secondaryColor,
         };
       }),
       camera: {
@@ -281,9 +292,21 @@ export class EffectSystem {
         const projectile = frame.projectiles.find(
           (candidate) => candidate.id === event.projectileId,
         );
+        const x = projectile?.x ?? 195;
+        const y = projectile?.y ?? 690;
         this.spawnBurst(
-          projectile?.x ?? 195,
-          projectile?.y ?? 690,
+          x,
+          y,
+          2,
+          '#fff2d2',
+          'brush-smear',
+          260,
+          1,
+          'front-effects',
+        );
+        this.spawnBurst(
+          x,
+          y,
           3,
           '#efffff',
           'muzzle',
@@ -302,12 +325,20 @@ export class EffectSystem {
           y,
           event.critical ? 6 : 3,
           event.critical ? '#fff0a8' : '#baf7ff',
-          'splash',
+          'brush-smear',
           420,
           event.critical ? 2 : 1,
           'front-effects',
         );
-        this.addRing(x, y, event.critical ? 10 : 6, event.critical ? 35 : 24);
+        this.addRing(
+          x,
+          y,
+          event.critical ? 10 : 6,
+          event.critical ? 35 : 24,
+          '#fff2d2',
+          1,
+          event.critical ? '#17344c' : undefined,
+        );
         if (
           event.critical
           || event.source === 'volley'
@@ -334,7 +365,13 @@ export class EffectSystem {
       }
       if (event.type === 'enemy-killed') {
         this.remember(event.x, event.y);
-        const count = event.kind === 'deep-echo-boss' ? 12 : 8;
+        const boss = event.kind === 'deep-echo-boss';
+        const count = boss
+          ? 14
+          : event.kind === 'storm-ray-elite'
+            ? 9
+            : 6;
+        this.spawnDefeatSquash(event.x, event.y, boss);
         this.spawnBurst(
           event.x,
           event.y,
@@ -342,9 +379,9 @@ export class EffectSystem {
           event.kind === 'storm-ray-elite'
             ? '#ac9cff'
             : '#b9f6ff',
-          'defeat-shard',
-          event.kind === 'deep-echo-boss' ? 1100 : 720,
-          event.kind === 'deep-echo-boss' ? 4 : 2,
+          'ink-bubble',
+          boss ? 1100 : 720,
+          4,
           'front-effects',
         );
         this.addRing(
@@ -352,8 +389,9 @@ export class EffectSystem {
           event.y,
           12,
           event.kind === 'deep-echo-boss' ? 96 : 44,
-          '#efffff',
+          '#fff2d2',
           3,
+          '#17344c',
         );
         this.shake(event.kind === 'deep-echo-boss' ? 6 : 2.4, 180);
       }
@@ -553,6 +591,26 @@ export class EffectSystem {
     this.addRing(x, y, 18, 110, '#ffb49f', 4);
   }
 
+  private spawnDefeatSquash(x: number, y: number, boss: boolean): void {
+    if (this.particleLimit <= 0) return;
+    const particle = this.particlePool.acquire();
+    particle.id = this.nextId++;
+    particle.kind = 'defeat-squash';
+    particle.layer = 'front-effects';
+    particle.color = boss ? '#243f67' : '#315c70';
+    particle.size = boss ? 42 : 24;
+    particle.lifetimeMs = boss ? 420 : 260;
+    particle.priority = 8;
+    particle.x = x;
+    particle.y = y;
+    particle.vx = 0;
+    particle.vy = 0;
+    particle.rotation = 0;
+    particle.spin = 0;
+    particle.ageMs = 0;
+    this.particles.push(particle);
+  }
+
   private addDamageNumber(
     x: number,
     y: number,
@@ -576,8 +634,9 @@ export class EffectSystem {
     y: number,
     startRadius: number,
     endRadius: number,
-    color = '#cfffff',
+    color = '#fff2d2',
     priority = 1,
+    secondaryColor?: string,
   ): void {
     if (this.impactLimit <= 0) return;
     const ring = this.ringPool.acquire();
@@ -585,6 +644,7 @@ export class EffectSystem {
     ring.x = x;
     ring.y = y;
     ring.color = color;
+    ring.secondaryColor = secondaryColor;
     ring.startRadius = startRadius;
     ring.endRadius = endRadius;
     ring.lifetimeMs = 420;
@@ -763,6 +823,7 @@ function createImpactRing(): MutableImpactRing {
     x: 0,
     y: 0,
     color: '',
+    secondaryColor: undefined,
     startRadius: 0,
     endRadius: 0,
     lifetimeMs: 0,
@@ -776,6 +837,7 @@ function resetImpactRing(ring: MutableImpactRing): void {
   ring.x = 0;
   ring.y = 0;
   ring.color = '';
+  ring.secondaryColor = undefined;
   ring.startRadius = 0;
   ring.endRadius = 0;
   ring.lifetimeMs = 0;
