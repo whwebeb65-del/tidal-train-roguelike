@@ -17,7 +17,7 @@
   overflow: hidden;
   border: 1px solid rgb(218 255 255 / 30%);
   border-radius: 0 0 24px 24px;
-  background: #69cbd8;
+  background: #d98a62;
   box-shadow: 0 24px 70px rgb(3 37 54 / 26%);
   isolation: isolate;
   touch-action: manipulation;
@@ -34,7 +34,7 @@
   z-index: 1;
   overflow: hidden;
   background:
-    linear-gradient(180deg, #c9f7fa, #58c9d8 55%, #207ca6);
+    linear-gradient(180deg, #f5c887, #d98a62 55%, #536675);
 }
 
 [data-battle-canvas] {

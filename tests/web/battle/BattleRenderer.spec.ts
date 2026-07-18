@@ -64,6 +64,112 @@ function pointPairs(command: LineDrawCommand): readonly (readonly number[])[] {
 }
 
 describe('BattleRenderer', () => {
+  it('draws ordered hand-drawn background layers with adjacent repeats', () => {
+    const commands = renderCommands().filter(
+      (command): command is ImageDrawCommand => (
+        command.kind.startsWith('background-')
+        && command.layer === 'background'
+      ),
+    );
+
+    expect(commands.map((command) => command.kind)).toEqual([
+      'background-sky',
+      'background-horizon',
+      'background-track',
+      'background-track',
+      'background-foreground',
+      'background-foreground',
+    ]);
+    expect(commands.map(({ width, height }) => ({ width, height }))).toEqual(
+      Array.from({ length: 6 }, () => ({ width: 398, height: 860 })),
+    );
+    expect(commands[0]).toMatchObject({
+      x: 195 + Math.sin(42_000 / 5000) * 3,
+      y: 422,
+    });
+    expect(commands[1]).toMatchObject({ x: 195, y: 422 - 120 * 0.08 });
+    expect(commands[2]).toMatchObject({ x: 195, y: 422 + 120 });
+    expect(commands[3]).toMatchObject({ x: 195, y: 422 + 120 - 860 });
+    expect(commands[4]?.y).toBeCloseTo(422 + 120 * 1.42, 10);
+    expect(commands[5]?.y).toBeCloseTo(422 + 120 * 1.42 - 860, 10);
+  });
+
+  it('skips missing optional art and keeps a warm fallback for critical art', () => {
+    const optionalMissing = renderCommands({
+      failedArtIds: ['backgroundHorizon', 'backgroundForeground'],
+    });
+    expect(optionalMissing.filter(
+      (command) => command.kind.startsWith('background-')
+        && command.layer === 'background',
+    ).map((command) => command.kind)).toEqual([
+      'background-sky',
+      'background-track',
+      'background-track',
+    ]);
+
+    const painter = createRecordingPainter();
+    let clearColor = '';
+    painter.clear = (color: string) => {
+      clearColor = color;
+    };
+    new BattleRenderer(painter).render(createPresentationFixture({
+      failedArtIds: ['backgroundSky', 'backgroundTrack'],
+    }));
+    expect(clearColor).toBe('#d98a62');
+    expect(painter.commands.filter(
+      (command) => command.kind === 'background-sky'
+        || command.kind === 'background-track',
+    )).toHaveLength(0);
+    expect(painter.commands.some((command) => command.kind === 'train')).toBe(
+      true,
+    );
+  });
+
+  it('removes horizon and foreground draws at low quality', () => {
+    const painter = createRecordingPainter();
+    new BattleRenderer(painter).render({
+      ...createPresentationFixture(),
+      renderBudget: getRenderBudget('low'),
+    });
+
+    expect(painter.commands.filter(
+      (command) => command.kind.startsWith('background-')
+        && command.layer === 'background',
+    ).map((command) => command.kind)).toEqual([
+      'background-sky',
+      'background-track',
+      'background-track',
+    ]);
+  });
+
+  it('uses time-independent fixed background poses for reduced motion', () => {
+    const backgroundCommands = (
+      timeMs: number,
+      laneOffset: number,
+    ): readonly ImageDrawCommand[] => {
+      const painter = createRecordingPainter();
+      new BattleRenderer(painter).render({
+        ...createPresentationFixture({
+          reducedMotion: true,
+          trainMotion: { laneOffset },
+        }),
+        timeMs,
+      });
+      return painter.commands.filter(
+        (command): command is ImageDrawCommand => (
+          command.kind.startsWith('background-')
+          && command.layer === 'background'
+        ),
+      );
+    };
+
+    const first = backgroundCommands(1000, 240);
+    const second = backgroundCommands(9000, 999);
+    expect(second).toEqual(first);
+    expect(first.filter((command) => command.kind === 'background-track'))
+      .toMatchObject([{ y: 428 }, { y: -432 }]);
+  });
+
   it('draws stable layers and falls back for failed art', () => {
     const painter = createRecordingPainter();
     const renderer = new BattleRenderer(painter);

@@ -14,6 +14,7 @@ import {
   createCaptainRig,
   type SpritePartPose,
 } from './LayeredSpriteRig';
+import { createHandDrawnParallax } from './HandDrawnParallax';
 import type {
   BattleFrameView,
   EnemyKind,
@@ -72,7 +73,7 @@ export class BattleRenderer {
     };
     this.painter.begin(input.viewport, camera);
     try {
-      this.painter.clear('#8edbe7');
+      this.painter.clear('#d98a62');
       this.drawBackground(input);
       this.drawBackgroundParticles(input);
       this.drawWaterLanes(input, trainMotion);
@@ -116,23 +117,33 @@ export class BattleRenderer {
   }
 
   private drawBackground(input: BattleRenderInput): void {
-    const background = input.assets.get('background');
-    if (!background) return;
-    const drift = input.reducedMotion
-      ? 0
-      : Math.sin(input.timeMs / 2600) * 4;
-    this.painter.image({
-      kind: 'background',
-      layer: 'background',
-      source: background,
-      x: 195,
-      y: 422 + drift,
-      width: 398,
-      height: 860,
-      anchorX: 0.5,
-      anchorY: 0.5,
-      fallbackColor: '#69cbd8',
+    const poses = createHandDrawnParallax({
+      timeMs: input.timeMs,
+      laneOffset: input.trainMotion.laneOffset,
+      backgroundLayers: input.renderBudget.backgroundLayers,
+      reducedMotion: input.reducedMotion,
     });
+    for (const pose of poses) {
+      const source = input.assets.get(pose.artId);
+      if (!source) continue;
+      const y = 422 + pose.offsetY;
+      const repeatPositions = pose.repeatY ? [y, y - 860] : [y];
+      for (const repeatY of repeatPositions) {
+        this.painter.image({
+          kind: `background-${pose.id}`,
+          layer: 'background',
+          source,
+          x: 195 + pose.offsetX,
+          y: repeatY,
+          width: 398,
+          height: 860,
+          anchorX: 0.5,
+          anchorY: 0.5,
+          fallbackColor: '#d98a62',
+          alpha: pose.alpha,
+        });
+      }
+    }
   }
 
   private drawWaterLanes(

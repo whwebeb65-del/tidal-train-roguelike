@@ -1,12 +1,9 @@
 import { CHIBI_ART } from './ChibiArtCatalog';
 
-const battleTrack = new URL('./chibi/battle-track-dusk.webp', import.meta.url).href;
-
 export const BATTLE_ART_URLS = {
-  background: battleTrack,
   backgroundSky: new URL('./chibi/battle-sky-dusk.webp', import.meta.url).href,
   backgroundHorizon: new URL('./chibi/battle-horizon-dusk.webp', import.meta.url).href,
-  backgroundTrack: battleTrack,
+  backgroundTrack: new URL('./chibi/battle-track-dusk.webp', import.meta.url).href,
   backgroundForeground: new URL('./chibi/battle-foreground-dusk.webp', import.meta.url).href,
   train: CHIBI_ART.train,
   captainFemaleBase:
@@ -51,7 +48,6 @@ export function getCriticalBattleArtIds(
   captainArtId: BattleArtId,
 ): readonly BattleArtId[] {
   return [
-    'background',
     'backgroundSky',
     'backgroundHorizon',
     'backgroundTrack',

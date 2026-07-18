@@ -45,20 +45,35 @@ describe('QualityMonitor', () => {
   });
 
   it('provides lower visual budgets without changing logical entities', () => {
-    expect(getRenderBudget('high')).toMatchObject({
+    expect(getRenderBudget('high')).toEqual({
+      backgroundLayers: 4,
+      backgroundParticles: 36,
+      visibleProjectileTrails: 120,
       particles: 200,
       damageNumbers: 18,
+      impactRings: 24,
       dprCap: 2,
       travelMarkers: 15,
       trainWakeSegments: 6,
     });
-    expect(getRenderBudget('medium')).toMatchObject({
+    expect(getRenderBudget('medium')).toEqual({
+      backgroundLayers: 3,
+      backgroundParticles: 18,
+      visibleProjectileTrails: 100,
+      particles: 130,
+      damageNumbers: 12,
+      impactRings: 16,
+      dprCap: 1.75,
       travelMarkers: 9,
       trainWakeSegments: 4,
     });
-    expect(getRenderBudget('low')).toMatchObject({
+    expect(getRenderBudget('low')).toEqual({
+      backgroundLayers: 2,
+      backgroundParticles: 0,
+      visibleProjectileTrails: 80,
       particles: 80,
       damageNumbers: 8,
+      impactRings: 10,
       dprCap: 1.5,
       travelMarkers: 3,
       trainWakeSegments: 2,

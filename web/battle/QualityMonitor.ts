@@ -11,6 +11,7 @@ export interface QualityChange {
 }
 
 export interface RenderBudget {
+  readonly backgroundLayers: 4 | 3 | 2;
   readonly backgroundParticles: number;
   readonly visibleProjectileTrails: number;
   readonly particles: number;
@@ -25,6 +26,7 @@ export const RENDER_BUDGETS: Readonly<
   Record<QualityLevel, RenderBudget>
 > = {
   high: {
+    backgroundLayers: 4,
     backgroundParticles: 36,
     visibleProjectileTrails: 120,
     particles: 200,
@@ -35,6 +37,7 @@ export const RENDER_BUDGETS: Readonly<
     dprCap: 2,
   },
   medium: {
+    backgroundLayers: 3,
     backgroundParticles: 18,
     visibleProjectileTrails: 100,
     particles: 130,
@@ -45,6 +48,7 @@ export const RENDER_BUDGETS: Readonly<
     dprCap: 1.75,
   },
   low: {
+    backgroundLayers: 2,
     backgroundParticles: 0,
     visibleProjectileTrails: 80,
     particles: 80,

@@ -19,9 +19,8 @@ describe('battle art catalog', () => {
   it('keeps the first battle stage separate from elite and boss art', () => {
     const critical = getCriticalBattleArtIds('captainFemaleBase');
 
-    expect(BATTLE_ART_URLS.background).toBe(BATTLE_ART_URLS.backgroundTrack);
+    expect(BATTLE_ART_URLS).not.toHaveProperty('background');
     expect(critical).toEqual([
-      'background',
       'backgroundSky',
       'backgroundHorizon',
       'backgroundTrack',
