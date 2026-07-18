@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { BattleRenderer } from '../../../web/battle/BattleRenderer';
+import { TrainMotionController } from '../../../web/battle/TrainMotionController';
 import type {
   BattleDrawCommand,
   EllipseDrawCommand,
@@ -290,6 +291,64 @@ describe('BattleRenderer', () => {
     }
   });
 
+  it('renders calibrated cannon and body recoil from a real fire event', () => {
+    const frame = createFrameFixture();
+    const baselineController = new TrainMotionController(false, 'high');
+    const firedController = new TrainMotionController(false, 'high');
+    baselineController.reset(frame);
+    firedController.reset(frame);
+    baselineController.update(100 / 6, frame, []);
+    firedController.update(100 / 6, frame, [{
+      type: 'weapon-fired', projectileId: 99, source: 'main',
+    }]);
+
+    const recoilEnvelope = 5 / 6;
+    expect(firedController.view.cannonRecoil).toBeCloseTo(
+      recoilEnvelope * 4,
+      6,
+    );
+    expect(Math.abs(
+      firedController.view.offsetY - baselineController.view.offsetY,
+    )).toBeLessThanOrEqual(recoilEnvelope * 0.6 + Number.EPSILON);
+
+    const baseline = renderCommands({
+      frame,
+      trainMotion: baselineController.view,
+    });
+    const fired = renderCommands({
+      frame,
+      trainMotion: firedController.view,
+    });
+    const baselineTrain = findCommand<ImageDrawCommand>(
+      baseline,
+      (item) => item.kind === 'train',
+    );
+    const firedTrain = findCommand<ImageDrawCommand>(
+      fired,
+      (item) => item.kind === 'train',
+    );
+    expect(Math.abs(firedTrain.y - baselineTrain.y)).toBeLessThanOrEqual(
+      recoilEnvelope * 0.6 + Number.EPSILON,
+    );
+
+    const firedCannon = findCommand<LineDrawCommand>(
+      fired,
+      (item) => item.kind === 'main-cannon',
+    );
+    const posedOnly = renderCommands({
+      frame,
+      trainMotion: { ...firedController.view, cannonRecoil: 0 },
+    });
+    const posedOnlyCannon = findCommand<LineDrawCommand>(
+      posedOnly,
+      (item) => item.kind === 'main-cannon',
+    );
+    expect(Math.hypot(
+      firedCannon.points[0]!.x - posedOnlyCannon.points[0]!.x,
+      firedCannon.points[0]!.y - posedOnlyCannon.points[0]!.y,
+    )).toBeCloseTo(recoilEnvelope * 4, 6);
+  });
+
   it('keeps essential travel motion in the low budget', () => {
     const painter = createRecordingPainter();
     new BattleRenderer(painter).render({
@@ -391,6 +450,54 @@ describe('BattleRenderer', () => {
         height: baselineTrain.height,
       });
     }
+  });
+
+  it('shuts down defeat power exactly while victory stays powered', () => {
+    const defeatFrame = createFrameFixture({ status: 'defeat' });
+    const defeatMotion = new TrainMotionController(false, 'high');
+    defeatMotion.reset(createFrameFixture());
+    for (let index = 0; index < 9; index += 1) {
+      defeatMotion.update(100, defeatFrame, []);
+    }
+
+    expect(defeatMotion.view.speed).toBe(0);
+    expect(defeatMotion.view.engineGlow).toBe(0);
+    const defeated = renderCommands({
+      frame: defeatFrame,
+      trainMotion: defeatMotion.view,
+    });
+    for (const kind of [
+      'train-engine-glow',
+      'train-window-flow',
+      'train-core',
+    ] as const) {
+      expect(findCommand<BattleDrawCommand>(
+        defeated,
+        (item) => item.kind === kind,
+      ).alpha).toBe(0);
+    }
+
+    const victoryFrame = createFrameFixture({ status: 'victory' });
+    const victoryMotion = new TrainMotionController(false, 'high');
+    victoryMotion.reset(createFrameFixture());
+    for (let index = 0; index < 14; index += 1) {
+      victoryMotion.update(100, victoryFrame, []);
+    }
+
+    expect(victoryMotion.view.speed).toBeCloseTo(0.25, 6);
+    expect(victoryMotion.view.engineGlow).toBeGreaterThan(0);
+    const victorious = renderCommands({
+      frame: victoryFrame,
+      trainMotion: victoryMotion.view,
+    });
+    expect(findCommand<BattleDrawCommand>(
+      victorious,
+      (item) => item.kind === 'train-engine-glow',
+    ).alpha).toBeGreaterThan(0);
+    expect(findCommand<BattleDrawCommand>(
+      victorious,
+      (item) => item.kind === 'train-core',
+    ).alpha).toBeGreaterThan(0);
   });
 
   it('moves only the window highlight with its flow phase', () => {

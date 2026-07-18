@@ -370,6 +370,72 @@ describe('BattleScene', () => {
     expect(sound.dispose).toHaveBeenCalledTimes(1);
   });
 
+  it('silences completed defeat propulsion while victory remains active', () => {
+    const terminalCases = [
+      {
+        phase: 'defeat' as const,
+        speed: 0,
+        engineGlow: 0,
+        expected: { active: false, speed: 0, power: 0 },
+      },
+      {
+        phase: 'victory' as const,
+        speed: 0.25,
+        engineGlow: 0.62,
+        expected: { active: true, speed: 0.25, power: 0.62 },
+      },
+    ];
+
+    for (const terminal of terminalCases) {
+      const scheduler = new ManualFrameScheduler();
+      const engine = createEngine(createFrameFixture({
+        status: terminal.phase,
+      }));
+      const motion = createMotion();
+      motion.view.phase = terminal.phase;
+      motion.view.speed = terminal.speed;
+      motion.view.engineGlow = terminal.engineGlow;
+      const setTrainMotion = vi.fn();
+      const sound = {
+        update: vi.fn(),
+        consume: vi.fn(),
+        setTrainMotion,
+        setBattlePhase: vi.fn(),
+        pause: vi.fn(),
+        resume: vi.fn(async () => undefined),
+        dispose: vi.fn(),
+      };
+      const { host } = createHost();
+      const scene = new BattleScene({
+        engine,
+        effects: {
+          view: EMPTY_EFFECT_FRAME_VIEW,
+          consume: vi.fn(),
+          update: vi.fn(),
+          reset: vi.fn(),
+        },
+        assets: { failedIds: [], get: () => null },
+        callbacks: createCallbacks(),
+        createRenderer: () => ({ render: vi.fn() }),
+        createHud: () => ({
+          mount: vi.fn(), update: vi.fn(), dispose: vi.fn(),
+        }),
+        sound,
+        motion,
+        scheduler,
+        captainArtId: 'captainFemaleBase',
+        reducedMotion: false,
+        eventTarget: new EventTarget(),
+        getDevicePixelRatio: () => 1,
+      });
+
+      scene.mount(host);
+
+      expect(setTrainMotion).toHaveBeenLastCalledWith(terminal.expected);
+      scene.unmount();
+    }
+  });
+
   it('settles a victory event only once', () => {
     const scheduler = new ManualFrameScheduler();
     const engine = createEngine();

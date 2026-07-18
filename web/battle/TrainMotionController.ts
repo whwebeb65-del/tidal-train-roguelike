@@ -10,6 +10,8 @@ const DEGREES_TO_RADIANS = Math.PI / 180;
 const MAX_OFFSET_X = 5.7;
 const MAX_OFFSET_Y = 6.8;
 const MAX_ROTATION = 0.02;
+const MAX_ROUTE_FLOW_SPEED = 1.5;
+const SURGE_ROUTE_FLOW_BOOST = 0.35;
 
 function clamp(value: number, minimum: number, maximum: number): number {
   return Math.min(maximum, Math.max(minimum, value));
@@ -46,6 +48,13 @@ function detailAlphaFor(level: QualityLevel): number {
     case 'low': return 0.65;
     default: return 1;
   }
+}
+
+function defeatShutdownFactor(
+  phase: TrainMotionPhase,
+  speed: number,
+): number {
+  return phase === 'defeat' ? clamp(speed, 0, 1) : 1;
 }
 
 export class TrainMotionController implements TrainMotionControllerPort {
@@ -126,7 +135,7 @@ export class TrainMotionController implements TrainMotionControllerPort {
         - lowPowerPulse * 0.22,
       0,
       1,
-    );
+    ) * defeatShutdownFactor(phase, speed);
     this.mutableView.windowGlowPhase = 0;
     this.mutableView.lowPowerPulse = lowPowerPulse;
     this.mutableView.detailAlpha = detailAlphaFor(this.qualityLevel);
@@ -164,7 +173,6 @@ export class TrainMotionController implements TrainMotionControllerPort {
       targetSpeed(phase) - this.speedFrom
     ) * easeOutCubic(this.phaseElapsedMs / transitionDuration(phase));
     this.mutableView.motionTimeMs += stepMs;
-    this.mutableView.laneOffset += stepMs * this.mutableView.speed * 0.16;
     this.mutableView.windowGlowPhase = (
       this.mutableView.motionTimeMs * 0.001
     ) % 1;
@@ -196,6 +204,12 @@ export class TrainMotionController implements TrainMotionControllerPort {
       this.damagePulse = Math.max(0, this.damagePulse - stepMs / 220);
       this.surge = Math.max(0, this.surge - stepMs / 320);
     }
+    const routeFlowSpeed = clamp(
+      this.mutableView.speed + this.surge * SURGE_ROUTE_FLOW_BOOST,
+      0,
+      MAX_ROUTE_FLOW_SPEED,
+    );
+    this.mutableView.laneOffset += stepMs * routeFlowSpeed * 0.16;
 
     const hpRatio = this.healthRatio(frame);
     const lowPowerPulse = this.lowPowerPulseFor(
@@ -211,7 +225,7 @@ export class TrainMotionController implements TrainMotionControllerPort {
         - lowPowerPulse * 0.22,
       0,
       1,
-    );
+    ) * defeatShutdownFactor(phase, this.mutableView.speed);
     this.mutableView.detailAlpha = detailAlphaFor(this.qualityLevel);
 
     if (this.reducedMotion) {
@@ -238,7 +252,7 @@ export class TrainMotionController implements TrainMotionControllerPort {
     );
     this.mutableView.offsetY = clamp(
       2.8 * Math.sin(time * 0.0041)
-        - this.recoil * 2.1
+        - this.recoil * 0.6
         - this.surge * 2.4
         + this.damagePulse * 1.6,
       -MAX_OFFSET_Y,
@@ -252,13 +266,14 @@ export class TrainMotionController implements TrainMotionControllerPort {
       MAX_ROTATION,
     );
     this.mutableView.scale = 1 + this.surge * 0.025 + this.damagePulse * 0.012;
-    this.mutableView.cannonRecoil = this.recoil;
+    this.mutableView.cannonRecoil = this.recoil * 4;
     this.mutableView.surge = this.surge;
     this.mutableView.damagePulse = this.damagePulse;
   }
 
   public setReducedMotion(reducedMotion: boolean): void {
     this.reducedMotion = reducedMotion;
+    if (reducedMotion) this.clearDisplacementMotion();
   }
 
   public setPresentationFrozen(frozen: boolean): void {
@@ -285,6 +300,20 @@ export class TrainMotionController implements TrainMotionControllerPort {
       if (enemy.kind === 'storm-ray-elite') return 'elite';
     }
     return 'cruise';
+  }
+
+  private clearDisplacementMotion(): void {
+    this.recoil = 0;
+    this.surge = 0;
+    this.damagePulse = 0;
+    this.damageDirection = 0;
+    this.mutableView.offsetX = 0;
+    this.mutableView.offsetY = 0;
+    this.mutableView.rotation = 0;
+    this.mutableView.scale = 1;
+    this.mutableView.cannonRecoil = 0;
+    this.mutableView.surge = 0;
+    this.mutableView.damagePulse = 0;
   }
 
   private energyRatio(frame: BattleFrameView): number {

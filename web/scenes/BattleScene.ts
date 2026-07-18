@@ -506,10 +506,11 @@ export class BattleScene implements GameScene {
   private renderBattle(): void {
     if (!this.host || !this.canvas || !this.renderer || !this.hud) return;
     const trainMotion = this.motion.view;
+    const defeating = trainMotion.phase === 'defeat';
     this.sound.setTrainMotion({
-      active: true,
+      active: !defeating || trainMotion.engineGlow > 0,
       speed: trainMotion.speed,
-      power: clamp(trainMotion.engineGlow, 0.35, 1),
+      power: clamp(trainMotion.engineGlow, defeating ? 0 : 0.35, 1),
     });
     this.sound.update?.(this.lastFrameTimeMs);
     this.refreshViewport();

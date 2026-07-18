@@ -517,11 +517,13 @@ export class BattleRenderer {
     input: BattleRenderInput,
     motion: TrainMotionFrameView,
   ): void {
-    const powerAlpha = clamp01(
-      (0.34 + motion.engineGlow * 0.66)
-        * (1 - motion.lowPowerPulse * 0.46)
-        * motion.detailAlpha,
-    );
+    const powerAlpha = motion.engineGlow <= 0
+      ? 0
+      : clamp01(
+        (0.34 + motion.engineGlow * 0.66)
+          * (1 - motion.lowPowerPulse * 0.46)
+          * motion.detailAlpha,
+      );
     this.painter.ellipse({
       kind: 'train-engine-glow',
       layer: 'train',
@@ -775,11 +777,13 @@ export class BattleRenderer {
       fill: input.frame.energy >= 100
         ? 'rgba(255, 239, 151, 0.68)'
         : 'rgba(151, 255, 241, 0.48)',
-      alpha: clamp01(
-        (0.48 + motion.engineGlow * 0.52)
-          * (1 - motion.lowPowerPulse * 0.42)
-          * motion.detailAlpha,
-      ),
+      alpha: motion.engineGlow <= 0
+        ? 0
+        : clamp01(
+          (0.48 + motion.engineGlow * 0.52)
+            * (1 - motion.lowPowerPulse * 0.42)
+            * motion.detailAlpha,
+        ),
       blendMode: 'screen',
     });
   }
