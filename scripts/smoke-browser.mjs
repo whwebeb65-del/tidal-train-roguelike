@@ -17,6 +17,14 @@ import {
   waitForHttp,
   waitForOwnedPreview,
 } from './lib/chrome-cdp.mjs';
+import {
+  buildBattleDynamicBounds,
+  createEvidenceViewport,
+  logicalRectToPixelRect,
+  passesDefeatCueEvidence,
+  passesObjectEvidence,
+  selectSafeControlRegion,
+} from './lib/battle-pixel-evidence.mjs';
 
 const repositoryRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -695,7 +703,46 @@ async function advanceBattle(client, durationMs) {
   );
 }
 
-async function inspectBattleCanvasRegions(client, regions) {
+async function readBattleCanvasViewport(client) {
+  const canvasMetrics = await evaluate(
+    client,
+    `(() => {
+      const canvas = document.querySelector('[data-battle-canvas]');
+      if (!(canvas instanceof HTMLCanvasElement)) {
+        throw new Error('battle canvas is missing');
+      }
+      return {
+        cssWidth: Number.parseFloat(canvas.style.width),
+        cssHeight: Number.parseFloat(canvas.style.height),
+        pixelWidth: canvas.width,
+        pixelHeight: canvas.height,
+      };
+    })()`,
+  );
+  const actualPixelRatio = Math.round(
+    canvasMetrics.pixelWidth / canvasMetrics.cssWidth * 4,
+  ) / 4;
+  const viewport = createEvidenceViewport({
+    cssWidth: canvasMetrics.cssWidth,
+    cssHeight: canvasMetrics.cssHeight,
+    devicePixelRatio: actualPixelRatio,
+    maxDevicePixelRatio: actualPixelRatio,
+  });
+  assert.equal(viewport.pixelWidth, canvasMetrics.pixelWidth);
+  assert.equal(viewport.pixelHeight, canvasMetrics.pixelHeight);
+  return viewport;
+}
+
+async function inspectBattleCanvasRegions(
+  client,
+  regions,
+  evidenceViewport = null,
+) {
+  const viewport = evidenceViewport ?? await readBattleCanvasViewport(client);
+  const pixelRegions = regions.map((region) => ({
+    ...logicalRectToPixelRect(region, viewport),
+    name: region.name,
+  }));
   return evaluate(
     client,
     `(() => {
@@ -705,18 +752,16 @@ async function inspectBattleCanvasRegions(client, regions) {
       }
       const context = canvas.getContext('2d');
       if (!context) throw new Error('battle canvas context is missing');
-      const scaleX = canvas.width / 390;
-      const scaleY = canvas.height / 844;
       const inspect = (region) => {
-        const x = Math.max(0, Math.floor(region.x * scaleX));
-        const y = Math.max(0, Math.floor(region.y * scaleY));
+        const x = Math.max(0, region.x);
+        const y = Math.max(0, region.y);
         const width = Math.max(1, Math.min(
           canvas.width - x,
-          Math.ceil(region.width * scaleX),
+          region.width,
         ));
         const height = Math.max(1, Math.min(
           canvas.height - y,
-          Math.ceil(region.height * scaleY),
+          region.height,
         ));
         const pixels = context.getImageData(x, y, width, height).data;
         let sampled = 0;
@@ -751,56 +796,66 @@ async function inspectBattleCanvasRegions(client, regions) {
       return {
         width: canvas.width,
         height: canvas.height,
-        regions: ${JSON.stringify(regions)}.map(inspect),
+        regions: ${JSON.stringify(pixelRegions)}.map(inspect),
       };
     })()`,
   );
 }
 
-function nearbyBackgroundControl(region) {
-  const gap = 12;
-  const rightX = region.x + region.width + gap;
-  const controlX = rightX + region.width <= 390
-    ? rightX
-    : Math.max(0, region.x - region.width - gap);
-  return {
-    ...region,
-    name: `${region.name}-nearby-background-control`,
-    x: controlX,
-  };
+function nearbyControlCandidates(region) {
+  const horizontalGap = region.width + 84;
+  const verticalGap = region.height + 84;
+  return [
+    { ...region, x: region.x + horizontalGap },
+    { ...region, x: region.x - horizontalGap },
+    { ...region, y: region.y - verticalGap },
+    { ...region, y: region.y + verticalGap },
+    { ...region, x: region.x + horizontalGap, y: region.y - verticalGap },
+    { ...region, x: region.x - horizontalGap, y: region.y - verticalGap },
+  ];
 }
 
-function compareRegionAppearance(first, second) {
-  const colorDifference = Math.sqrt(first.meanColor.reduce(
-    (total, value, index) => total + (value - second.meanColor[index]) ** 2,
-    0,
-  ));
-  const shapeDifference = first.shapeProfile.reduce(
-    (total, value, index) => total + Math.abs(
-      value - second.shapeProfile[index],
-    ),
-    0,
-  );
-  return { colorDifference, shapeDifference };
-}
-
-async function compareObjectRegionToControl(client, objectRegions) {
-  const pairedRegions = objectRegions.flatMap((region) => [
+async function compareObjectRegionToControl(
+  client,
+  objectRegions,
+  dynamicBounds,
+) {
+  const viewport = await readBattleCanvasViewport(client);
+  const safePairs = objectRegions.map((region) => ({
     region,
-    nearbyBackgroundControl(region),
+    control: selectSafeControlRegion({
+      target: region,
+      candidates: nearbyControlCandidates(region),
+      dynamicBounds,
+      viewport,
+    }),
+  })).filter(({ control }) => control != null);
+  const pairedRegions = safePairs.flatMap(({ region, control }) => [
+    region,
+    { ...control, name: `${region.name}-nearby-background-control` },
   ]);
-  const canvas = await inspectBattleCanvasRegions(client, pairedRegions);
-  return objectRegions.map((region, index) => {
+  const canvas = await inspectBattleCanvasRegions(client, pairedRegions, viewport);
+  return safePairs.map(({ region, control }, index) => {
     const object = canvas.regions[index * 2];
-    const control = canvas.regions[index * 2 + 1];
+    const controlEvidence = canvas.regions[index * 2 + 1];
     return {
       id: region.id,
       region,
       object,
-      control,
-      ...compareRegionAppearance(object, control),
+      controlRegion: control,
+      control: controlEvidence,
+      viewport,
+      passed: passesObjectEvidence({ target: object, control: controlEvidence }),
     };
   });
+}
+
+async function inspectFixedObjectControlPair(client, baseline) {
+  const evidence = await inspectBattleCanvasRegions(client, [
+    baseline.region,
+    { ...baseline.controlRegion, name: `${baseline.region.name}-control` },
+  ], baseline.viewport);
+  return { target: evidence.regions[0], control: evidence.regions[1] };
 }
 
 async function assertLowQualityResilience(client, label) {
@@ -846,88 +901,126 @@ async function assertLowQualityResilience(client, label) {
   let trainObjectBound = false;
   let enemyObjectBound = false;
   let defeatObjectBound = false;
-  let previousKills = 0;
   let preDefeatLocalBaseline = new Map();
+  const attemptedKillIds = new Set();
   let defeatedEnemyId = null;
   let deathCoordinates = null;
-  for (let index = 0; index < 160; index += 1) {
+  for (let index = 0; index < 320; index += 1) {
     const state = await snapshot(client);
     const battle = state.battle;
     assert.ok(battle, `${label} low-quality battle snapshot must exist`);
     const liveEnemies = battle.enemies.filter((enemy) => enemy.alive);
     enemySeen ||= liveEnemies.length > 0;
+    const dynamicBounds = buildBattleDynamicBounds(battle, state.trainMotion);
     const enemyRegions = liveEnemies.slice(0, 3).map((enemy) => ({
       id: enemy.id,
       name: `enemy-${enemy.id}`,
-      x: enemy.x - 46,
-      y: enemy.y - 54,
-      width: 92,
-      height: 108,
+      x: enemy.x - 16,
+      y: enemy.y - 16,
+      width: 32,
+      height: 32,
     }));
-    const objectEvidence = await compareObjectRegionToControl(client, [
-      { name: 'train', x: 135, y: 700, width: 120, height: 140 },
-      ...enemyRegions,
-    ]);
+    const objectEvidence = await compareObjectRegionToControl(
+      client,
+      [{
+        name: 'train',
+        x: 179 + (state.trainMotion?.offsetX ?? 0),
+        y: 744 + (state.trainMotion?.offsetY ?? 0),
+        width: 32,
+        height: 32,
+      }, ...enemyRegions],
+      dynamicBounds,
+    );
     const trainEvidence = objectEvidence.find(({ region }) => region.name === 'train');
-    trainObjectBound ||= Boolean(trainEvidence
-      && (trainEvidence.colorDifference > 8
-        || trainEvidence.shapeDifference > 0.08));
-    enemyObjectBound ||= objectEvidence.some(({ region, colorDifference, shapeDifference }) => (
-      region.name.startsWith('enemy-')
-      && (colorDifference > 8 || shapeDifference > 0.08)
+    trainObjectBound ||= trainEvidence?.passed ?? false;
+    enemyObjectBound ||= objectEvidence.some(({ region, passed }) => (
+      region.name.startsWith('enemy-') && passed
     ));
 
-    const liveIds = new Set(liveEnemies.map((enemy) => enemy.id));
-    const defeatedBaseline = battle.kills > previousKills
-      ? [...preDefeatLocalBaseline.values()].find(({ id }) => !liveIds.has(id))
-      : null;
-    if (defeatedBaseline && state.diagnostics.effects > 0) {
-      defeatCueSeen = true;
-      defeatedEnemyId = defeatedBaseline.id;
-      deathCoordinates = {
-        x: defeatedBaseline.region.x + defeatedBaseline.region.width / 2,
-        y: defeatedBaseline.region.y + defeatedBaseline.region.height / 2,
-      };
-      const cue = (await compareObjectRegionToControl(
-        client,
-        [defeatedBaseline.region],
-      ))[0];
-      const preToCue = compareRegionAppearance(
-        defeatedBaseline.object,
-        cue.object,
-      );
+    const deadEnemy = battle.enemies.find((enemy) => (
+      enemy.alive === false
+      && preDefeatLocalBaseline.has(enemy.id)
+      && !attemptedKillIds.has(enemy.id)
+    ));
+    if (deadEnemy) {
+      attemptedKillIds.add(deadEnemy.id);
+      const defeatedBaseline = preDefeatLocalBaseline.get(deadEnemy.id);
+      const expectedX = defeatedBaseline.region.x
+        + defeatedBaseline.region.width / 2;
+      const expectedY = defeatedBaseline.region.y
+        + defeatedBaseline.region.height / 2;
+      const exactDeathLocation = Math.abs(expectedX - deadEnemy.x) < 0.001
+        && Math.abs(expectedY - deadEnemy.y) < 0.001;
+      const controlStillSafe = selectSafeControlRegion({
+        target: defeatedBaseline.region,
+        candidates: [defeatedBaseline.controlRegion],
+        dynamicBounds,
+        viewport: defeatedBaseline.viewport,
+      });
+      if (!exactDeathLocation || !controlStillSafe) continue;
+      defeatedEnemyId = deadEnemy.id;
+      deathCoordinates = { x: deadEnemy.x, y: deadEnemy.y };
+      const cue = await inspectFixedObjectControlPair(client, defeatedBaseline);
       const defeatEvidenceDeadline = Date.now() + 500;
       while (Date.now() < defeatEvidenceDeadline) {
         await advanceBattle(client, 50);
-        const later = (await compareObjectRegionToControl(
+        const followState = await snapshot(client);
+        const followBattle = followState.battle;
+        if (!followBattle) break;
+        const followDynamicBounds = buildBattleDynamicBounds(
+          followBattle,
+          followState.trainMotion,
+        );
+        const followControlSafe = selectSafeControlRegion({
+          target: defeatedBaseline.region,
+          candidates: [defeatedBaseline.controlRegion],
+          dynamicBounds: followDynamicBounds,
+          viewport: defeatedBaseline.viewport,
+        });
+        if (!followControlSafe) break;
+        const followup = await inspectFixedObjectControlPair(
           client,
-          [defeatedBaseline.region],
-        ))[0];
-        const localTemporal = compareRegionAppearance(cue.object, later.object);
-        const controlTemporal = compareRegionAppearance(cue.control, later.control);
-        const localizedColorDifference = localTemporal.colorDifference
-          - controlTemporal.colorDifference;
-        const localizedShapeDifference = localTemporal.shapeDifference
-          - controlTemporal.shapeDifference;
-        if (
-          (preToCue.colorDifference > 4 || preToCue.shapeDifference > 0.04)
-          && (localizedColorDifference > 2 || localizedShapeDifference > 0.025)
-        ) {
+          defeatedBaseline,
+        );
+        if (passesDefeatCueEvidence({
+          killedEnemyId: deadEnemy.id,
+          deadEnemy,
+          preTarget: defeatedBaseline.object,
+          cueTarget: cue.target,
+          followupTarget: followup.target,
+          preControl: defeatedBaseline.control,
+          cueControl: cue.control,
+          followupControl: followup.control,
+        })) {
+          defeatCueSeen = true;
           defeatObjectBound = true;
           break;
         }
       }
+      const continueObservingLaterKills = !defeatObjectBound;
+      if (continueObservingLaterKills) continue;
       break;
     }
     if (battle.status === 'upgrade') {
       await callHook(client, 'return hook.chooseFirstUpgrade();');
     }
     if (battle.status === 'defeat' || battle.status === 'victory') break;
-    preDefeatLocalBaseline = new Map(objectEvidence
-      .filter(({ id }) => id != null)
+    const predictedEnemyRegions = liveEnemies.map((enemy) => ({
+      id: enemy.id,
+      name: `enemy-${enemy.id}-predicted-death`,
+      x: enemy.x - 16,
+      y: Math.min(716, enemy.y + enemy.speedPerSecond * 0.05) - 16,
+      width: 32,
+      height: 32,
+    }));
+    const predictedEvidence = await compareObjectRegionToControl(
+      client,
+      predictedEnemyRegions,
+      dynamicBounds,
+    );
+    preDefeatLocalBaseline = new Map(predictedEvidence
       .map((evidence) => [evidence.id, evidence]));
-    previousKills = battle.kills;
-    await advanceBattle(client, 100);
+    await advanceBattle(client, 50);
   }
   const state = await snapshot(client);
   assert.equal(state.diagnostics.qualityLevel, 'low');
