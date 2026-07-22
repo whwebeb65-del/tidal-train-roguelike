@@ -239,7 +239,9 @@ export function passesDefeatCueEvidence(input) {
     || !Number.isFinite(firstSquash.id)
   ) return false;
   let priorProgress = -Infinity;
+  let priorFrame = null;
   let localizedPixelChangeSeen = false;
+  let localizedPixelEvolutionSeen = false;
   for (const frame of input.frames) {
     const squash = frame.defeatSquash;
     if (
@@ -271,10 +273,27 @@ export function passesDefeatCueEvidence(input) {
       targetChange.colorDifference - controlChange.colorDifference > 4
       || targetChange.shapeDifference - controlChange.shapeDifference > 0.04
     );
+    if (priorFrame) {
+      const targetEvolution = compareRegionAppearance(
+        priorFrame.target,
+        frame.target,
+      );
+      const controlEvolution = compareRegionAppearance(
+        priorFrame.control,
+        frame.control,
+      );
+      localizedPixelEvolutionSeen ||= (
+        targetEvolution.colorDifference - controlEvolution.colorDifference > 2
+        || targetEvolution.shapeDifference - controlEvolution.shapeDifference
+          > 0.025
+      );
+    }
+    priorFrame = frame;
   }
 
   const lastSquash = input.frames[input.frames.length - 1].defeatSquash;
   return localizedPixelChangeSeen
+    && localizedPixelEvolutionSeen
     && lastSquash.progress - firstSquash.progress >= 0.12;
 }
 

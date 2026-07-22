@@ -253,6 +253,17 @@ describe('battle pixel evidence helpers', () => {
     expect(helpers.passesDefeatCueEvidence(input)).toBe(false);
   });
 
+  it('rejects stable enemy-free background after a one-time disappearance', async () => {
+    const helpers = await loadHelpers();
+    const input = structuredClone(validDefeatEvidence());
+    for (const frame of input.frames) frame.target = input.preControl;
+    expect(helpers.compareRegionAppearance(
+      input.preTarget,
+      input.frames[0].target,
+    ).colorDifference).toBeGreaterThan(4);
+    expect(helpers.passesDefeatCueEvidence(input)).toBe(false);
+  });
+
   it('rejects a target-only projectile speck without a true squash pixel pattern', async () => {
     const helpers = await loadHelpers();
     const input = structuredClone(validDefeatEvidence());
@@ -390,10 +401,20 @@ describe('battle pixel evidence helpers', () => {
     expect(helpers.passesDefeatCueEvidence(input)).toBe(false);
   });
 
-  it('accepts stable squash pixels when exact geometry evolves across frames', async () => {
+  it('accepts multi-frame squash pixel evolution with stable paired controls', async () => {
     const helpers = await loadHelpers();
     const input = structuredClone(validDefeatEvidence());
-    for (const frame of input.frames) frame.target = cue;
+    for (let index = 1; index < input.frames.length; index += 1) {
+      const prior = input.frames[index - 1];
+      const frame = input.frames[index];
+      expect(helpers.compareRegionAppearance(
+        prior.target,
+        frame.target,
+      ).colorDifference).toBeGreaterThan(helpers.compareRegionAppearance(
+        prior.control,
+        frame.control,
+      ).colorDifference);
+    }
     expect(helpers.passesDefeatCueEvidence(input)).toBe(true);
   });
 
