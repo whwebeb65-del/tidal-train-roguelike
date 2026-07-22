@@ -311,6 +311,24 @@ describe('BattleRenderer', () => {
     const painter = createRecordingPainter();
     new BattleRenderer(painter).render({
       ...createPresentationFixture(),
+      effects: {
+        particles: [{
+          id: 77,
+          kind: 'defeat-squash',
+          layer: 'front-effects',
+          x: 92,
+          y: 250,
+          size: 20,
+          color: '#315c70',
+          alpha: 0.72,
+          rotation: 0,
+          progress: 0.5,
+        }],
+        rings: [],
+        damageNumbers: [],
+        camera: { x: 0, y: 0, rotation: 0, amplitude: 0 },
+        cinematic: { darken: 0, title: null, slowMotion: 0 },
+      },
       renderBudget: getRenderBudget('low'),
     });
 
@@ -322,6 +340,11 @@ describe('BattleRenderer', () => {
       'background-track',
       'background-track',
     ]);
+    expect(painter.commands.some((command) => command.kind === 'train')).toBe(true);
+    expect(painter.commands.some((command) => command.kind === 'enemy')).toBe(true);
+    expect(painter.commands.some(
+      (command) => command.kind === 'effect-defeat-squash',
+    )).toBe(true);
   });
 
   it('uses time-independent fixed background poses for reduced motion', () => {

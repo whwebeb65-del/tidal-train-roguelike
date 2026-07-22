@@ -82,6 +82,53 @@ export async function findFreePort(host = '127.0.0.1') {
   return port;
 }
 
+export async function assertLoopbackPortAvailable(port, host = '127.0.0.1') {
+  const server = createServer();
+  try {
+    await new Promise((resolve, reject) => {
+      server.once('error', reject);
+      server.listen(port, host, resolve);
+    });
+  } catch (error) {
+    if (error && typeof error === 'object' && error.code === 'EADDRINUSE') {
+      throw new Error(`Preview port ${port} is already occupied`);
+    }
+    throw error;
+  } finally {
+    if (server.listening) {
+      await new Promise((resolve, reject) => {
+        server.close((error) => (error ? reject(error) : resolve()));
+      });
+    }
+  }
+}
+
+export function assertChildAlive(child, label = 'Process') {
+  if (!child || child.exitCode !== null || child.signalCode !== null) {
+    const code = child?.exitCode ?? child?.signalCode ?? 'unknown';
+    throw new Error(`${label} exited before readiness (code ${code})`);
+  }
+}
+
+export async function waitForOwnedPreview(
+  url,
+  { child, getOutput, timeoutMs = 15_000 },
+) {
+  const deadline = Date.now() + timeoutMs;
+  const readyPattern = /Local:\s+http:\/\/127\.0\.0\.1:\d+\/?/;
+  while (Date.now() < deadline) {
+    assertChildAlive(child, 'Owned preview');
+    const output = String(getOutput()).replace(/\u001b\[[0-9;]*m/g, '');
+    if (readyPattern.test(output)) {
+      await waitForHttp(url, { child, timeoutMs: Math.max(1, deadline - Date.now()) });
+      assertChildAlive(child, 'Owned preview');
+      return;
+    }
+    await delay(25);
+  }
+  throw new Error('Timed out waiting for the owned preview ready signal');
+}
+
 export async function waitForHttp(
   url,
   { timeoutMs = 15_000, child = null } = {},
@@ -233,5 +280,8 @@ export async function stopChild(child, graceMs = 3_000) {
   if (child.exitCode === null && child.signalCode === null) {
     child.kill('SIGKILL');
     await Promise.race([exited, delay(1_000)]);
+  }
+  if (child.exitCode === null && child.signalCode === null) {
+    throw new Error(`Failed to stop owned child process ${child.pid ?? 'unknown'}`);
   }
 }

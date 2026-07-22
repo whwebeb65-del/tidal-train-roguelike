@@ -7,12 +7,15 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   CdpClient,
+  assertChildAlive,
+  assertLoopbackPortAvailable,
   createCdpTarget,
   delay,
   findChromeExecutable,
   findFreePort,
   stopChild,
   waitForHttp,
+  waitForOwnedPreview,
 } from './lib/chrome-cdp.mjs';
 
 const repositoryRoot = path.resolve(
@@ -36,7 +39,14 @@ function captureChildOutput(child, label) {
   };
   child.stdout?.on('data', append);
   child.stderr?.on('data', append);
-  return () => (output.trim() ? `\n${label}:\n${output.trim()}` : '');
+  return {
+    raw: () => output,
+    diagnostic: () => (output.trim() ? `\n${label}:\n${output.trim()}` : ''),
+  };
+}
+
+function assertPreviewAlive(preview, label) {
+  assertChildAlive(preview, `Owned preview before ${label}`);
 }
 
 async function evaluate(client, expression) {
@@ -578,7 +588,8 @@ async function measureStationDeparturePose(client, label) {
         throw new Error('captain greeting overlapped station departure');
       }
       const departureStartedAt = performance.now();
-      const choreographyDeadline = departureStartedAt + 1_000;
+      const displacementSampleTimeoutMs = 1_000;
+      const choreographyDeadline = departureStartedAt + displacementSampleTimeoutMs;
       let during = readBoxes();
       let sampleReady = false;
       while (performance.now() < choreographyDeadline) {
@@ -600,7 +611,8 @@ async function measureStationDeparturePose(client, label) {
       if (!sampleReady) {
         throw new Error(
           'station departure did not reach measurable shared displacement '
-            + 'inside the 1200ms choreography safe window'
+            + 'inside the 1000ms displacement-sample window '
+            + '(1200ms full choreography)'
         );
       }
       return {
@@ -683,7 +695,7 @@ async function advanceBattle(client, durationMs) {
   );
 }
 
-async function inspectBattleCanvas(client) {
+async function inspectBattleCanvasRegions(client, regions) {
   return evaluate(
     client,
     `(() => {
@@ -693,31 +705,43 @@ async function inspectBattleCanvas(client) {
       }
       const context = canvas.getContext('2d');
       if (!context) throw new Error('battle canvas context is missing');
-      const startY = Math.floor(canvas.height * 0.55);
-      const pixels = context.getImageData(
-        0,
-        startY,
-        canvas.width,
-        Math.max(1, canvas.height - startY),
-      ).data;
-      const colors = new Set();
-      let sampled = 0;
-      let opaque = 0;
-      for (let index = 0; index < pixels.length; index += 64) {
-        sampled += 1;
-        if (pixels[index + 3] > 0) opaque += 1;
-        colors.add(
-          (pixels[index] >> 4) + ':'
-            + (pixels[index + 1] >> 4) + ':'
-            + (pixels[index + 2] >> 4) + ':'
-            + (pixels[index + 3] >> 4)
-        );
-      }
+      const scaleX = canvas.width / 390;
+      const scaleY = canvas.height / 844;
+      const inspect = (region) => {
+        const x = Math.max(0, Math.floor(region.x * scaleX));
+        const y = Math.max(0, Math.floor(region.y * scaleY));
+        const width = Math.max(1, Math.min(
+          canvas.width - x,
+          Math.ceil(region.width * scaleX),
+        ));
+        const height = Math.max(1, Math.min(
+          canvas.height - y,
+          Math.ceil(region.height * scaleY),
+        ));
+        const pixels = context.getImageData(x, y, width, height).data;
+        let sampled = 0;
+        let ink = 0;
+        let signature = 2166136261;
+        for (let index = 0; index < pixels.length; index += 16) {
+          sampled += 1;
+          const red = pixels[index];
+          const green = pixels[index + 1];
+          const blue = pixels[index + 2];
+          const alpha = pixels[index + 3];
+          if (alpha > 180 && red < 105 && green < 135 && blue < 170) ink += 1;
+          signature ^= red | (green << 8) | (blue << 16) | (alpha << 24);
+          signature = Math.imul(signature, 16777619) >>> 0;
+        }
+        return {
+          name: region.name,
+          inkRatio: sampled > 0 ? ink / sampled : 0,
+          signature,
+        };
+      };
       return {
         width: canvas.width,
         height: canvas.height,
-        opaqueRatio: sampled > 0 ? opaque / sampled : 0,
-        colorBuckets: colors.size,
+        regions: ${JSON.stringify(regions)}.map(inspect),
       };
     })()`,
   );
@@ -751,7 +775,7 @@ async function assertLowQualityResilience(client, label) {
     lowPerformance: 'true',
     distantDisplay: 'none',
     foregroundDisplay: 'none',
-  });
+  }, `${label} background-foreground semantic omission must be visible`);
 
   const baseline = await snapshot(client);
   await startNormalBattle(client);
@@ -763,19 +787,55 @@ async function assertLowQualityResilience(client, label) {
 
   let enemySeen = false;
   let defeatCueSeen = false;
+  let trainInkRatio = 0;
+  let enemyInkRatio = 0;
+  let defeatRegionChanged = false;
+  let priorEnemyRegions = [];
+  let priorEnemyEvidence = null;
   for (let index = 0; index < 160; index += 1) {
     const state = await snapshot(client);
     const battle = state.battle;
     assert.ok(battle, `${label} low-quality battle snapshot must exist`);
-    enemySeen ||= battle.enemies.some((enemy) => enemy.alive);
+    const liveEnemies = battle.enemies.filter((enemy) => enemy.alive);
+    enemySeen ||= liveEnemies.length > 0;
+    const enemyRegions = liveEnemies.slice(0, 3).map((enemy) => ({
+      name: `enemy-${enemy.id}`,
+      x: enemy.x - 46,
+      y: enemy.y - 54,
+      width: 92,
+      height: 108,
+    }));
+    const canvasEvidence = await inspectBattleCanvasRegions(client, [
+      { name: 'train', x: 105, y: 680, width: 180, height: 164 },
+      ...enemyRegions,
+    ]);
+    const trainRegion = canvasEvidence.regions.find((region) => region.name === 'train');
+    trainInkRatio = Math.max(trainInkRatio, trainRegion?.inkRatio ?? 0);
+    enemyInkRatio = Math.max(
+      enemyInkRatio,
+      ...canvasEvidence.regions
+        .filter((region) => region.name.startsWith('enemy-'))
+        .map((region) => region.inkRatio),
+    );
     if (battle.kills > 0 && state.diagnostics.effects > 0) {
       defeatCueSeen = true;
+      if (priorEnemyEvidence && priorEnemyRegions.length > 0) {
+        const after = await inspectBattleCanvasRegions(client, priorEnemyRegions);
+        defeatRegionChanged = after.regions.some((region, regionIndex) => (
+          region.signature !== priorEnemyEvidence.regions[regionIndex]?.signature
+          && region.inkRatio > 0.002
+        ));
+      }
       break;
     }
     if (battle.status === 'upgrade') {
       await callHook(client, 'return hook.chooseFirstUpgrade();');
     }
     if (battle.status === 'defeat' || battle.status === 'victory') break;
+    priorEnemyRegions = enemyRegions;
+    priorEnemyEvidence = enemyRegions.length > 0
+      ? await inspectBattleCanvasRegions(client, enemyRegions)
+      : null;
     await advanceBattle(client, 100);
   }
   const state = await snapshot(client);
@@ -787,14 +847,13 @@ async function assertLowQualityResilience(client, label) {
     true,
     `${label} low quality must retain the pooled defeat cue`,
   );
-  const canvas = await inspectBattleCanvas(client);
-  assert.ok(canvas.width > 0 && canvas.height > 0);
-  assert.ok(
-    canvas.opaqueRatio > 0.9 && canvas.colorBuckets > 8,
-    `${label} low quality must retain a painted track and readable battle canvas`,
+  assert.ok(trainInkRatio > 0.002, `${label} expected train region must contain ink`);
+  assert.ok(enemyInkRatio > 0.002, `${label} expected enemy region must contain ink`);
+  assert.equal(
+    defeatRegionChanged,
+    true,
+    `${label} expected defeated-enemy region must visibly change`,
   );
-  // Detailed background-horizon/background-foreground command omission remains
-  // locked by BattleRenderer.spec.ts; browser smoke asserts the real low state.
   const stateText = await evaluate(
     client,
     `[
@@ -1378,10 +1437,11 @@ async function main() {
   let profileDirectory = null;
   let client = null;
   let target = null;
-  let previewOutput = () => '';
-  let browserOutput = () => '';
+  let previewOutput = { raw: () => '', diagnostic: () => '' };
+  let browserOutput = { raw: () => '', diagnostic: () => '' };
 
   try {
+    await assertLoopbackPortAvailable(previewPort);
     preview = spawn(
       process.execPath,
       [
@@ -1400,7 +1460,10 @@ async function main() {
       },
     );
     previewOutput = captureChildOutput(preview, 'preview output');
-    await waitForHttp(previewOrigin, { child: preview });
+    await waitForOwnedPreview(previewOrigin, {
+      child: preview,
+      getOutput: previewOutput.raw,
+    });
 
     const cdpPort = await findFreePort();
     profileDirectory = await mkdtemp(path.join(
@@ -1465,10 +1528,12 @@ async function main() {
 
     const stationPoseResults = [];
     for (const viewport of viewports) {
+      assertPreviewAlive(preview, `viewport ${viewport.width}x${viewport.height}`);
       stationPoseResults.push(
         await runViewport(client, viewport, smokeId, browserErrors),
       );
     }
+    assertPreviewAlive(preview, 'ordinary-URL isolation check');
     await assertOrdinaryUrlHasNoHook(client, smokeId);
     assert.deepEqual(browserErrors, [], browserErrors.join('\n'));
     console.log('[smoke] ordinary URL PASS - no E2E global');
@@ -1485,7 +1550,7 @@ async function main() {
     console.log('[smoke] browser smoke ok');
   } catch (error) {
     if (error instanceof Error) {
-      error.message += `${previewOutput()}${browserOutput()}`;
+      error.message += `${previewOutput.diagnostic()}${browserOutput.diagnostic()}`;
     }
     throw error;
   } finally {
