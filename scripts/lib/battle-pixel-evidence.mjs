@@ -78,6 +78,66 @@ export function rectsIntersect(first, second) {
     && first.y + first.height > second.y;
 }
 
+function ellipseStrokeIntersectsRect(ellipse, rect) {
+  const closestX = Math.max(
+    rect.x,
+    Math.min(ellipse.centerX, rect.x + rect.width),
+  );
+  const closestY = Math.max(
+    rect.y,
+    Math.min(ellipse.centerY, rect.y + rect.height),
+  );
+  const outerDistance = (
+    ((closestX - ellipse.centerX) / ellipse.radiusX) ** 2
+    + ((closestY - ellipse.centerY) / ellipse.radiusY) ** 2
+  );
+  if (outerDistance > 1) return false;
+
+  const innerRadiusX = ellipse.radiusX - ellipse.strokeWidth;
+  const innerRadiusY = ellipse.radiusY - ellipse.strokeWidth;
+  if (innerRadiusX <= 0 || innerRadiusY <= 0) return true;
+  const corners = [
+    [rect.x, rect.y],
+    [rect.x + rect.width, rect.y],
+    [rect.x, rect.y + rect.height],
+    [rect.x + rect.width, rect.y + rect.height],
+  ];
+  const entirelyInsideHollowCenter = corners.every(([x, y]) => (
+    ((x - ellipse.centerX) / innerRadiusX) ** 2
+    + ((y - ellipse.centerY) / innerRadiusY) ** 2
+  ) < 1);
+  return !entirelyInsideHollowCenter;
+}
+
+function mapEllipseStrokeToPixels(bounds, viewport) {
+  const pixelScale = viewport.scale * viewport.pixelRatio;
+  return {
+    geometry: 'ellipse-stroke',
+    centerX: (viewport.offsetX + bounds.centerX * viewport.scale)
+      * viewport.pixelRatio,
+    centerY: (viewport.offsetY + bounds.centerY * viewport.scale)
+      * viewport.pixelRatio,
+    radiusX: bounds.radiusX * pixelScale + 1,
+    radiusY: bounds.radiusY * pixelScale + 1,
+    strokeWidth: bounds.strokeWidth * pixelScale + 2,
+  };
+}
+
+export function boundsIntersectRect(bounds, rect, viewport = null) {
+  const logicalIntersection = bounds.geometry === 'ellipse-stroke'
+    ? ellipseStrokeIntersectsRect(bounds, rect)
+    : rectsIntersect(bounds, rect);
+  if (!viewport) return logicalIntersection;
+  const pixelRect = logicalRectToPixelRect(rect, viewport);
+  const pixelIntersection = bounds.geometry === 'ellipse-stroke'
+    ? ellipseStrokeIntersectsRect(
+      mapEllipseStrokeToPixels(bounds, viewport),
+      pixelRect,
+    )
+    : rectsIntersect(logicalRectToPixelRect(bounds, viewport), pixelRect);
+  return logicalIntersection || pixelIntersection;
+}
+
 export function selectSafeControlRegion({
   target,
   candidates,
@@ -90,16 +150,14 @@ export function selectSafeControlRegion({
     && candidate.x + candidate.width <= LOGICAL_WIDTH
     && candidate.y + candidate.height <= LOGICAL_HEIGHT
     && !rectsIntersect(candidate, target)
-    && dynamicBounds.every((bounds) => !rectsIntersect(candidate, bounds))
+    && dynamicBounds.every((bounds) => (
+      !boundsIntersectRect(bounds, candidate, viewport)
+    ))
     && (!viewport || (
       !rectsIntersect(
         logicalRectToPixelRect(candidate, viewport),
         logicalRectToPixelRect(target, viewport),
       )
-      && dynamicBounds.every((bounds) => !rectsIntersect(
-        logicalRectToPixelRect(candidate, viewport),
-        logicalRectToPixelRect(bounds, viewport),
-      ))
     ))
   )) ?? null;
 }
@@ -154,12 +212,17 @@ export function passesDefeatCueEvidence(input) {
   ) return false;
 
   const firstSquash = input.frames[0]?.defeatSquash;
-  if (!firstSquash || !Number.isFinite(firstSquash.id)) return false;
+  if (
+    !firstSquash
+    || firstSquash.kind !== 'defeat-squash'
+    || !Number.isFinite(firstSquash.id)
+  ) return false;
   let priorProgress = -Infinity;
   for (const frame of input.frames) {
     const squash = frame.defeatSquash;
     if (
-      squash?.id !== firstSquash.id
+      squash?.kind !== 'defeat-squash'
+      || squash.id !== firstSquash.id
       || squash.sourceEnemyId !== input.killedEnemyId
       || Math.abs(squash.originX - input.deadEnemy.x) > 0.001
       || Math.abs(squash.originY - input.deadEnemy.y) > 0.001
@@ -170,7 +233,7 @@ export function passesDefeatCueEvidence(input) {
     ) return false;
     priorProgress = squash.progress;
     const interfering = (frame.dynamicBounds ?? []).some((bounds) => (
-      rectsIntersect(input.targetRegion, bounds)
+      boundsIntersectRect(bounds, input.targetRegion)
       && bounds.id !== `enemy-${input.killedEnemyId}`
       && bounds.id !== `effect-defeat-squash-${firstSquash.id}`
       && !(bounds.kind === 'enemy' && bounds.alive === false)
@@ -212,11 +275,16 @@ function particleBounds(particle) {
     : particle.kind === 'armour-shard' || particle.kind === 'defeat-shard'
       ? particle.size * 0.55
       : particle.size;
+  const rotation = Number.isFinite(particle.rotation) ? particle.rotation : 0;
+  const cosine = Math.abs(Math.cos(rotation));
+  const sine = Math.abs(Math.sin(rotation));
+  const extentX = radiusX * cosine + radiusY * sine;
+  const extentY = radiusX * sine + radiusY * cosine;
   return {
-    x: particle.x - radiusX,
-    y: particle.y - radiusY,
-    width: radiusX * 2,
-    height: radiusY * 2,
+    x: particle.x - extentX,
+    y: particle.y - extentY,
+    width: extentX * 2,
+    height: extentY * 2,
   };
 }
 
@@ -290,41 +358,21 @@ export function buildBattleDynamicBounds(battle, trainMotion, effectView = null)
   for (const ring of effects.rings ?? []) {
     const radiusX = ring.radius + 2.5;
     const radiusY = ring.radius * 0.72 + 2.5;
-    const stroke = 5;
-    bounds.push(
-      {
-        id: `ring-${ring.id}-top`,
-        kind: 'ring',
-        x: ring.x - radiusX,
-        y: ring.y - radiusY,
-        width: radiusX * 2,
-        height: stroke,
-      },
-      {
-        id: `ring-${ring.id}-bottom`,
-        kind: 'ring',
-        x: ring.x - radiusX,
-        y: ring.y + radiusY - stroke,
-        width: radiusX * 2,
-        height: stroke,
-      },
-      {
-        id: `ring-${ring.id}-left`,
-        kind: 'ring',
-        x: ring.x - radiusX,
-        y: ring.y - radiusY,
-        width: stroke,
-        height: radiusY * 2,
-      },
-      {
-        id: `ring-${ring.id}-right`,
-        kind: 'ring',
-        x: ring.x + radiusX - stroke,
-        y: ring.y - radiusY,
-        width: stroke,
-        height: radiusY * 2,
-      },
-    );
+    const stroke = Math.max(5, ring.radius * 0.1 + 3.25);
+    bounds.push({
+      id: `ring-${ring.id}`,
+      kind: 'ring',
+      geometry: 'ellipse-stroke',
+      centerX: ring.x,
+      centerY: ring.y,
+      radiusX,
+      radiusY,
+      strokeWidth: stroke,
+      x: ring.x - radiusX,
+      y: ring.y - radiusY,
+      width: radiusX * 2,
+      height: radiusY * 2,
+    });
   }
   return bounds;
 }

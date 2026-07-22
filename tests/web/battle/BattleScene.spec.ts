@@ -283,7 +283,7 @@ describe('BattleScene', () => {
         size: 24,
         color: '#315c70',
         alpha: 0.8,
-        rotation: 0,
+        rotation: 0.75,
         progress: 0.42,
       }],
     };
@@ -380,6 +380,7 @@ describe('BattleScene', () => {
         x: 92,
         y: 250,
         size: 24,
+        rotation: 0.75,
         progress: 0.42,
       })],
       damageNumbers: [],

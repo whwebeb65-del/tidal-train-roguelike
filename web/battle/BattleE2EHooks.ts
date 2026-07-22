@@ -16,6 +16,7 @@ export interface BattleE2EEffectGeometry {
     readonly x: number;
     readonly y: number;
     readonly size: number;
+    readonly rotation: number;
     readonly progress: number;
     readonly sourceEnemyId?: number | null;
     readonly originX?: number;

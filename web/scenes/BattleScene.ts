@@ -438,6 +438,7 @@ export class BattleScene implements GameScene {
         x: particle.x,
         y: particle.y,
         size: particle.size,
+        rotation: particle.rotation,
         progress: particle.progress,
         sourceEnemyId: particle.sourceEnemyId,
         originX: particle.originX,

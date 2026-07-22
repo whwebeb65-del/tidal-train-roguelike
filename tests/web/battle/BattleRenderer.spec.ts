@@ -64,6 +64,62 @@ function pointPairs(command: LineDrawCommand): readonly (readonly number[])[] {
   return command.points.map((point) => [point.x, point.y]);
 }
 
+function distanceToSegment(
+  x: number,
+  y: number,
+  start: { readonly x: number; readonly y: number },
+  end: { readonly x: number; readonly y: number },
+): number {
+  const dx = end.x - start.x;
+  const dy = end.y - start.y;
+  const lengthSquared = dx * dx + dy * dy;
+  const amount = lengthSquared === 0
+    ? 0
+    : Math.max(0, Math.min(1, ((x - start.x) * dx + (y - start.y) * dy) / lengthSquared));
+  return Math.hypot(x - (start.x + dx * amount), y - (start.y + dy * amount));
+}
+
+function trainSignatureFeature(commands: readonly BattleDrawCommand[]) {
+  const sample = { x: 179, y: 683, width: 32, height: 32 };
+  const brightLines = commands.filter((command): command is LineDrawCommand => {
+    if (!('points' in command)) return false;
+    const rgba = command.stroke.match(/^rgba\(\s*(\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\s*\)$/);
+    const hex = command.stroke.match(/^#([\da-f]{6})$/i);
+    const color = rgba
+      ? [Number(rgba[1]), Number(rgba[2]), Number(rgba[3]), Number(rgba[4])]
+      : hex
+        ? [
+          Number.parseInt(hex[1]!.slice(0, 2), 16),
+          Number.parseInt(hex[1]!.slice(2, 4), 16),
+          Number.parseInt(hex[1]!.slice(4, 6), 16),
+          1,
+        ]
+        : [0, 0, 0, 0];
+    return color[0]! >= 210
+      && color[1]! >= 235
+      && color[2]! >= 235
+      && color[3]! * (command.alpha ?? 1) >= 0.7;
+  });
+  let bright = 0;
+  let centerBright = 0;
+  for (let row = 0; row < sample.height; row += 1) {
+    for (let column = 0; column < sample.width; column += 1) {
+      const x = sample.x + column + 0.5;
+      const y = sample.y + row + 0.5;
+      const occupied = brightLines.some((line) => line.points.slice(1).some(
+        (point, index) => distanceToSegment(x, y, line.points[index]!, point) <= line.lineWidth / 2,
+      ));
+      if (!occupied) continue;
+      bright += 1;
+      if (column >= 8 && column < 24 && row >= 8 && row < 24) centerBright += 1;
+    }
+  }
+  return {
+    brightCyanFraction: bright / (sample.width * sample.height),
+    centerBrightFraction: centerBright / (16 * 16),
+  };
+}
+
 describe('BattleRenderer', () => {
   it.each([
     ['bubble-fin', 78, 78],
@@ -681,6 +737,30 @@ describe('BattleRenderer', () => {
     expect(markerMidpoints[2]).toBeGreaterThan(195);
     expect(wake[0]!.points[0]!.x).toBeLessThan(195);
     expect(wake[1]!.points[0]!.x).toBeGreaterThan(195);
+  });
+
+  it('requires the real cannon signature over low-quality waterway backgrounds at every travel phase', async () => {
+    // @ts-expect-error The executable smoke helper intentionally ships as plain ESM.
+    const { passesObjectEvidence } = await import('../../../scripts/lib/battle-pixel-evidence.mjs');
+    for (const laneOffset of [0, 33, 91, 143]) {
+      const painter = createRecordingPainter();
+      new BattleRenderer(painter).render({
+        ...createPresentationFixture({ trainMotion: { laneOffset } }),
+        renderBudget: getRenderBudget('low'),
+      });
+      const commands = painter.commands;
+      expect(commands.some((item) => item.kind === 'water-lane')).toBe(true);
+      expect(commands.some((item) => item.kind === 'travel-marker')).toBe(true);
+      const withoutTrain = commands.filter((item) => item.layer !== 'train');
+      expect(passesObjectEvidence({
+        target: trainSignatureFeature(withoutTrain),
+        signature: 'train-cannon',
+      })).toBe(false);
+      expect(passesObjectEvidence({
+        target: trainSignatureFeature(commands),
+        signature: 'train-cannon',
+      })).toBe(true);
+    }
   });
 
   it('moves route markers deterministically with lane offset', () => {

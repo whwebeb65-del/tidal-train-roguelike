@@ -17,6 +17,34 @@ const cue = feature([49, 92, 112], [0.1, 0.9, 0.8, 0.15]);
 const squashMid = feature([54, 96, 118], [0.12, 0.84, 0.7, 0.22]);
 const squashLate = feature([61, 104, 124], [0.18, 0.72, 0.54, 0.36]);
 
+function validDefeatEvidence() {
+  return {
+    killedEnemyId: 7,
+    deadEnemy: { id: 7, alive: false, x: 92, y: 250 },
+    targetAnchor: { x: 92, y: 250 },
+    targetRegion: { x: 98.5, y: 260.5, width: 1, height: 1 },
+    preTarget: target,
+    preControl: background,
+    frames: [0.2, 0.5, 0.8].map((progress, index) => ({
+      target: [cue, squashMid, squashLate][index],
+      control: background,
+      defeatSquash: {
+        id: 31,
+        kind: 'defeat-squash',
+        sourceEnemyId: 7,
+        originX: 92,
+        originY: 250,
+        x: 92,
+        y: 250,
+        size: 24,
+        rotation: 0,
+        progress,
+      },
+      dynamicBounds: [],
+    })),
+  };
+}
+
 describe('battle pixel evidence helpers', () => {
   it('maps logical bounds with production uniform scale, DPR and letterbox offsets', async () => {
     const helpers = await loadHelpers();
@@ -180,111 +208,56 @@ describe('battle pixel evidence helpers', () => {
     })).toBeNull();
   });
 
-  it('accepts only multi-frame evolution of the same identity-bound defeat squash', async () => {
+  it('accepts the shared valid three-frame identity-bound defeat fixture', async () => {
     const helpers = await loadHelpers();
     expect(helpers.passesDefeatCueEvidence).toBeTypeOf('function');
-    expect(helpers.passesDefeatCueEvidence({
-      killedEnemyId: 7,
-      deadEnemy: { id: 7, alive: false, x: 92, y: 250 },
-      preTarget: target,
-      preControl: background,
-      targetRegion: { x: 76, y: 234, width: 32, height: 32 },
-      frames: [
-        {
-          target: cue,
-          control: background,
-          defeatSquash: { id: 31, sourceEnemyId: 7, originX: 92, originY: 250, x: 92, y: 250, size: 24, progress: 0.1 },
-          dynamicBounds: [],
-        },
-        {
-          target: squashMid,
-          control: background,
-          defeatSquash: { id: 31, sourceEnemyId: 7, originX: 92, originY: 250, x: 92, y: 250.07, size: 24, progress: 0.42 },
-          dynamicBounds: [],
-        },
-        {
-          target: squashLate,
-          control: background,
-          defeatSquash: { id: 31, sourceEnemyId: 7, originX: 92, originY: 250, x: 92, y: 250.21, size: 24, progress: 0.78 },
-          dynamicBounds: [],
-        },
-      ],
-    })).toBe(true);
-  });
-
-  it('rejects a localized projectile-only change when the control stays unchanged', async () => {
-    const helpers = await loadHelpers();
-    expect(helpers.passesDefeatCueEvidence({
-      killedEnemyId: 7,
-      deadEnemy: { id: 7, alive: false, x: 92, y: 250 },
-      preTarget: target,
-      cueTarget: cue,
-      followupTarget: background,
-      preControl: background,
-      cueControl: background,
-      followupControl: background,
-    })).toBe(false);
-    expect(helpers.passesDefeatCueEvidence({
-      killedEnemyId: 7,
-      deadEnemy: { id: 7, alive: false, x: 92, y: 250 },
-      preTarget: target,
-      preControl: background,
-      targetRegion: { x: 76, y: 234, width: 32, height: 32 },
-      frames: [
-        { target: cue, control: background, dynamicBounds: [] },
-        { target: background, control: background, dynamicBounds: [] },
-        { target: background, control: background, dynamicBounds: [] },
-      ],
-    })).toBe(false);
+    expect(helpers.passesDefeatCueEvidence(validDefeatEvidence())).toBe(true);
   });
 
   it.each([
     {
-      name: 'no defeat cue',
-      cueTarget: target,
-      followupTarget: target,
-      cueControl: background,
-      followupControl: background,
+      name: 'no cue in one required frame',
+      mutate(input: any) {
+        input.frames[0].defeatSquash = undefined;
+      },
     },
     {
-      name: 'enemy disappearance only',
-      cueTarget: background,
-      followupTarget: background,
-      cueControl: background,
-      followupControl: background,
+      name: 'enemy disappearance without a defeat cue',
+      mutate(input: any) {
+        for (const frame of input.frames) frame.defeatSquash = undefined;
+      },
     },
     {
-      name: 'projectile-only paired change',
-      cueTarget: cue,
-      followupTarget: background,
-      cueControl: cue,
-      followupControl: background,
+      name: 'projectile-only geometry',
+      mutate(input: any) {
+        for (const frame of input.frames) frame.defeatSquash.kind = 'projectile';
+      },
     },
-  ])('rejects $name as defeat evidence', async (scenario) => {
+    {
+      name: 'wrong dead-enemy identity',
+      mutate(input: any) {
+        input.deadEnemy.id = 8;
+      },
+    },
+    {
+      name: 'one overlapping non-defeat effect',
+      mutate(input: any) {
+        input.frames[1].dynamicBounds = [{
+          id: 'effect-ink-bubble-44',
+          kind: 'effect',
+          effectKind: 'ink-bubble',
+          x: 98.5,
+          y: 260.5,
+          width: 1,
+          height: 1,
+        }];
+      },
+    },
+  ])('rejects $name by changing one dimension of the shared fixture', async ({ mutate }) => {
     const helpers = await loadHelpers();
-    expect(helpers.passesDefeatCueEvidence).toBeTypeOf('function');
-    expect(helpers.passesDefeatCueEvidence({
-      killedEnemyId: 7,
-      deadEnemy: { id: 7, alive: false, x: 92, y: 250 },
-      preTarget: target,
-      preControl: background,
-      ...scenario,
-    })).toBe(false);
-  });
-
-  it('rejects a cue whose dead record does not match the killed enemy', async () => {
-    const helpers = await loadHelpers();
-    expect(helpers.passesDefeatCueEvidence).toBeTypeOf('function');
-    expect(helpers.passesDefeatCueEvidence({
-      killedEnemyId: 7,
-      deadEnemy: { id: 8, alive: false, x: 92, y: 250 },
-      preTarget: target,
-      cueTarget: cue,
-      followupTarget: background,
-      preControl: background,
-      cueControl: background,
-      followupControl: background,
-    })).toBe(false);
+    const input = structuredClone(validDefeatEvidence());
+    mutate(input);
+    expect(helpers.passesDefeatCueEvidence(input)).toBe(false);
   });
 
   it('consumes exact effect geometry and rejects an overlapping control', async () => {
@@ -321,92 +294,55 @@ describe('battle pixel evidence helpers', () => {
     })).toBeNull();
   });
 
-  it('rejects defeat evidence when an exact non-defeat effect overlaps the target', async () => {
+  it.each(['brush-smear', 'armour-shard', 'defeat-shard'])(
+    'rejects a rotated %s whose rendered pixels overlap the target',
+    async (kind) => {
     const helpers = await loadHelpers();
-    const overlap = {
-      id: 'effect-ink-bubble-44',
-      kind: 'effect',
-      effectKind: 'ink-bubble',
-      x: 88,
-      y: 246,
-      width: 8,
-      height: 8,
-    };
-    expect(helpers.passesDefeatCueEvidence({
-      killedEnemyId: 7,
-      deadEnemy: { id: 7, alive: false, x: 92, y: 250 },
-      preTarget: target,
-      preControl: background,
-      targetRegion: { x: 76, y: 234, width: 32, height: 32 },
-      frames: [0.1, 0.42, 0.78].map((progress, index) => ({
-        target: [cue, squashMid, squashLate][index],
-        control: background,
-        defeatSquash: {
-          id: 31,
-          sourceEnemyId: 7,
-          originX: 92,
-          originY: 250,
-          x: 92,
-          y: 250 + index * 0.07,
-          size: 24,
-          progress,
-        },
-        dynamicBounds: index === 1 ? [overlap] : [],
-      })),
-    })).toBe(false);
+    const input = structuredClone(validDefeatEvidence());
+    input.frames[1].dynamicBounds = helpers.buildBattleDynamicBounds({
+      enemies: [], projectiles: [], loot: [],
+      effects: {
+        particles: [{
+          id: 82,
+          kind,
+          x: 95,
+          y: 252,
+          size: 8,
+          rotation: Math.PI / 4,
+          progress: 0.4,
+        }],
+        damageNumbers: [], rings: [],
+      },
+    }, null).filter((item: any) => item.id !== 'train');
+    expect(helpers.passesDefeatCueEvidence(input)).toBe(false);
+    },
+  );
+
+  it('rejects a diagonal impact-ring arc overlapping the target', async () => {
+    const helpers = await loadHelpers();
+    const input = structuredClone(validDefeatEvidence());
+    input.frames[1].dynamicBounds = helpers.buildBattleDynamicBounds({
+      enemies: [], projectiles: [], loot: [],
+      effects: {
+        particles: [], damageNumbers: [],
+        rings: [{ id: 61, x: 92, y: 250, radius: 20 }],
+      },
+    }, null).filter((item: any) => item.id !== 'train');
+    expect(helpers.passesDefeatCueEvidence(input)).toBe(false);
   });
 
   it('rejects squash metadata whose rendered geometry misses the target sample', async () => {
     const helpers = await loadHelpers();
-    expect(helpers.passesDefeatCueEvidence({
-      killedEnemyId: 7,
-      deadEnemy: { id: 7, alive: false, x: 92, y: 250 },
-      targetAnchor: { x: 92, y: 250 },
-      targetRegion: { x: 122, y: 248, width: 4, height: 4 },
-      preTarget: target,
-      preControl: background,
-      frames: [0.2, 0.5, 0.8].map((progress, index) => ({
-        target: [cue, squashMid, squashLate][index],
-        control: background,
-        defeatSquash: {
-          id: 31,
-          sourceEnemyId: 7,
-          originX: 92,
-          originY: 250,
-          x: 200,
-          y: 250,
-          size: 24,
-          progress,
-        },
-        dynamicBounds: [],
-      })),
-    })).toBe(false);
+    const input = structuredClone(validDefeatEvidence());
+    for (const frame of input.frames) frame.defeatSquash.x = 200;
+    expect(helpers.passesDefeatCueEvidence(input)).toBe(false);
   });
 
   it('accepts stable squash pixels when exact geometry evolves across frames', async () => {
     const helpers = await loadHelpers();
-    expect(helpers.passesDefeatCueEvidence({
-      killedEnemyId: 7,
-      deadEnemy: { id: 7, alive: false, x: 92, y: 250 },
-      targetRegion: { x: 76, y: 234, width: 32, height: 32 },
-      preTarget: target,
-      preControl: background,
-      frames: [0.2, 0.5, 0.8].map((progress) => ({
-        target: cue,
-        control: background,
-        defeatSquash: {
-          id: 31,
-          sourceEnemyId: 7,
-          originX: 92,
-          originY: 250,
-          x: 92,
-          y: 250,
-          size: 24,
-          progress,
-        },
-        dynamicBounds: [],
-      })),
-    })).toBe(true);
+    const input = structuredClone(validDefeatEvidence());
+    for (const frame of input.frames) frame.target = cue;
+    expect(helpers.passesDefeatCueEvidence(input)).toBe(true);
   });
 
   it('models an impact ring as a hollow stroke instead of a solid box', async () => {
@@ -424,7 +360,7 @@ describe('battle pixel evidence helpers', () => {
     const centralWindow = { x: 76, y: 234, width: 32, height: 32 };
     expect(bounds.some((item: any) => (
       item.id.startsWith('ring-61')
-      && helpers.rectsIntersect(item, centralWindow)
+      && helpers.boundsIntersectRect(item, centralWindow)
     ))).toBe(false);
     expect(helpers.selectSafeControlRegion({
       target: centralWindow,

@@ -19,12 +19,12 @@ import {
 } from './lib/chrome-cdp.mjs';
 import {
   buildBattleDynamicBounds,
+  boundsIntersectRect,
   createEvidenceViewport,
   logicalRectToPixelRect,
   passesDefeatCueEvidence,
   passesObjectEvidence,
   predictNextEnemyRegion,
-  rectsIntersect,
   selectSafeControlRegion,
 } from './lib/battle-pixel-evidence.mjs';
 
@@ -1021,7 +1021,7 @@ async function assertLowQualityResilience(client, label) {
       const region = laneWitnessRegions[laneIndex];
       const appearance = witnessCanvas.regions[laneIndex + 1];
       const overlapping = dynamicBounds.filter((bounds) => (
-        rectsIntersect(region, bounds)
+        boundsIntersectRect(bounds, region)
       ));
       if (overlapping.length === 0) {
         laneBackgroundBaselines.set(region.id, appearance);
@@ -1107,7 +1107,7 @@ async function assertLowQualityResilience(client, label) {
             followControlUnsafe: true,
             controlRegion: defeatedBaseline.controlRegion,
             overlappingIds: followDynamicBounds.filter((bounds) => (
-              rectsIntersect(defeatedBaseline.controlRegion, bounds)
+              boundsIntersectRect(bounds, defeatedBaseline.controlRegion)
             )).map((bounds) => bounds.id),
           });
           break;
@@ -1133,16 +1133,16 @@ async function assertLowQualityResilience(client, label) {
         ));
         if (
           !squashBounds
-          || !rectsIntersect(defeatedBaseline.region, squashBounds)
+          || !boundsIntersectRect(squashBounds, defeatedBaseline.region)
         ) continue;
         const interfering = followDynamicBounds.some((bounds) => (
-          rectsIntersect(defeatedBaseline.region, bounds)
+          boundsIntersectRect(bounds, defeatedBaseline.region)
           && bounds.id !== `enemy-${deadEnemy.id}`
           && bounds.id !== `effect-defeat-squash-${defeatSquash.id}`
           && !(bounds.kind === 'enemy' && bounds.alive === false)
         ));
         const interferingIds = followDynamicBounds.filter((bounds) => (
-          rectsIntersect(defeatedBaseline.region, bounds)
+          boundsIntersectRect(bounds, defeatedBaseline.region)
           && bounds.id !== `enemy-${deadEnemy.id}`
           && bounds.id !== `effect-defeat-squash-${defeatSquash.id}`
           && !(bounds.kind === 'enemy' && bounds.alive === false)
