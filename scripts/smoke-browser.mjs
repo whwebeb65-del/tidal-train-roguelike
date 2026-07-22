@@ -23,6 +23,8 @@ import {
   logicalRectToPixelRect,
   passesDefeatCueEvidence,
   passesObjectEvidence,
+  predictNextEnemyRegion,
+  rectsIntersect,
   selectSafeControlRegion,
 } from './lib/battle-pixel-evidence.mjs';
 
@@ -768,7 +770,11 @@ async function inspectBattleCanvasRegions(
         const colorTotal = [0, 0, 0];
         const shapeTotal = Array.from({ length: 9 }, () => 0);
         const shapeCount = Array.from({ length: 9 }, () => 0);
-        for (let index = 0; index < pixels.length; index += 16) {
+        let brightCyanCount = 0;
+        let centerBrightCount = 0;
+        let centerSampled = 0;
+        const smallRegionStride = width * height <= 64 ? 4 : 16;
+        for (let index = 0; index < pixels.length; index += smallRegionStride) {
           sampled += 1;
           const red = pixels[index];
           const green = pixels[index + 1];
@@ -784,6 +790,12 @@ async function inspectBattleCanvasRegions(
           const cell = cellY * 3 + cellX;
           shapeTotal[cell] += (red + green + blue) / (3 * 255);
           shapeCount[cell] += 1;
+          const brightCyan = red >= 180 && green >= 225 && blue >= 225;
+          if (brightCyan) brightCyanCount += 1;
+          if (cell === 4) {
+            centerSampled += 1;
+            if (brightCyan) centerBrightCount += 1;
+          }
         }
         return {
           name: region.name,
@@ -791,6 +803,8 @@ async function inspectBattleCanvasRegions(
           shapeProfile: shapeTotal.map((total, index) => (
             total / Math.max(1, shapeCount[index])
           )),
+          brightCyanFraction: brightCyanCount / Math.max(1, sampled),
+          centerBrightFraction: centerBrightCount / Math.max(1, centerSampled),
         };
       };
       return {
@@ -815,6 +829,20 @@ function nearbyControlCandidates(region) {
   ];
 }
 
+function controlGridCandidates(region) {
+  const candidates = [];
+  for (let y = 32; y <= 620; y += 64) {
+    for (let x = 20; x <= 350; x += 55) {
+      candidates.push({
+        ...region,
+        x,
+        y,
+      });
+    }
+  }
+  return candidates;
+}
+
 async function compareObjectRegionToControl(
   client,
   objectRegions,
@@ -825,7 +853,10 @@ async function compareObjectRegionToControl(
     region,
     control: selectSafeControlRegion({
       target: region,
-      candidates: nearbyControlCandidates(region),
+      candidates: [
+        ...nearbyControlCandidates(region),
+        ...controlGridCandidates(region),
+      ],
       dynamicBounds,
       viewport,
     }),
@@ -845,7 +876,11 @@ async function compareObjectRegionToControl(
       controlRegion: control,
       control: controlEvidence,
       viewport,
-      passed: passesObjectEvidence({ target: object, control: controlEvidence }),
+      passed: passesObjectEvidence({
+        target: object,
+        backgroundBaseline: region.backgroundBaseline,
+        signature: region.signature,
+      }),
     };
   });
 }
@@ -856,6 +891,23 @@ async function inspectFixedObjectControlPair(client, baseline) {
     { ...baseline.controlRegion, name: `${baseline.region.name}-control` },
   ], baseline.viewport);
   return { target: evidence.regions[0], control: evidence.regions[1] };
+}
+
+function predictDefeatSampleRegions(enemy) {
+  const center = predictNextEnemyRegion(enemy);
+  const deathX = center.x + center.width / 2;
+  const deathY = center.y + center.height / 2;
+  return [24, -28].map((offsetX, index) => ({
+    id: `${enemy.id}-lobe-${index}`,
+    enemyId: enemy.id,
+    name: `enemy-${enemy.id}-predicted-lobe-${index}`,
+    deathX,
+    deathY,
+    x: deathX + offsetX,
+    y: deathY - 2,
+    width: 4,
+    height: 4,
+  }));
 }
 
 async function assertLowQualityResilience(client, label) {
@@ -902,40 +954,90 @@ async function assertLowQualityResilience(client, label) {
   let enemyObjectBound = false;
   let defeatObjectBound = false;
   let preDefeatLocalBaseline = new Map();
+  const laneBackgroundBaselines = new Map();
+  const laneWitnessRegions = [92, 195, 298].map((x, lane) => ({
+    id: `lane-${lane}`,
+    name: `enemy-lane-${lane}-witness`,
+    x: x - 12,
+    y: 98,
+    width: 24,
+    height: 24,
+  }));
+  const trainCannonRegion = {
+    name: 'train-cannon',
+    x: 179,
+    y: 683,
+    width: 32,
+    height: 32,
+  };
   const attemptedKillIds = new Set();
   let defeatedEnemyId = null;
   let deathCoordinates = null;
-  for (let index = 0; index < 320; index += 1) {
+  const defeatDiagnostics = [];
+  let maxDefeatBaselines = 0;
+  const deadIdsWithoutBaseline = new Set();
+  const observedDeadIds = new Set();
+  const evidenceStepMs = 17;
+  for (let index = 0; index < 960; index += 1) {
     const state = await snapshot(client);
     const battle = state.battle;
     assert.ok(battle, `${label} low-quality battle snapshot must exist`);
     const liveEnemies = battle.enemies.filter((enemy) => enemy.alive);
+    for (const enemy of battle.enemies.filter((candidate) => !candidate.alive)) {
+      if (!preDefeatLocalBaseline.has(enemy.id)) deadIdsWithoutBaseline.add(enemy.id);
+      if (!observedDeadIds.has(enemy.id)) {
+        observedDeadIds.add(enemy.id);
+        defeatDiagnostics.push({
+          enemyId: enemy.id,
+          firstDeadObservation: true,
+          baselineIds: [...preDefeatLocalBaseline.keys()],
+          activeProjectiles: battle.projectiles.filter((projectile) => projectile.active)
+            .map((projectile) => ({ id: projectile.id, targetId: projectile.targetId })),
+          effectIds: state.effects?.particles.map((particle) => (
+            `${particle.kind}-${particle.id}`
+          )) ?? [],
+        });
+      }
+    }
     enemySeen ||= liveEnemies.length > 0;
-    const dynamicBounds = buildBattleDynamicBounds(battle, state.trainMotion);
-    const enemyRegions = liveEnemies.slice(0, 3).map((enemy) => ({
-      id: enemy.id,
-      name: `enemy-${enemy.id}`,
-      x: enemy.x - 16,
-      y: enemy.y - 16,
-      width: 32,
-      height: 32,
-    }));
-    const objectEvidence = await compareObjectRegionToControl(
-      client,
-      [{
-        name: 'train',
-        x: 179 + (state.trainMotion?.offsetX ?? 0),
-        y: 744 + (state.trainMotion?.offsetY ?? 0),
-        width: 32,
-        height: 32,
-      }, ...enemyRegions],
-      dynamicBounds,
+    const dynamicBounds = buildBattleDynamicBounds(
+      battle,
+      state.trainMotion,
+      state.effects,
     );
-    const trainEvidence = objectEvidence.find(({ region }) => region.name === 'train');
-    trainObjectBound ||= trainEvidence?.passed ?? false;
-    enemyObjectBound ||= objectEvidence.some(({ region, passed }) => (
-      region.name.startsWith('enemy-') && passed
-    ));
+    const witnessCanvas = await inspectBattleCanvasRegions(client, [
+      {
+        ...trainCannonRegion,
+        x: trainCannonRegion.x + (state.trainMotion?.offsetX ?? 0),
+        y: trainCannonRegion.y + (state.trainMotion?.offsetY ?? 0),
+      },
+      ...laneWitnessRegions,
+    ]);
+    trainObjectBound ||= passesObjectEvidence({
+      target: witnessCanvas.regions[0],
+      signature: 'train-cannon',
+    });
+    for (let laneIndex = 0; laneIndex < laneWitnessRegions.length; laneIndex += 1) {
+      const region = laneWitnessRegions[laneIndex];
+      const appearance = witnessCanvas.regions[laneIndex + 1];
+      const overlapping = dynamicBounds.filter((bounds) => (
+        rectsIntersect(region, bounds)
+      ));
+      if (overlapping.length === 0) {
+        laneBackgroundBaselines.set(region.id, appearance);
+        continue;
+      }
+      const onlyEnemyObjects = overlapping.every((bounds) => (
+        bounds.id.startsWith('enemy-')
+      ));
+      const backgroundBaseline = laneBackgroundBaselines.get(region.id);
+      if (onlyEnemyObjects && backgroundBaseline) {
+        enemyObjectBound ||= passesObjectEvidence({
+          target: appearance,
+          backgroundBaseline,
+        });
+      }
+    }
 
     const deadEnemy = battle.enemies.find((enemy) => (
       enemy.alive === false
@@ -944,11 +1046,17 @@ async function assertLowQualityResilience(client, label) {
     ));
     if (deadEnemy) {
       attemptedKillIds.add(deadEnemy.id);
-      const defeatedBaseline = preDefeatLocalBaseline.get(deadEnemy.id);
-      const expectedX = defeatedBaseline.region.x
-        + defeatedBaseline.region.width / 2;
-      const expectedY = defeatedBaseline.region.y
-        + defeatedBaseline.region.height / 2;
+      const defeatedBaseline = preDefeatLocalBaseline.get(deadEnemy.id).find(
+        (candidate) => selectSafeControlRegion({
+          target: candidate.region,
+          candidates: [candidate.controlRegion],
+          dynamicBounds,
+          viewport: candidate.viewport,
+        }),
+      );
+      if (!defeatedBaseline) continue;
+      const expectedX = defeatedBaseline.region.deathX;
+      const expectedY = defeatedBaseline.region.deathY;
       const exactDeathLocation = Math.abs(expectedX - deadEnemy.x) < 0.001
         && Math.abs(expectedY - deadEnemy.y) < 0.001;
       const controlStillSafe = selectSafeControlRegion({
@@ -957,19 +1065,35 @@ async function assertLowQualityResilience(client, label) {
         dynamicBounds,
         viewport: defeatedBaseline.viewport,
       });
-      if (!exactDeathLocation || !controlStillSafe) continue;
+      if (!exactDeathLocation || !controlStillSafe) {
+        defeatDiagnostics.push({
+          enemyId: deadEnemy.id,
+          rejectedBeforeCue: true,
+          exactDeathLocation,
+          controlStillSafe: Boolean(controlStillSafe),
+          expectedX,
+          expectedY,
+          actualX: deadEnemy.x,
+          actualY: deadEnemy.y,
+        });
+        continue;
+      }
       defeatedEnemyId = deadEnemy.id;
       deathCoordinates = { x: deadEnemy.x, y: deadEnemy.y };
-      const cue = await inspectFixedObjectControlPair(client, defeatedBaseline);
+      const squashFrames = [];
       const defeatEvidenceDeadline = Date.now() + 500;
       while (Date.now() < defeatEvidenceDeadline) {
-        await advanceBattle(client, 50);
+        await advanceBattle(client, evidenceStepMs);
         const followState = await snapshot(client);
         const followBattle = followState.battle;
-        if (!followBattle) break;
+        if (!followBattle) {
+          defeatDiagnostics.push({ enemyId: deadEnemy.id, missingFollowBattle: true });
+          break;
+        }
         const followDynamicBounds = buildBattleDynamicBounds(
           followBattle,
           followState.trainMotion,
+          followState.effects,
         );
         const followControlSafe = selectSafeControlRegion({
           target: defeatedBaseline.region,
@@ -977,20 +1101,87 @@ async function assertLowQualityResilience(client, label) {
           dynamicBounds: followDynamicBounds,
           viewport: defeatedBaseline.viewport,
         });
-        if (!followControlSafe) break;
-        const followup = await inspectFixedObjectControlPair(
+        if (!followControlSafe) {
+          defeatDiagnostics.push({
+            enemyId: deadEnemy.id,
+            followControlUnsafe: true,
+            controlRegion: defeatedBaseline.controlRegion,
+            overlappingIds: followDynamicBounds.filter((bounds) => (
+              rectsIntersect(defeatedBaseline.controlRegion, bounds)
+            )).map((bounds) => bounds.id),
+          });
+          break;
+        }
+        const defeatSquash = followState.effects?.particles.find((particle) => (
+          particle.kind === 'defeat-squash'
+          && particle.sourceEnemyId === deadEnemy.id
+          && Math.abs(particle.originX - deadEnemy.x) < 0.001
+          && Math.abs(particle.originY - deadEnemy.y) < 0.001
+        ));
+        if (!defeatSquash) {
+          defeatDiagnostics.push({
+            enemyId: deadEnemy.id,
+            missingDefeatSquash: true,
+            effects: followState.effects?.particles.map((particle) => (
+              `${particle.kind}-${particle.id}@${particle.x},${particle.y}`
+            )) ?? [],
+          });
+          break;
+        }
+        const squashBounds = followDynamicBounds.find((bounds) => (
+          bounds.id === `effect-defeat-squash-${defeatSquash.id}`
+        ));
+        if (
+          !squashBounds
+          || !rectsIntersect(defeatedBaseline.region, squashBounds)
+        ) continue;
+        const interfering = followDynamicBounds.some((bounds) => (
+          rectsIntersect(defeatedBaseline.region, bounds)
+          && bounds.id !== `enemy-${deadEnemy.id}`
+          && bounds.id !== `effect-defeat-squash-${defeatSquash.id}`
+          && !(bounds.kind === 'enemy' && bounds.alive === false)
+        ));
+        const interferingIds = followDynamicBounds.filter((bounds) => (
+          rectsIntersect(defeatedBaseline.region, bounds)
+          && bounds.id !== `enemy-${deadEnemy.id}`
+          && bounds.id !== `effect-defeat-squash-${defeatSquash.id}`
+          && !(bounds.kind === 'enemy' && bounds.alive === false)
+        )).map((bounds) => bounds.id);
+        defeatDiagnostics.push({
+          enemyId: deadEnemy.id,
+          progress: defeatSquash.progress,
+          interferingIds,
+          collectedFrames: squashFrames.length,
+        });
+        if (interfering) continue;
+        const sample = await inspectFixedObjectControlPair(
           client,
           defeatedBaseline,
         );
+        squashFrames.push({
+          target: sample.target,
+          control: sample.control,
+          defeatSquash: {
+            id: defeatSquash.id,
+            kind: defeatSquash.kind,
+            sourceEnemyId: defeatSquash.sourceEnemyId,
+            originX: defeatSquash.originX,
+            originY: defeatSquash.originY,
+            x: defeatSquash.x,
+            y: defeatSquash.y,
+            size: defeatSquash.size,
+            progress: defeatSquash.progress,
+          },
+          dynamicBounds: followDynamicBounds,
+        });
         if (passesDefeatCueEvidence({
           killedEnemyId: deadEnemy.id,
           deadEnemy,
           preTarget: defeatedBaseline.object,
-          cueTarget: cue.target,
-          followupTarget: followup.target,
           preControl: defeatedBaseline.control,
-          cueControl: cue.control,
-          followupControl: followup.control,
+          targetRegion: defeatedBaseline.region,
+          targetAnchor: { x: deadEnemy.x, y: deadEnemy.y },
+          frames: squashFrames,
         })) {
           defeatCueSeen = true;
           defeatObjectBound = true;
@@ -1005,22 +1196,21 @@ async function assertLowQualityResilience(client, label) {
       await callHook(client, 'return hook.chooseFirstUpgrade();');
     }
     if (battle.status === 'defeat' || battle.status === 'victory') break;
-    const predictedEnemyRegions = liveEnemies.map((enemy) => ({
-      id: enemy.id,
-      name: `enemy-${enemy.id}-predicted-death`,
-      x: enemy.x - 16,
-      y: Math.min(716, enemy.y + enemy.speedPerSecond * 0.05) - 16,
-      width: 32,
-      height: 32,
-    }));
+    const predictedEnemyRegions = liveEnemies.flatMap(predictDefeatSampleRegions);
     const predictedEvidence = await compareObjectRegionToControl(
       client,
       predictedEnemyRegions,
       dynamicBounds,
     );
-    preDefeatLocalBaseline = new Map(predictedEvidence
-      .map((evidence) => [evidence.id, evidence]));
-    await advanceBattle(client, 50);
+    preDefeatLocalBaseline = new Map();
+    for (const evidence of predictedEvidence) {
+      const enemyId = evidence.region.enemyId;
+      const entries = preDefeatLocalBaseline.get(enemyId) ?? [];
+      entries.push(evidence);
+      preDefeatLocalBaseline.set(enemyId, entries);
+    }
+    maxDefeatBaselines = Math.max(maxDefeatBaselines, preDefeatLocalBaseline.size);
+    await advanceBattle(client, evidenceStepMs);
   }
   const state = await snapshot(client);
   assert.equal(state.diagnostics.qualityLevel, 'low');
@@ -1029,7 +1219,12 @@ async function assertLowQualityResilience(client, label) {
   assert.equal(
     defeatCueSeen,
     true,
-    `${label} low quality must retain the pooled defeat cue`,
+    `${label} low quality must retain the pooled defeat cue: `
+      + JSON.stringify({
+        frames: defeatDiagnostics.slice(-20),
+        maxDefeatBaselines,
+        deadIdsWithoutBaseline: [...deadIdsWithoutBaseline],
+      }),
   );
   assert.equal(trainObjectBound, true, `${label} train must differ from nearby background`);
   assert.equal(enemyObjectBound, true, `${label} enemy must differ from nearby background`);

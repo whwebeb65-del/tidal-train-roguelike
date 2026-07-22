@@ -429,6 +429,35 @@ export class BattleScene implements GameScene {
     };
   }
 
+  public snapshotEffectGeometry() {
+    const view = this.dependencies.effects.view;
+    return {
+      particles: view.particles.map((particle) => ({
+        id: particle.id,
+        kind: particle.kind,
+        x: particle.x,
+        y: particle.y,
+        size: particle.size,
+        progress: particle.progress,
+        sourceEnemyId: particle.sourceEnemyId,
+        originX: particle.originX,
+        originY: particle.originY,
+      })),
+      damageNumbers: view.damageNumbers.map((number) => ({
+        id: number.id,
+        x: number.x,
+        y: number.y,
+        critical: number.critical,
+      })),
+      rings: view.rings.map((ring) => ({
+        id: ring.id,
+        x: ring.x,
+        y: ring.y,
+        radius: ring.radius,
+      })),
+    };
+  }
+
   public unmount(): void {
     if (!this.host) return;
     this.lifecycleVersion += 1;

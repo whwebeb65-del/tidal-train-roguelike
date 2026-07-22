@@ -7,11 +7,39 @@ import type {
   BattleDiagnosticsSnapshot,
 } from './BattleDiagnostics';
 import type { TrainMotionFrameView } from './TrainMotionTypes';
+import type { EffectParticleKind } from './EffectSystem';
+
+export interface BattleE2EEffectGeometry {
+  readonly particles: readonly {
+    readonly id: number;
+    readonly kind: EffectParticleKind;
+    readonly x: number;
+    readonly y: number;
+    readonly size: number;
+    readonly progress: number;
+    readonly sourceEnemyId?: number | null;
+    readonly originX?: number;
+    readonly originY?: number;
+  }[];
+  readonly damageNumbers: readonly {
+    readonly id: number;
+    readonly x: number;
+    readonly y: number;
+    readonly critical: boolean;
+  }[];
+  readonly rings: readonly {
+    readonly id: number;
+    readonly x: number;
+    readonly y: number;
+    readonly radius: number;
+  }[];
+}
 
 export interface BattleE2ESnapshot {
   readonly sceneId: SceneId;
   readonly battle: BattleFrameView | null;
   readonly trainMotion: TrainMotionFrameView | null;
+  readonly effects: BattleE2EEffectGeometry | null;
   readonly diagnostics: BattleDiagnosticsSnapshot;
   readonly settlementCount: number;
 }

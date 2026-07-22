@@ -1978,6 +1978,9 @@ function e2eSnapshot(): BattleE2ESnapshot {
     trainMotion: activeBattleScene
       ? activeBattleScene.snapshotTrainMotion()
       : null,
+    effects: activeBattleScene
+      ? activeBattleScene.snapshotEffectGeometry()
+      : null,
     diagnostics: snapshot,
     settlementCount: snapshot.settledBattleCount,
   };

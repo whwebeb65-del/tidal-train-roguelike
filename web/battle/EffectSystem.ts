@@ -33,6 +33,9 @@ export interface EffectParticleView {
   readonly alpha: number;
   readonly rotation: number;
   readonly progress: number;
+  readonly sourceEnemyId?: number | null;
+  readonly originX?: number;
+  readonly originY?: number;
 }
 
 export interface DamageNumberView {
@@ -114,6 +117,9 @@ interface MutableParticle {
   rotation: number;
   spin: number;
   ageMs: number;
+  sourceEnemyId: number | null;
+  originX: number;
+  originY: number;
 }
 
 interface MutableDamageNumber {
@@ -245,6 +251,9 @@ export class EffectSystem {
           1,
           Math.max(0, particle.ageMs / Math.max(1, particle.lifetimeMs)),
         ),
+        sourceEnemyId: particle.sourceEnemyId,
+        originX: particle.originX,
+        originY: particle.originY,
       })),
       damageNumbers: this.damageNumbers.map((number) => ({
         id: number.id,
@@ -371,7 +380,7 @@ export class EffectSystem {
           : event.kind === 'storm-ray-elite'
             ? 9
             : 6;
-        this.spawnDefeatSquash(event.x, event.y, boss);
+        this.spawnDefeatSquash(event.enemyId, event.x, event.y, boss);
         this.spawnBurst(
           event.x,
           event.y,
@@ -573,6 +582,9 @@ export class EffectSystem {
       particle.spin =
         (id % 2 === 0 ? 1 : -1) * (1.2 + id % 4);
       particle.ageMs = 0;
+      particle.sourceEnemyId = null;
+      particle.originX = x;
+      particle.originY = y;
       this.particles.push(particle);
     }
   }
@@ -591,7 +603,12 @@ export class EffectSystem {
     this.addRing(x, y, 18, 110, '#ffb49f', 4);
   }
 
-  private spawnDefeatSquash(x: number, y: number, boss: boolean): void {
+  private spawnDefeatSquash(
+    enemyId: number,
+    x: number,
+    y: number,
+    boss: boolean,
+  ): void {
     if (this.particleLimit <= 0) return;
     const particle = this.particlePool.acquire();
     particle.id = this.nextId++;
@@ -608,6 +625,9 @@ export class EffectSystem {
     particle.rotation = 0;
     particle.spin = 0;
     particle.ageMs = 0;
+    particle.sourceEnemyId = enemyId;
+    particle.originX = x;
+    particle.originY = y;
     this.particles.push(particle);
   }
 
@@ -775,6 +795,9 @@ function createParticle(): MutableParticle {
     rotation: 0,
     spin: 0,
     ageMs: 0,
+    sourceEnemyId: null,
+    originX: 0,
+    originY: 0,
   };
 }
 
@@ -793,6 +816,9 @@ function resetParticle(particle: MutableParticle): void {
   particle.rotation = 0;
   particle.spin = 0;
   particle.ageMs = 0;
+  particle.sourceEnemyId = null;
+  particle.originX = 0;
+  particle.originY = 0;
 }
 
 function createDamageNumber(): MutableDamageNumber {

@@ -272,8 +272,23 @@ describe('BattleScene', () => {
       projectileId: 3,
       source: 'main',
     });
+    const effectView = {
+      ...EMPTY_EFFECT_FRAME_VIEW,
+      particles: [{
+        id: 81,
+        kind: 'defeat-squash' as const,
+        layer: 'front-effects' as const,
+        x: 92,
+        y: 250,
+        size: 24,
+        color: '#315c70',
+        alpha: 0.8,
+        rotation: 0,
+        progress: 0.42,
+      }],
+    };
     const effects = {
-      view: EMPTY_EFFECT_FRAME_VIEW,
+      view: effectView,
       consume: vi.fn(),
       update: vi.fn(),
       reset: vi.fn(),
@@ -357,6 +372,23 @@ describe('BattleScene', () => {
     const snapshot = scene.snapshotTrainMotion();
     expect(snapshot).toEqual(motion.view);
     expect(snapshot).not.toBe(motion.view);
+    const effectSnapshot = scene.snapshotEffectGeometry();
+    expect(effectSnapshot).toMatchObject({
+      particles: [expect.objectContaining({
+        id: 81,
+        kind: 'defeat-squash',
+        x: 92,
+        y: 250,
+        size: 24,
+        progress: 0.42,
+      })],
+      damageNumbers: [],
+      rings: [],
+    });
+    expect(effectSnapshot).not.toBe(effectView);
+    expect(effectSnapshot.particles).not.toBe(effectView.particles);
+    expect(effectSnapshot.particles[0]).not.toHaveProperty('color');
+    expect(effectSnapshot).not.toHaveProperty('camera');
 
     const updatesBeforePause = motion.update.mock.calls.length;
     const laneOffsetBeforePause = motion.view.laneOffset;

@@ -62,6 +62,7 @@ describe('browser smoke script', () => {
     expect(source).toContain('inspectBattleCanvasRegions');
     expect(source).toContain('compareObjectRegionToControl');
     expect(source).toContain('nearbyControlCandidates');
+    expect(source).toContain('controlGridCandidates');
     expect(source).toContain('defeatedEnemyId');
     expect(source).toContain('deathCoordinates');
     expect(source).toContain('preDefeatLocalBaseline');
@@ -70,6 +71,11 @@ describe('browser smoke script', () => {
     expect(source).toContain('logicalRectToPixelRect');
     expect(source).toContain('selectSafeControlRegion');
     expect(source).toContain('passesDefeatCueEvidence');
+    expect(source).toContain('backgroundBaseline');
+    expect(source).toContain('state.effects');
+    expect(source).toContain('defeatSquash');
+    expect(source).toContain('dynamicBounds');
+    expect(source).toContain('smallRegionStride');
     expect(source).toContain("alive === false");
     expect(source).toContain('continueObservingLaterKills');
     expect(source).toContain('background-foreground semantic omission');

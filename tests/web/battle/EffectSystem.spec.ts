@@ -90,7 +90,15 @@ describe('EffectSystem', () => {
     expect(effects.view.particles.filter((item) => item.kind === 'ink-bubble').length).toBeGreaterThanOrEqual(4);
     expect(effects.view.particles.every((item) => item.progress >= 0 && item.progress <= 1)).toBe(true);
     effects.update(120);
-    expect(effects.view.particles.find((item) => item.kind === 'defeat-squash')!.progress).toBeGreaterThan(0);
+    const evolvedSquash = effects.view.particles.find(
+      (item) => item.kind === 'defeat-squash',
+    )!;
+    expect(evolvedSquash.progress).toBeGreaterThan(0);
+    expect(evolvedSquash).toMatchObject({
+      sourceEnemyId: 7,
+      originX: 120,
+      originY: 260,
+    });
   });
 
   it('retains the first squash when later combat decoration exceeds the particle budget', () => {

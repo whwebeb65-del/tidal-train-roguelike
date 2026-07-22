@@ -13,6 +13,7 @@ function createController(): BattleE2EController {
       sceneId: 'station',
       battle: null,
       trainMotion: null,
+      effects: null,
       diagnostics: {
         activeFrameLoops: 0,
         activeListeners: 0,
