@@ -720,22 +720,32 @@ async function inspectBattleCanvasRegions(client, regions) {
         ));
         const pixels = context.getImageData(x, y, width, height).data;
         let sampled = 0;
-        let ink = 0;
-        let signature = 2166136261;
+        const colorTotal = [0, 0, 0];
+        const shapeTotal = Array.from({ length: 9 }, () => 0);
+        const shapeCount = Array.from({ length: 9 }, () => 0);
         for (let index = 0; index < pixels.length; index += 16) {
           sampled += 1;
           const red = pixels[index];
           const green = pixels[index + 1];
           const blue = pixels[index + 2];
-          const alpha = pixels[index + 3];
-          if (alpha > 180 && red < 105 && green < 135 && blue < 170) ink += 1;
-          signature ^= red | (green << 8) | (blue << 16) | (alpha << 24);
-          signature = Math.imul(signature, 16777619) >>> 0;
+          colorTotal[0] += red;
+          colorTotal[1] += green;
+          colorTotal[2] += blue;
+          const pixelIndex = index / 4;
+          const pixelX = pixelIndex % width;
+          const pixelY = Math.floor(pixelIndex / width);
+          const cellX = Math.min(2, Math.floor(pixelX / width * 3));
+          const cellY = Math.min(2, Math.floor(pixelY / height * 3));
+          const cell = cellY * 3 + cellX;
+          shapeTotal[cell] += (red + green + blue) / (3 * 255);
+          shapeCount[cell] += 1;
         }
         return {
           name: region.name,
-          inkRatio: sampled > 0 ? ink / sampled : 0,
-          signature,
+          meanColor: colorTotal.map((total) => total / Math.max(1, sampled)),
+          shapeProfile: shapeTotal.map((total, index) => (
+            total / Math.max(1, shapeCount[index])
+          )),
         };
       };
       return {
@@ -745,6 +755,52 @@ async function inspectBattleCanvasRegions(client, regions) {
       };
     })()`,
   );
+}
+
+function nearbyBackgroundControl(region) {
+  const gap = 12;
+  const rightX = region.x + region.width + gap;
+  const controlX = rightX + region.width <= 390
+    ? rightX
+    : Math.max(0, region.x - region.width - gap);
+  return {
+    ...region,
+    name: `${region.name}-nearby-background-control`,
+    x: controlX,
+  };
+}
+
+function compareRegionAppearance(first, second) {
+  const colorDifference = Math.sqrt(first.meanColor.reduce(
+    (total, value, index) => total + (value - second.meanColor[index]) ** 2,
+    0,
+  ));
+  const shapeDifference = first.shapeProfile.reduce(
+    (total, value, index) => total + Math.abs(
+      value - second.shapeProfile[index],
+    ),
+    0,
+  );
+  return { colorDifference, shapeDifference };
+}
+
+async function compareObjectRegionToControl(client, objectRegions) {
+  const pairedRegions = objectRegions.flatMap((region) => [
+    region,
+    nearbyBackgroundControl(region),
+  ]);
+  const canvas = await inspectBattleCanvasRegions(client, pairedRegions);
+  return objectRegions.map((region, index) => {
+    const object = canvas.regions[index * 2];
+    const control = canvas.regions[index * 2 + 1];
+    return {
+      id: region.id,
+      region,
+      object,
+      control,
+      ...compareRegionAppearance(object, control),
+    };
+  });
 }
 
 async function assertLowQualityResilience(client, label) {
@@ -787,11 +843,13 @@ async function assertLowQualityResilience(client, label) {
 
   let enemySeen = false;
   let defeatCueSeen = false;
-  let trainInkRatio = 0;
-  let enemyInkRatio = 0;
-  let defeatRegionChanged = false;
-  let priorEnemyRegions = [];
-  let priorEnemyEvidence = null;
+  let trainObjectBound = false;
+  let enemyObjectBound = false;
+  let defeatObjectBound = false;
+  let previousKills = 0;
+  let preDefeatLocalBaseline = new Map();
+  let defeatedEnemyId = null;
+  let deathCoordinates = null;
   for (let index = 0; index < 160; index += 1) {
     const state = await snapshot(client);
     const battle = state.battle;
@@ -799,32 +857,65 @@ async function assertLowQualityResilience(client, label) {
     const liveEnemies = battle.enemies.filter((enemy) => enemy.alive);
     enemySeen ||= liveEnemies.length > 0;
     const enemyRegions = liveEnemies.slice(0, 3).map((enemy) => ({
+      id: enemy.id,
       name: `enemy-${enemy.id}`,
       x: enemy.x - 46,
       y: enemy.y - 54,
       width: 92,
       height: 108,
     }));
-    const canvasEvidence = await inspectBattleCanvasRegions(client, [
-      { name: 'train', x: 105, y: 680, width: 180, height: 164 },
+    const objectEvidence = await compareObjectRegionToControl(client, [
+      { name: 'train', x: 135, y: 700, width: 120, height: 140 },
       ...enemyRegions,
     ]);
-    const trainRegion = canvasEvidence.regions.find((region) => region.name === 'train');
-    trainInkRatio = Math.max(trainInkRatio, trainRegion?.inkRatio ?? 0);
-    enemyInkRatio = Math.max(
-      enemyInkRatio,
-      ...canvasEvidence.regions
-        .filter((region) => region.name.startsWith('enemy-'))
-        .map((region) => region.inkRatio),
-    );
-    if (battle.kills > 0 && state.diagnostics.effects > 0) {
+    const trainEvidence = objectEvidence.find(({ region }) => region.name === 'train');
+    trainObjectBound ||= Boolean(trainEvidence
+      && (trainEvidence.colorDifference > 8
+        || trainEvidence.shapeDifference > 0.08));
+    enemyObjectBound ||= objectEvidence.some(({ region, colorDifference, shapeDifference }) => (
+      region.name.startsWith('enemy-')
+      && (colorDifference > 8 || shapeDifference > 0.08)
+    ));
+
+    const liveIds = new Set(liveEnemies.map((enemy) => enemy.id));
+    const defeatedBaseline = battle.kills > previousKills
+      ? [...preDefeatLocalBaseline.values()].find(({ id }) => !liveIds.has(id))
+      : null;
+    if (defeatedBaseline && state.diagnostics.effects > 0) {
       defeatCueSeen = true;
-      if (priorEnemyEvidence && priorEnemyRegions.length > 0) {
-        const after = await inspectBattleCanvasRegions(client, priorEnemyRegions);
-        defeatRegionChanged = after.regions.some((region, regionIndex) => (
-          region.signature !== priorEnemyEvidence.regions[regionIndex]?.signature
-          && region.inkRatio > 0.002
-        ));
+      defeatedEnemyId = defeatedBaseline.id;
+      deathCoordinates = {
+        x: defeatedBaseline.region.x + defeatedBaseline.region.width / 2,
+        y: defeatedBaseline.region.y + defeatedBaseline.region.height / 2,
+      };
+      const cue = (await compareObjectRegionToControl(
+        client,
+        [defeatedBaseline.region],
+      ))[0];
+      const preToCue = compareRegionAppearance(
+        defeatedBaseline.object,
+        cue.object,
+      );
+      const defeatEvidenceDeadline = Date.now() + 500;
+      while (Date.now() < defeatEvidenceDeadline) {
+        await advanceBattle(client, 50);
+        const later = (await compareObjectRegionToControl(
+          client,
+          [defeatedBaseline.region],
+        ))[0];
+        const localTemporal = compareRegionAppearance(cue.object, later.object);
+        const controlTemporal = compareRegionAppearance(cue.control, later.control);
+        const localizedColorDifference = localTemporal.colorDifference
+          - controlTemporal.colorDifference;
+        const localizedShapeDifference = localTemporal.shapeDifference
+          - controlTemporal.shapeDifference;
+        if (
+          (preToCue.colorDifference > 4 || preToCue.shapeDifference > 0.04)
+          && (localizedColorDifference > 2 || localizedShapeDifference > 0.025)
+        ) {
+          defeatObjectBound = true;
+          break;
+        }
       }
       break;
     }
@@ -832,10 +923,10 @@ async function assertLowQualityResilience(client, label) {
       await callHook(client, 'return hook.chooseFirstUpgrade();');
     }
     if (battle.status === 'defeat' || battle.status === 'victory') break;
-    priorEnemyRegions = enemyRegions;
-    priorEnemyEvidence = enemyRegions.length > 0
-      ? await inspectBattleCanvasRegions(client, enemyRegions)
-      : null;
+    preDefeatLocalBaseline = new Map(objectEvidence
+      .filter(({ id }) => id != null)
+      .map((evidence) => [evidence.id, evidence]));
+    previousKills = battle.kills;
     await advanceBattle(client, 100);
   }
   const state = await snapshot(client);
@@ -847,13 +938,11 @@ async function assertLowQualityResilience(client, label) {
     true,
     `${label} low quality must retain the pooled defeat cue`,
   );
-  assert.ok(trainInkRatio > 0.002, `${label} expected train region must contain ink`);
-  assert.ok(enemyInkRatio > 0.002, `${label} expected enemy region must contain ink`);
-  assert.equal(
-    defeatRegionChanged,
-    true,
-    `${label} expected defeated-enemy region must visibly change`,
-  );
+  assert.equal(trainObjectBound, true, `${label} train must differ from nearby background`);
+  assert.equal(enemyObjectBound, true, `${label} enemy must differ from nearby background`);
+  assert.ok(defeatedEnemyId != null, `${label} defeated enemy ID must be retained`);
+  assert.ok(deathCoordinates, `${label} exact death coordinates must be retained`);
+  assert.equal(defeatObjectBound, true, `${label} defeat cue must change its death region`);
   const stateText = await evaluate(
     client,
     `[

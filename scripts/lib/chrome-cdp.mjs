@@ -114,13 +114,38 @@ export async function waitForOwnedPreview(
   url,
   { child, getOutput, timeoutMs = 15_000 },
 ) {
+  const expected = new URL(url);
+  if (expected.hostname !== '127.0.0.1' || !expected.port) {
+    throw new Error(`Owned preview URL must name an exact loopback port: ${url}`);
+  }
   const deadline = Date.now() + timeoutMs;
-  const readyPattern = /Local:\s+http:\/\/127\.0\.0\.1:\d+\/?/;
+  const expectedReadyUrl = `${expected.origin}/`;
+  const readyPattern = new RegExp(
+    `Local:\\s+${expectedReadyUrl.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`,
+  );
   while (Date.now() < deadline) {
     assertChildAlive(child, 'Owned preview');
     const output = String(getOutput()).replace(/\u001b\[[0-9;]*m/g, '');
     if (readyPattern.test(output)) {
-      await waitForHttp(url, { child, timeoutMs: Math.max(1, deadline - Date.now()) });
+      let rejectExited;
+      const exited = new Promise((_, reject) => {
+        rejectExited = (code, signal) => reject(new Error(
+          `Owned preview exited before readiness (code ${code ?? signal ?? 'unknown'})`,
+        ));
+        child.once('exit', rejectExited);
+      });
+      try {
+        assertChildAlive(child, 'Owned preview');
+        await Promise.race([
+          waitForHttp(url, {
+            child,
+            timeoutMs: Math.max(1, deadline - Date.now()),
+          }),
+          exited,
+        ]);
+      } finally {
+        child.off('exit', rejectExited);
+      }
       assertChildAlive(child, 'Owned preview');
       return;
     }

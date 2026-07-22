@@ -30,6 +30,7 @@ async function listen(server: ReturnType<typeof createServer>): Promise<number> 
 }
 
 async function close(server: ReturnType<typeof createServer>): Promise<void> {
+  server.closeAllConnections();
   await new Promise<void>((resolve, reject) => {
     server.close((error) => (error ? reject(error) : resolve()));
   });
@@ -59,9 +60,14 @@ describe('browser smoke script', () => {
     expect(source).toContain('waitForOwnedPreview');
     expect(source).toContain('assertPreviewAlive');
     expect(source).toContain('inspectBattleCanvasRegions');
-    expect(source).toContain('trainInkRatio');
-    expect(source).toContain('enemyInkRatio');
-    expect(source).toContain('defeatRegionChanged');
+    expect(source).toContain('compareObjectRegionToControl');
+    expect(source).toContain('nearbyBackgroundControl');
+    expect(source).toContain('defeatedEnemyId');
+    expect(source).toContain('deathCoordinates');
+    expect(source).toContain('preDefeatLocalBaseline');
+    expect(source).toContain('localizedColorDifference');
+    expect(source).toContain('localizedShapeDifference');
+    expect(source).toContain('defeatEvidenceDeadline');
     expect(source).toContain('background-foreground semantic omission');
     expect(source).toContain('1000ms displacement-sample window');
     expect(source).toContain('1200ms full choreography');
@@ -81,14 +87,56 @@ describe('browser smoke script', () => {
     }
   });
 
-  it('does not accept stale HTTP readiness after the owned preview exits', async () => {
-    expect(previewLifecycle.waitForOwnedPreview).toBeTypeOf('function');
-    const staleServer = createServer((_request, response) => response.end('stale'));
-    const port = await listen(staleServer);
+  it.each(Array.from({ length: 8 }, (_, index) => index + 1))(
+    'rejects delayed stale HTTP when the owned preview exits first (run %i)',
+    async () => {
+      expect(previewLifecycle.waitForOwnedPreview).toBeTypeOf('function');
+      let staleResponseSent = false;
+      const staleServer = createServer((_request, response) => {
+        setTimeout(() => {
+          staleResponseSent = true;
+          response.end('stale');
+        }, 300);
+      });
+      const port = await listen(staleServer);
+      const output: string[] = [];
+      const child = spawn(
+        process.execPath,
+        ['-e', [
+          `console.log('Local: http://127.0.0.1:${port}/');`,
+          'setTimeout(() => process.exit(0), 30);',
+        ].join('')],
+        { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true },
+      );
+      child.stdout?.on('data', (chunk) => output.push(String(chunk)));
+
+      try {
+        await expect(previewLifecycle.waitForOwnedPreview(
+          `http://127.0.0.1:${port}`,
+          {
+            child,
+            getOutput: () => output.join(''),
+            timeoutMs: 2_000,
+          },
+        )).rejects.toThrow('Owned preview exited before readiness');
+        expect(staleResponseSent).toBe(false);
+      } finally {
+        if (child.exitCode === null) child.kill('SIGKILL');
+        await close(staleServer);
+      }
+    },
+  );
+
+  it('requires the ready signal to name the exact expected host and port', async () => {
+    const server = createServer((_request, response) => response.end('ready'));
+    const port = await listen(server);
     const output: string[] = [];
     const child = spawn(
       process.execPath,
-      ['-e', `console.log('Local: http://127.0.0.1:${port}/');`],
+      ['-e', [
+        `console.log('Local: http://127.0.0.1:${port + 1}/');`,
+        'setInterval(() => {}, 1000);',
+      ].join('')],
       { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true },
     );
     child.stdout?.on('data', (chunk) => output.push(String(chunk)));
@@ -96,15 +144,11 @@ describe('browser smoke script', () => {
     try {
       await expect(previewLifecycle.waitForOwnedPreview(
         `http://127.0.0.1:${port}`,
-        {
-          child,
-          getOutput: () => output.join(''),
-          timeoutMs: 2_000,
-        },
-      )).rejects.toThrow('Owned preview exited before readiness');
+        { child, getOutput: () => output.join(''), timeoutMs: 250 },
+      )).rejects.toThrow('Timed out waiting for the owned preview ready signal');
     } finally {
-      if (child.exitCode === null) child.kill('SIGKILL');
-      await close(staleServer);
+      child.kill('SIGKILL');
+      await close(server);
     }
   });
 });
