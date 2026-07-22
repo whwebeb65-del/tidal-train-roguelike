@@ -16,6 +16,7 @@ const target = feature([70, 110, 145], [0.2, 0.8, 0.3, 0.7]);
 const cue = feature([49, 92, 112], [0.1, 0.9, 0.8, 0.15]);
 const squashMid = feature([54, 96, 118], [0.12, 0.84, 0.7, 0.22]);
 const squashLate = feature([61, 104, 124], [0.18, 0.72, 0.54, 0.36]);
+const projectileSpeck = feature([68, 109, 144], [0.2, 0.8, 0.31, 0.7]);
 
 function validDefeatEvidence() {
   return {
@@ -96,6 +97,37 @@ describe('battle pixel evidence helpers', () => {
       height: 32,
     });
     expect(region.y + 16).toBeCloseTo(138.733333333333 + 52 / 60, 12);
+  });
+
+  it('places defeat samples inside the stable painted squash lobes', async () => {
+    const helpers = await loadHelpers();
+    expect(helpers.predictDefeatSampleRegions).toBeTypeOf('function');
+    const regions = helpers.predictDefeatSampleRegions({
+      id: 7,
+      x: 92,
+      y: 249.133333333333,
+      speedPerSecond: 52,
+    });
+    expect(regions).toMatchObject([
+      {
+        enemyId: 7,
+        deathX: 92,
+        x: 112,
+        width: 2,
+        height: 2,
+      },
+      {
+        enemyId: 7,
+        deathX: 92,
+        x: 70,
+        width: 2,
+        height: 2,
+      },
+    ]);
+    for (const region of regions) {
+      expect(region.deathY).toBeCloseTo(250, 12);
+      expect(region.y).toBeCloseTo(252, 12);
+    }
   });
 
   it('fails object evidence when the target is removed but background remains', async () => {
@@ -212,6 +244,26 @@ describe('battle pixel evidence helpers', () => {
     const helpers = await loadHelpers();
     expect(helpers.passesDefeatCueEvidence).toBeTypeOf('function');
     expect(helpers.passesDefeatCueEvidence(validDefeatEvidence())).toBe(true);
+  });
+
+  it('rejects valid squash geometry when target and control pixels stay at baseline', async () => {
+    const helpers = await loadHelpers();
+    const input = structuredClone(validDefeatEvidence());
+    for (const frame of input.frames) frame.target = input.preTarget;
+    expect(helpers.passesDefeatCueEvidence(input)).toBe(false);
+  });
+
+  it('rejects a target-only projectile speck without a true squash pixel pattern', async () => {
+    const helpers = await loadHelpers();
+    const input = structuredClone(validDefeatEvidence());
+    input.frames[0].target = projectileSpeck;
+    input.frames[1].target = input.preTarget;
+    input.frames[2].target = input.preTarget;
+    expect(helpers.compareRegionAppearance(
+      input.preTarget,
+      input.frames[0].target,
+    ).colorDifference).toBeGreaterThan(0);
+    expect(helpers.passesDefeatCueEvidence(input)).toBe(false);
   });
 
   it.each([

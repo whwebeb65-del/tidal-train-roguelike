@@ -302,6 +302,50 @@ describe('BattleRenderer', () => {
     ]);
   });
 
+  it('keeps both defeat evidence samples inside opaque squash fill', () => {
+    const samples = [
+      { x: 112, y: 252, width: 2, height: 2 },
+      { x: 70, y: 252, width: 2, height: 2 },
+    ];
+    for (const progress of [0.2, 0.5, 0.8]) {
+      const effects: EffectFrameView = {
+        particles: [{
+          id: 1,
+          kind: 'defeat-squash',
+          layer: 'front-effects',
+          x: 92,
+          y: 250,
+          size: 24,
+          color: '#315c70',
+          alpha: 0.6,
+          rotation: 0,
+          progress,
+        }],
+        rings: [],
+        damageNumbers: [],
+        camera: { x: 0, y: 0, rotation: 0, amplitude: 0 },
+        cinematic: { darken: 0, title: null, slowMotion: 0 },
+      };
+      const squash = findCommand<EllipseDrawCommand>(
+        renderCommands({ effects }),
+        (item) => item.kind === 'effect-defeat-squash',
+      );
+      expect(squash.fill).toBe('#315c70');
+      expect(squash.alpha).toBeGreaterThan(0);
+      for (const sample of samples) {
+        for (const x of [sample.x, sample.x + sample.width]) {
+          for (const y of [sample.y, sample.y + sample.height]) {
+            const normalizedDistance = (
+              ((x - squash.x) / squash.radiusX) ** 2
+              + ((y - squash.y) / squash.radiusY) ** 2
+            );
+            expect(normalizedDistance).toBeLessThan(0.8);
+          }
+        }
+      }
+    }
+  });
+
   it('draws ordered hand-drawn background layers with adjacent repeats', () => {
     const commands = renderCommands().filter(
       (command): command is ImageDrawCommand => (

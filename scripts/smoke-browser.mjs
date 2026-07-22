@@ -24,6 +24,7 @@ import {
   logicalRectToPixelRect,
   passesDefeatCueEvidence,
   passesObjectEvidence,
+  predictDefeatSampleRegions,
   predictNextEnemyRegion,
   selectSafeControlRegion,
 } from './lib/battle-pixel-evidence.mjs';
@@ -891,23 +892,6 @@ async function inspectFixedObjectControlPair(client, baseline) {
     { ...baseline.controlRegion, name: `${baseline.region.name}-control` },
   ], baseline.viewport);
   return { target: evidence.regions[0], control: evidence.regions[1] };
-}
-
-function predictDefeatSampleRegions(enemy) {
-  const center = predictNextEnemyRegion(enemy);
-  const deathX = center.x + center.width / 2;
-  const deathY = center.y + center.height / 2;
-  return [24, -28].map((offsetX, index) => ({
-    id: `${enemy.id}-lobe-${index}`,
-    enemyId: enemy.id,
-    name: `enemy-${enemy.id}-predicted-lobe-${index}`,
-    deathX,
-    deathY,
-    x: deathX + offsetX,
-    y: deathY - 2,
-    width: 4,
-    height: 4,
-  }));
 }
 
 async function assertLowQualityResilience(client, label) {

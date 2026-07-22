@@ -17,6 +17,23 @@ export function predictNextEnemyRegion(enemy) {
   };
 }
 
+export function predictDefeatSampleRegions(enemy) {
+  const center = predictNextEnemyRegion(enemy);
+  const deathX = center.x + center.width / 2;
+  const deathY = center.y + center.height / 2;
+  return [20, -22].map((offsetX, index) => ({
+    id: `${enemy.id}-lobe-${index}`,
+    enemyId: enemy.id,
+    name: `enemy-${enemy.id}-predicted-lobe-${index}`,
+    deathX,
+    deathY,
+    x: deathX + offsetX,
+    y: deathY + 2,
+    width: 2,
+    height: 2,
+  }));
+}
+
 export function createEvidenceViewport({
   cssWidth,
   cssHeight,
@@ -209,6 +226,10 @@ export function passesDefeatCueEvidence(input) {
     || Math.abs(targetAnchor?.y - input.deadEnemy.y) > 0.001
     || !Array.isArray(input.frames)
     || input.frames.length < 3
+    || !Array.isArray(input.preTarget?.meanColor)
+    || !Array.isArray(input.preTarget?.shapeProfile)
+    || !Array.isArray(input.preControl?.meanColor)
+    || !Array.isArray(input.preControl?.shapeProfile)
   ) return false;
 
   const firstSquash = input.frames[0]?.defeatSquash;
@@ -218,6 +239,7 @@ export function passesDefeatCueEvidence(input) {
     || !Number.isFinite(firstSquash.id)
   ) return false;
   let priorProgress = -Infinity;
+  let localizedPixelChangeSeen = false;
   for (const frame of input.frames) {
     const squash = frame.defeatSquash;
     if (
@@ -229,6 +251,10 @@ export function passesDefeatCueEvidence(input) {
       || !Number.isFinite(squash.progress)
       || squash.progress <= priorProgress
       || !Number.isFinite(squash.size)
+      || !Array.isArray(frame.target?.meanColor)
+      || !Array.isArray(frame.target?.shapeProfile)
+      || !Array.isArray(frame.control?.meanColor)
+      || !Array.isArray(frame.control?.shapeProfile)
       || !rectsIntersect(input.targetRegion, particleBounds(squash))
     ) return false;
     priorProgress = squash.progress;
@@ -239,10 +265,17 @@ export function passesDefeatCueEvidence(input) {
       && !(bounds.kind === 'enemy' && bounds.alive === false)
     ));
     if (interfering) return false;
+    const targetChange = compareRegionAppearance(input.preTarget, frame.target);
+    const controlChange = compareRegionAppearance(input.preControl, frame.control);
+    localizedPixelChangeSeen ||= (
+      targetChange.colorDifference - controlChange.colorDifference > 4
+      || targetChange.shapeDifference - controlChange.shapeDifference > 0.04
+    );
   }
 
   const lastSquash = input.frames[input.frames.length - 1].defeatSquash;
-  return lastSquash.progress - firstSquash.progress >= 0.12;
+  return localizedPixelChangeSeen
+    && lastSquash.progress - firstSquash.progress >= 0.12;
 }
 
 const ENEMY_SIZE = {
