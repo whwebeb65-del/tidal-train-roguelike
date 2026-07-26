@@ -1,5 +1,14 @@
 import type { MapId } from '../../src/domain/station/MapProgression';
+import type {
+  BattleSkillId,
+  SkillVariantId,
+} from '../../src/domain/skill/SkillProgressionTypes';
 import type { RunMode } from '../app/AppTypes';
+
+export type {
+  BattleSkillId,
+  SkillVariantId,
+} from '../../src/domain/skill/SkillProgressionTypes';
 
 export type BattleStatus =
   | 'running'
@@ -16,12 +25,7 @@ export type EnemyKind =
   | 'storm-ray-elite'
   | 'deep-echo-boss';
 
-export type BattleSkillId =
-  | 'tidal-volley'
-  | 'bubble-barrier'
-  | 'extreme-tide';
-
-export type BattleUpgradeId =
+export type BattleGeneralUpgradeId =
   | 'multi-barrel'
   | 'rapid-reload'
   | 'coral-warhead'
@@ -31,6 +35,27 @@ export type BattleUpgradeId =
   | 'tidal-resonance'
   | 'magnetic-salvage'
   | 'overload-core';
+
+export type BattleSkillRankUpgradeId =
+  | 'rank-tidal-volley'
+  | 'rank-bubble-barrier'
+  | 'rank-extreme-tide';
+
+export type BattleUpgradeId =
+  | BattleGeneralUpgradeId
+  | BattleSkillRankUpgradeId
+  | SkillVariantId;
+
+export type SkillRanks = Record<BattleSkillId, 1 | 2 | 3 | 4 | 5>;
+
+export type SkillVariantLoadout =
+  Record<BattleSkillId, readonly SkillVariantId[]>;
+
+export interface BattleBuildState {
+  readonly generalLevels: Readonly<Record<BattleGeneralUpgradeId, number>>;
+  readonly skillRanks: Readonly<SkillRanks>;
+  readonly skillVariants: Readonly<SkillVariantLoadout>;
+}
 
 export type PauseReason =
   | 'manual'
@@ -52,6 +77,8 @@ export interface BattleRunInput {
   readonly enemyHpFlatBonus: number;
   readonly enemyHpMultiplier: number;
   readonly enemyDamageMultiplier: number;
+  readonly skillMasteryPower?: Readonly<Record<BattleSkillId, number>>;
+  readonly unlockedSkillVariants?: readonly SkillVariantId[];
 }
 
 export interface EnemyState {
@@ -131,7 +158,7 @@ export interface BattleFrameView {
   readonly experience: number;
   readonly nextExperienceThreshold: number | null;
   readonly offeredUpgradeIds: readonly BattleUpgradeId[];
-  readonly upgradeLevels: Readonly<Record<BattleUpgradeId, number>>;
+  readonly upgradeLevels: Readonly<Partial<Record<BattleUpgradeId, number>>>;
   readonly cooldowns: Readonly<Record<BattleSkillId, number>>;
   readonly adReviveUsed: boolean;
   readonly skillRefreshUsed: boolean;
