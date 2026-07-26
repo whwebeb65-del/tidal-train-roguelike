@@ -56,6 +56,7 @@ import {
   availableBattleSpeeds,
   grantAccountXp,
   maximumBattleSpeed,
+  type BattleSpeed,
 } from '../src/domain/progression/AccountProgressionSystem';
 import {
   recoverStamina,
@@ -287,6 +288,7 @@ let activeBattleSettlement: BattleSettlementPresentation | null = null;
 let activeBattleScene: BattleScene | null = null;
 let preparedBattleScene: BattleScene | null = null;
 let preparedBattleAccountLevel: number | null = null;
+let preparedBattleSpeed: { initial: BattleSpeed; available: readonly BattleSpeed[] } | null = null;
 let activeRunAccountStart = save.accountLevel;
 let activeRunStaminaSpent = 0;
 let activeStationScene: StationScene | null = null;
@@ -417,12 +419,10 @@ function createBattleScene(
     createHud: (callbacks) => new BattleHUD(callbacks),
     captainArtId: getActiveCaptainArtId(),
     reducedMotion: effectiveReducedMotion,
-    initialBattleSpeed: getInitialBattleSpeed(
-      preparedBattleAccountLevel ?? save.accountLevel,
-    ),
-    availableBattleSpeeds: availableBattleSpeeds(
-      preparedBattleAccountLevel ?? save.accountLevel,
-    ),
+    initialBattleSpeed: preparedBattleSpeed?.initial
+      ?? getInitialBattleSpeed(preparedBattleAccountLevel ?? save.accountLevel),
+    availableBattleSpeeds: preparedBattleSpeed?.available
+      ?? availableBattleSpeeds(preparedBattleAccountLevel ?? save.accountLevel),
     onBattleSpeedChanged: (speed) => {
       settingsBridge.updateSettings({ preferredBattleSpeed: speed });
     },
@@ -594,7 +594,7 @@ function getProgressionSnapshot(): ProgressionSnapshot {
   });
 }
 
-function getInitialBattleSpeed(accountLevel: number) {
+function getBattleSpeed(accountLevel: number) {
   const speeds = availableBattleSpeeds(accountLevel);
   const preferred = settingsBridge.getSettings().preferredBattleSpeed;
   const initialBattleSpeed = speeds.includes(preferred)
@@ -604,7 +604,11 @@ function getInitialBattleSpeed(accountLevel: number) {
     settingsBridge.updateSettings({ preferredBattleSpeed: initialBattleSpeed });
   }
   dependencies.onBattleSpeedResolved?.(initialBattleSpeed, speeds);
-  return initialBattleSpeed;
+  return { initial: initialBattleSpeed, available: speeds };
+}
+
+function getInitialBattleSpeed(accountLevel: number) {
+  return getBattleSpeed(accountLevel).initial;
 }
 
 function syncStamina(): void {
@@ -1144,7 +1148,7 @@ async function startRun(
     }));
     activeBattleEngine = candidateEngine;
     preparedBattleAccountLevel = candidateSave.accountLevel;
-    getInitialBattleSpeed(candidateSave.accountLevel);
+    preparedBattleSpeed = getBattleSpeed(candidateSave.accountLevel);
     preparedBattleScene = dependencies.prepareBattleScene?.(
       candidateEngine,
       currentBattleAssets,
@@ -1156,6 +1160,7 @@ async function startRun(
     activeRunStaminaSpent = staminaResult?.spent ?? 0;
     if (mode === 'normal') commit(candidateSave);
     preparedBattleAccountLevel = null;
+    preparedBattleSpeed = null;
     scheduleDeferredBattleAssets();
     notice = dailyDefinition
       ? `${dailyDefinition.dayId} 每日试炼出发：${dailyDefinition.rule.name}，固定种子 ${seed}。`
@@ -1179,6 +1184,7 @@ async function startRun(
     activeBattleSettlement = null;
     preparedBattleScene = null;
     preparedBattleAccountLevel = null;
+    preparedBattleSpeed = null;
     activeBattleScene = null;
     activeRunStaminaSpent = 0;
     phase = 'station';

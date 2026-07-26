@@ -7,3 +7,4 @@
 - Runtime integration coverage drives `start()` and the public station click path with injected station preparation and scene construction seams. It verifies the normal successful commit and a throwing scene constructor rollback.
 - The same harness covers local preparation abort, insufficient stamina, daily trial zero-cost behavior, locked-speed clamping, and the Lv.20 speed set.
 - Clock-injected station synchronization asserts the completed-interval recovery timestamp preserves the partial-regeneration baseline. A mount-failure/retry test asserts failed prepared scenes are discarded and the retry creates one fresh scene and charges only once.
+- Asset preparation failure is independently covered before scene creation. Resolved battle speed is prepared once and reused by the scene, avoiding duplicate settings-bridge or observer effects.

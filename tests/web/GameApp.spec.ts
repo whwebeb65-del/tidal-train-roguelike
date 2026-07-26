@@ -46,6 +46,7 @@ describe('LegacyGameRuntime departure transaction', () => {
     const snapshots: Array<{ phase: string; stamina: number; staminaUpdatedAtMs: number; accountXp: number; activeRunStaminaSpent: number }> = [];
     const speedUpdates: number[] = [];
     const speedResolutions: Array<{ initial: number; available: readonly number[] }> = [];
+    let sceneCreates = 0;
     const audio = new Proxy({}, { get: () => () => undefined }) as never;
     const runtime = createLegacyGameRuntime(app, storage, true, audio, {
       getSettings: () => ({ version: 2, musicEnabled: false, sfxEnabled: false, reducedMotion: true, qualityPreference: 'auto', preferredBattleSpeed: options.preferredBattleSpeed ?? 1 }),
@@ -56,12 +57,16 @@ describe('LegacyGameRuntime departure transaction', () => {
         : options.preparation === 'failure'
           ? { status: 'failure', error: new Error('asset') }
           : { status: 'ready', assets: { failedIds: [], get: () => null } },
-      prepareBattleScene: options.scene ?? (() => ({ id: 'battle', mount: async () => undefined, unmount: () => undefined } as never)),
+      prepareBattleScene: (...args) => {
+        sceneCreates += 1;
+        return options.scene?.()
+          ?? ({ id: 'battle', mount: async () => undefined, unmount: () => undefined } as never);
+      },
       nowMs: () => options.nowMs ?? 0,
       onTestSnapshot: (snapshot) => snapshots.push(snapshot),
       onBattleSpeedResolved: (initial, available) => speedResolutions.push({ initial, available }),
     });
-    return { app, storage, runtime, snapshots, speedUpdates, speedResolutions };
+    return { app, storage, runtime, snapshots, speedUpdates, speedResolutions, getSceneCreates: () => sceneCreates };
   }
 
   it('commits normal stamina and start XP only after the prepared scene mounts', async () => {
@@ -96,6 +101,18 @@ describe('LegacyGameRuntime departure transaction', () => {
       expect(saved.stamina).toBe(options.stamina ?? 10);
       expect(snapshots.at(-1)?.phase).toBe('station');
     }
+  });
+
+  it('keeps save and active run state unchanged when asset preparation fails before scene creation', async () => {
+    const { app, storage, runtime, snapshots, getSceneCreates } = setup({ preparation: 'failure' });
+    await runtime.start();
+    const button = document.createElement('button'); button.dataset.action = 'start-run'; app.append(button); button.click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const saved = JSON.parse(storage.getItem(APP_STORAGE_KEYS.player) ?? '{}');
+    expect(saved.stamina).toBe(10);
+    expect(saved.accountXp).toBe(0);
+    expect(snapshots.at(-1)).toMatchObject({ phase: 'station', activeRunStaminaSpent: 0 });
+    expect(getSceneCreates()).toBe(0);
   });
 
   it('does not charge a daily trial and resolves locked and unlocked speeds', async () => {
