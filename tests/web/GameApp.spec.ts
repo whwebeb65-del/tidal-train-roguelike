@@ -23,6 +23,7 @@ describe('GameApp navigation', () => {
 describe('LegacyGameRuntime departure transaction', () => {
   function setup(options: {
     stamina?: number;
+    staminaUpdatedAtMs?: number;
     stationLevel?: number;
     accountLevel?: number;
     preferredBattleSpeed?: 1 | 1.5 | 2 | 3;
@@ -37,12 +38,12 @@ describe('LegacyGameRuntime departure transaction', () => {
       ...defaultSave(),
       selectedCaptainId: 'captain-tide-female' as const,
       stamina: options.stamina ?? 10,
-      staminaUpdatedAtMs: 0,
+      staminaUpdatedAtMs: options.staminaUpdatedAtMs ?? 0,
       stationLevel: options.stationLevel ?? 1,
       accountLevel: options.accountLevel ?? 1,
     };
     storage.setItem(APP_STORAGE_KEYS.player, JSON.stringify(save));
-    const snapshots: Array<{ phase: string; stamina: number; accountXp: number; activeRunStaminaSpent: number }> = [];
+    const snapshots: Array<{ phase: string; stamina: number; staminaUpdatedAtMs: number; accountXp: number; activeRunStaminaSpent: number }> = [];
     const speedUpdates: number[] = [];
     const speedResolutions: Array<{ initial: number; available: readonly number[] }> = [];
     const audio = new Proxy({}, { get: () => () => undefined }) as never;
@@ -110,5 +111,42 @@ describe('LegacyGameRuntime departure transaction', () => {
     const button = document.createElement('button'); button.dataset.action = 'start-run'; fast.app.append(button); button.click();
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(fast.speedResolutions.at(-1)).toEqual({ initial: 2, available: [1, 1.5, 2] });
+  });
+
+  it('recovers stamina using completed intervals while preserving the partial baseline', async () => {
+    const { runtime, snapshots } = setup({
+      stamina: 20,
+      staminaUpdatedAtMs: 1_000,
+      nowMs: 1_201_001,
+    });
+    await runtime.start();
+    expect(snapshots.at(-1)).toMatchObject({
+      stamina: 22,
+      staminaUpdatedAtMs: 1_201_000,
+    });
+  });
+
+  it('clears a failed prepared scene and creates a fresh scene for one successful retry', async () => {
+    let creates = 0;
+    const scene = () => {
+      creates += 1;
+      return {
+        id: 'battle',
+        mount: async () => { if (creates === 1) throw new Error('mount failed'); },
+        unmount: () => undefined,
+      } as never;
+    };
+    const { app, storage, runtime } = setup({ scene });
+    await runtime.start();
+    const button = document.createElement('button'); button.dataset.action = 'start-run'; app.append(button);
+    button.click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(JSON.parse(storage.getItem(APP_STORAGE_KEYS.player) ?? '{}').stamina).toBe(10);
+    button.click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const saved = JSON.parse(storage.getItem(APP_STORAGE_KEYS.player) ?? '{}');
+    expect(creates).toBe(2);
+    expect(saved.stamina).toBe(5);
+    expect(saved.accountXp).toBe(50);
   });
 });

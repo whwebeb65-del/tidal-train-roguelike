@@ -203,6 +203,7 @@ export interface RuntimeSettingsBridge {
 export interface LegacyRuntimeTestSnapshot {
   readonly phase: 'station' | 'combat';
   readonly stamina: number;
+  readonly staminaUpdatedAtMs: number;
   readonly accountXp: number;
   readonly activeRunStaminaSpent: number;
   readonly preparedBattleScene: boolean;
@@ -1001,6 +1002,7 @@ async function syncView(): Promise<void> {
     dependencies.onTestSnapshot?.({
       phase,
       stamina: save.stamina,
+      staminaUpdatedAtMs: save.staminaUpdatedAtMs,
       accountXp: save.accountXp,
       activeRunStaminaSpent,
       preparedBattleScene: preparedBattleScene !== null,
@@ -1017,6 +1019,7 @@ async function syncView(): Promise<void> {
   dependencies.onTestSnapshot?.({
     phase,
     stamina: save.stamina,
+    staminaUpdatedAtMs: save.staminaUpdatedAtMs,
     accountXp: save.accountXp,
     activeRunStaminaSpent,
     preparedBattleScene: preparedBattleScene !== null,
