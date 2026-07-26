@@ -75,7 +75,10 @@ export interface BattleEnginePort {
   update(stepMs: number): void;
   drainEvents(): readonly BattleEvent[];
   useSkill(skillId: BattleSkillId): boolean;
-  chooseUpgrade(upgradeId: BattleUpgradeId): boolean;
+  chooseUpgrade(
+    upgradeId: BattleUpgradeId,
+    source?: 'manual' | 'timeout',
+  ): boolean;
   rerollUpgradeOffer(): boolean;
   refreshActiveSkillCooldowns(): boolean;
   revive(hpRestored: number, protectionMs: number): boolean;
@@ -142,9 +145,9 @@ export interface BattleSceneDependencies {
   readonly eventTarget?: EventTarget | null;
   readonly getDevicePixelRatio?: () => number;
   readonly maxDevicePixelRatio?: number;
-  readonly initialBattleSpeed?: BattleSpeed;
-  readonly availableBattleSpeeds?: readonly BattleSpeed[];
-  readonly onBattleSpeedChanged?: (speed: BattleSpeed) => void;
+  readonly initialBattleSpeed: BattleSpeed;
+  readonly availableBattleSpeeds: readonly BattleSpeed[];
+  readonly onBattleSpeedChanged: (speed: BattleSpeed) => void;
   readonly monotonicNowMs?: () => number;
 }
 
@@ -267,10 +270,10 @@ export class BattleScene implements GameScene {
         typeof window === 'undefined' ? 1 : window.devicePixelRatio || 1
       ));
     this.maxDevicePixelRatio = dependencies.maxDevicePixelRatio ?? 2;
-    this.availableBattleSpeeds = dependencies.availableBattleSpeeds ?? [1];
+    this.availableBattleSpeeds = dependencies.availableBattleSpeeds;
     this.battleSpeed = this.availableBattleSpeeds.includes(
-      dependencies.initialBattleSpeed ?? 1,
-    ) ? dependencies.initialBattleSpeed ?? 1 : 1;
+      dependencies.initialBattleSpeed,
+    ) ? dependencies.initialBattleSpeed : 1;
     this.monotonicNowMs = dependencies.monotonicNowMs ?? (() => (
       typeof performance === 'undefined' ? Date.now() : performance.now()
     ));
@@ -370,7 +373,7 @@ export class BattleScene implements GameScene {
     if (!this.availableBattleSpeeds.includes(speed)) return false;
     this.battleSpeed = speed;
     this.simulationRate?.setSpeed(speed);
-    this.dependencies.onBattleSpeedChanged?.(speed);
+    this.dependencies.onBattleSpeedChanged(speed);
     this.renderBattle();
     return true;
   }
@@ -423,7 +426,7 @@ export class BattleScene implements GameScene {
     if (!this.dependencies.manualStepMode) return false;
     const first = this.dependencies.engine.frame.offeredUpgradeIds[0];
     if (!first) return false;
-    const accepted = this.dependencies.engine.chooseUpgrade(first);
+    const accepted = this.acceptUpgrade(first, 'manual');
     this.renderBattle();
     return accepted;
   }
@@ -776,11 +779,10 @@ export class BattleScene implements GameScene {
   ): boolean {
     if (
       this.pendingActions.has('upgrade-choice')
-      || !this.dependencies.engine.chooseUpgrade(upgradeId)
+      || !this.dependencies.engine.chooseUpgrade(upgradeId, source)
     ) {
       return false;
     }
-    void source;
     this.clearUpgradeChoiceTimer();
     this.pendingActions.add('upgrade-choice');
     this.pendingActions.add('upgrade-resume');

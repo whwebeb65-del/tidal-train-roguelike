@@ -23,6 +23,12 @@ import {
 } from './helpers/BattleFixtures';
 import { RecordingAudioBackend } from '../audio/helpers/RecordingAudioBackend';
 
+const TEST_BATTLE_SPEED_DEPENDENCIES = {
+  initialBattleSpeed: 1 as const,
+  availableBattleSpeeds: [1] as const,
+  onBattleSpeedChanged: vi.fn(),
+};
+
 class ManualFrameScheduler implements FrameScheduler {
   private nextId = 1;
   private readonly callbacks = new Map<number, FrameRequestCallback>();
@@ -153,6 +159,7 @@ function mountReviveScene(
   const hudCallbackRef: { current?: BattleHudCallbacks } = {};
   const { host } = createHost();
   const scene = new BattleScene({
+    ...TEST_BATTLE_SPEED_DEPENDENCIES,
     engine,
     effects: {
       view: EMPTY_EFFECT_FRAME_VIEW,
@@ -261,6 +268,94 @@ function createHost(): {
 }
 
 describe('BattleScene', () => {
+  it('keeps the same engine frame and event trace at equal simulated horizons', () => {
+    const run = (speed: 1 | 3, realSteps: number) => {
+      const scheduler = new ManualFrameScheduler();
+      const engine = createEngine(createFrameFixture({ status: 'running' }));
+      const trace: string[] = [];
+      let elapsedMs = 0;
+      engine.update = vi.fn((stepMs: number) => {
+        engine.updateCalls += 1;
+        elapsedMs += stepMs;
+        if (Math.round(elapsedMs / FIXED_STEP_MS) % 10 === 0) {
+          trace.push(`weapon-fired:${elapsedMs}`);
+          engine.events.push({
+            type: 'weapon-fired', projectileId: trace.length, source: 'main',
+          });
+        }
+        engine.setFrame(createFrameFixture({
+          status: 'running', elapsedMs,
+        }));
+      });
+      const { host } = createHost();
+      const scene = new BattleScene({
+        ...TEST_BATTLE_SPEED_DEPENDENCIES,
+        engine,
+        effects: {
+          view: EMPTY_EFFECT_FRAME_VIEW,
+          consume: vi.fn(), update: vi.fn(), reset: vi.fn(),
+        },
+        assets: { failedIds: [], get: () => null },
+        callbacks: createCallbacks(),
+        createRenderer: () => ({ render: vi.fn() }),
+        createHud: () => ({ mount: vi.fn(), update: vi.fn(), dispose: vi.fn() }),
+        captainArtId: 'captainFemaleBase',
+        reducedMotion: false,
+        manualStepMode: true,
+        initialBattleSpeed: speed,
+        availableBattleSpeeds: [1, 3],
+        onBattleSpeedChanged: vi.fn(),
+        scheduler,
+        eventTarget: new EventTarget(),
+        getDevicePixelRatio: () => 1,
+      });
+      scene.mount(host);
+      scene.advanceForE2E(FIXED_STEP_MS * realSteps);
+      const result = {
+        elapsedMs: engine.frame.elapsedMs,
+        updateCalls: engine.updateCalls,
+        trace,
+      };
+      scene.unmount();
+      return result;
+    };
+
+    expect(run(1, 120)).toEqual(run(3, 40));
+  });
+
+  it('routes E2E upgrade choice through the manual acceptance path', () => {
+    const engine = createEngine(createFrameFixture({
+      status: 'upgrade', offeredUpgradeIds: ['multi-barrel'],
+    }));
+    const chooseUpgrade = vi.fn(() => true);
+    engine.chooseUpgrade = chooseUpgrade;
+    const { host } = createHost();
+    const scene = new BattleScene({
+      ...TEST_BATTLE_SPEED_DEPENDENCIES,
+      engine,
+      effects: {
+        view: EMPTY_EFFECT_FRAME_VIEW,
+        consume: vi.fn(), update: vi.fn(), reset: vi.fn(),
+      },
+      assets: { failedIds: [], get: () => null },
+      callbacks: createCallbacks(),
+      createRenderer: () => ({ render: vi.fn() }),
+      createHud: () => ({ mount: vi.fn(), update: vi.fn(), dispose: vi.fn() }),
+      captainArtId: 'captainFemaleBase',
+      reducedMotion: false,
+      manualStepMode: true,
+      scheduler: new ManualFrameScheduler(),
+      eventTarget: new EventTarget(),
+      getDevicePixelRatio: () => 1,
+    });
+
+    scene.mount(host);
+    expect(scene.chooseFirstUpgradeForE2E()).toBe(true);
+    expect(chooseUpgrade).toHaveBeenCalledWith('multi-barrel', 'manual');
+    expect(engine.frame.status).toBe('paused');
+    scene.unmount();
+  });
+
   it('uses a six-second real-time deadline for upgrade auto-choice at 3x speed', () => {
     vi.useFakeTimers();
     try {
@@ -270,6 +365,7 @@ describe('BattleScene', () => {
         offeredUpgradeIds: ['multi-barrel'],
       }));
       const chooseUpgrade = vi.fn(() => true);
+      const onBattleSpeedChanged = vi.fn();
       const originalUpdate = engine.update.bind(engine);
       engine.update = vi.fn(() => {
         originalUpdate(FIXED_STEP_MS);
@@ -303,6 +399,9 @@ describe('BattleScene', () => {
         captainArtId: 'captainFemaleBase',
         reducedMotion: false,
         manualStepMode: true,
+        initialBattleSpeed: 1,
+        availableBattleSpeeds: [1, 1.5, 2, 3],
+        onBattleSpeedChanged,
         scheduler,
         eventTarget: new EventTarget(),
         getDevicePixelRatio: () => 1,
@@ -310,13 +409,15 @@ describe('BattleScene', () => {
 
       scene.mount(host);
       hudCallbacks.current?.onBattleSpeed?.(3);
+      expect(onBattleSpeedChanged).toHaveBeenCalledWith(3);
       scene.advanceForE2E(FIXED_STEP_MS);
+      expect(engine.update).toHaveBeenCalledTimes(3);
       vi.advanceTimersByTime(5_999);
       expect(chooseUpgrade).not.toHaveBeenCalled();
 
       vi.advanceTimersByTime(1);
       expect(chooseUpgrade).toHaveBeenCalledTimes(1);
-      expect(chooseUpgrade).toHaveBeenCalledWith('multi-barrel');
+      expect(chooseUpgrade).toHaveBeenCalledWith('multi-barrel', 'timeout');
       scene.unmount();
     } finally {
       vi.useRealTimers();
@@ -373,6 +474,7 @@ describe('BattleScene', () => {
     };
     const { host } = createHost();
     const scene = new BattleScene({
+      ...TEST_BATTLE_SPEED_DEPENDENCIES,
       engine,
       effects,
       assets: { failedIds: [], get: () => null },
@@ -509,6 +611,7 @@ describe('BattleScene', () => {
       };
       const { host } = createHost();
       const scene = new BattleScene({
+        ...TEST_BATTLE_SPEED_DEPENDENCIES,
         engine,
         effects: {
           view: EMPTY_EFFECT_FRAME_VIEW,
@@ -552,6 +655,7 @@ describe('BattleScene', () => {
     };
     const { host } = createHost();
     const scene = new BattleScene({
+      ...TEST_BATTLE_SPEED_DEPENDENCIES,
       engine,
       effects: {
         view: EMPTY_EFFECT_FRAME_VIEW,
@@ -616,6 +720,7 @@ describe('BattleScene', () => {
     };
     const { host } = createHost();
     const scene = new BattleScene({
+      ...TEST_BATTLE_SPEED_DEPENDENCIES,
       engine,
       effects: {
         view: EMPTY_EFFECT_FRAME_VIEW,
@@ -663,6 +768,7 @@ describe('BattleScene', () => {
     const hudCallbackRef: { current?: BattleHudCallbacks } = {};
     const { host } = createHost();
     const scene = new BattleScene({
+      ...TEST_BATTLE_SPEED_DEPENDENCIES,
       engine,
       effects: {
         view: EMPTY_EFFECT_FRAME_VIEW,
@@ -733,6 +839,7 @@ describe('BattleScene', () => {
     };
     const { host } = createHost();
     const scene = new BattleScene({
+      ...TEST_BATTLE_SPEED_DEPENDENCIES,
       engine,
       effects: {
         view: EMPTY_EFFECT_FRAME_VIEW,
@@ -799,6 +906,7 @@ describe('BattleScene', () => {
     const motion = createMotion();
     const { host } = createHost();
     const scene = new BattleScene({
+      ...TEST_BATTLE_SPEED_DEPENDENCIES,
       engine,
       effects,
       assets: { failedIds: [], get: () => null },
