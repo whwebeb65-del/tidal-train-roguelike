@@ -259,6 +259,8 @@ let activeBattleEngine: BattleEngine | null = null;
 let activeBattleProgression: ProgressionSnapshot | null = null;
 let activeBattleSettlement: BattleSettlementPresentation | null = null;
 let activeBattleScene: BattleScene | null = null;
+let preparedBattleScene: BattleScene | null = null;
+let preparedBattleAccountLevel: number | null = null;
 let activeRunAccountStart = save.accountLevel;
 let activeRunStaminaSpent = 0;
 let activeStationScene: StationScene | null = null;
@@ -344,14 +346,27 @@ const sceneFactory: SceneFactory = (sceneId) => {
   if (!activeBattleEngine || !battleAssets) {
     throw new Error('Battle scene requested before battle preparation');
   }
-  const scene = new BattleScene({
-    engine: activeBattleEngine,
+  const scene = preparedBattleScene ?? createBattleScene(
+    activeBattleEngine,
+    battleAssets,
+  );
+  preparedBattleScene = null;
+  activeBattleScene = scene;
+  return scene;
+};
+
+function createBattleScene(
+  engine: BattleEngine,
+  assets: BattleAssetSet<BattleArtId>,
+): BattleScene {
+  return new BattleScene({
+    engine,
     effects: new EffectSystem({
       particleLimit: 200,
       damageNumberLimit: 18,
       reducedMotion: effectiveReducedMotion,
     }),
-    assets: battleAssets,
+    assets,
     callbacks: {
       onOutcome: settleBattleOutcome,
       onRequestRevive: requestBattleRevive,
@@ -376,8 +391,12 @@ const sceneFactory: SceneFactory = (sceneId) => {
     createHud: (callbacks) => new BattleHUD(callbacks),
     captainArtId: getActiveCaptainArtId(),
     reducedMotion: effectiveReducedMotion,
-    initialBattleSpeed: getInitialBattleSpeed(),
-    availableBattleSpeeds: availableBattleSpeeds(save.accountLevel),
+    initialBattleSpeed: getInitialBattleSpeed(
+      preparedBattleAccountLevel ?? save.accountLevel,
+    ),
+    availableBattleSpeeds: availableBattleSpeeds(
+      preparedBattleAccountLevel ?? save.accountLevel,
+    ),
     onBattleSpeedChanged: (speed) => {
       settingsBridge.updateSettings({ preferredBattleSpeed: speed });
     },
@@ -386,9 +405,7 @@ const sceneFactory: SceneFactory = (sceneId) => {
     manualStepMode: e2eEnabled,
     sound: audio,
   });
-  activeBattleScene = scene;
-  return scene;
-};
+}
 const router = new SceneRouter(shell.sceneHost, sceneFactory, {
   transitionMs: 220,
   reducedMotion: effectiveReducedMotion,
@@ -551,12 +568,12 @@ function getProgressionSnapshot(): ProgressionSnapshot {
   });
 }
 
-function getInitialBattleSpeed() {
-  const speeds = availableBattleSpeeds(save.accountLevel);
+function getInitialBattleSpeed(accountLevel: number) {
+  const speeds = availableBattleSpeeds(accountLevel);
   const preferred = settingsBridge.getSettings().preferredBattleSpeed;
   const initialBattleSpeed = speeds.includes(preferred)
     ? preferred
-    : maximumBattleSpeed(save.accountLevel);
+    : maximumBattleSpeed(accountLevel);
   if (initialBattleSpeed !== preferred) {
     settingsBridge.updateSettings({ preferredBattleSpeed: initialBattleSpeed });
   }
@@ -1078,12 +1095,16 @@ async function startRun(
       dailyTrial: dailyDefinition,
       skillMasteryXp: candidateSave.skillMasteryXp,
     }));
-    activeRunAccountStart = save.accountLevel;
-    if (mode === 'normal') commit(candidateSave);
-    activeRunStaminaSpent = staminaResult?.spent ?? 0;
     activeBattleEngine = candidateEngine;
-
+    preparedBattleAccountLevel = candidateSave.accountLevel;
+    preparedBattleScene = createBattleScene(candidateEngine, currentBattleAssets);
+    activeBattleScene = preparedBattleScene;
     phase = 'combat';
+    await syncView();
+    activeRunAccountStart = save.accountLevel;
+    activeRunStaminaSpent = staminaResult?.spent ?? 0;
+    if (mode === 'normal') commit(candidateSave);
+    preparedBattleAccountLevel = null;
     scheduleDeferredBattleAssets();
     notice = dailyDefinition
       ? `${dailyDefinition.dayId} 每日试炼出发：${dailyDefinition.rule.name}，固定种子 ${seed}。`
@@ -1105,6 +1126,10 @@ async function startRun(
     activeBattleEngine = null;
     activeBattleProgression = null;
     activeBattleSettlement = null;
+    preparedBattleScene = null;
+    preparedBattleAccountLevel = null;
+    activeBattleScene = null;
+    activeRunStaminaSpent = 0;
     phase = 'station';
     setStationIdleMotion();
     if (!pageHidden) activeStationScene?.resumeForVisibility();
