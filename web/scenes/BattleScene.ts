@@ -19,6 +19,7 @@ import type {
   EffectFrameView,
 } from '../battle/EffectSystem';
 import { FixedStepLoop } from '../battle/FixedStepLoop';
+import { SimulationRateController } from '../battle/SimulationRateController';
 import {
   SILENT_BATTLE_SOUND,
   type BattleSoundPort,
@@ -55,6 +56,7 @@ import type {
   TrainMotionFrameView,
 } from '../battle/TrainMotionTypes';
 import type { GameScene } from './Scene';
+import type { BattleSpeed } from '../../src/domain/progression/AccountProgressionSystem';
 
 export interface FrameScheduler {
   request(callback: FrameRequestCallback): number;
@@ -140,6 +142,10 @@ export interface BattleSceneDependencies {
   readonly eventTarget?: EventTarget | null;
   readonly getDevicePixelRatio?: () => number;
   readonly maxDevicePixelRatio?: number;
+  readonly initialBattleSpeed?: BattleSpeed;
+  readonly availableBattleSpeeds?: readonly BattleSpeed[];
+  readonly onBattleSpeedChanged?: (speed: BattleSpeed) => void;
+  readonly monotonicNowMs?: () => number;
 }
 
 const BROWSER_FRAME_SCHEDULER: FrameScheduler = {
@@ -183,9 +189,13 @@ export class BattleScene implements GameScene {
   private hud: BattleHudPort | null = null;
   private viewport: CanvasViewport | null = null;
   private loop: FixedStepLoop | null = null;
+  private simulationRate: SimulationRateController | null = null;
   private frameRequestId: number | null = null;
   private frameLoopPaused = false;
   private upgradeTimerId: ReturnType<typeof setTimeout> | null = null;
+  private upgradeChoiceTimerId: ReturnType<typeof setTimeout> | null = null;
+  private upgradeChoiceDeadlineMs: number | null = null;
+  private upgradeChoiceRemainingMs: number | null = null;
   private lastFrameTimeMs = 0;
   private lastQualityFrameTimeMs: number | null = null;
   private lifecycleVersion = 0;
@@ -203,6 +213,9 @@ export class BattleScene implements GameScene {
   private readonly motion: TrainMotionControllerPort;
   private renderBudget: RenderBudget;
   private revivePresentationFreezeVersion: number | null = null;
+  private battleSpeed: BattleSpeed;
+  private readonly availableBattleSpeeds: readonly BattleSpeed[];
+  private readonly monotonicNowMs: () => number;
 
   private readonly frameCallback: FrameRequestCallback = (timeMs): void => {
     if (!this.host || !this.loop) return;
@@ -254,6 +267,13 @@ export class BattleScene implements GameScene {
         typeof window === 'undefined' ? 1 : window.devicePixelRatio || 1
       ));
     this.maxDevicePixelRatio = dependencies.maxDevicePixelRatio ?? 2;
+    this.availableBattleSpeeds = dependencies.availableBattleSpeeds ?? [1];
+    this.battleSpeed = this.availableBattleSpeeds.includes(
+      dependencies.initialBattleSpeed ?? 1,
+    ) ? dependencies.initialBattleSpeed ?? 1 : 1;
+    this.monotonicNowMs = dependencies.monotonicNowMs ?? (() => (
+      typeof performance === 'undefined' ? Date.now() : performance.now()
+    ));
   }
 
   public mount(host: HTMLElement): void {
@@ -270,6 +290,13 @@ export class BattleScene implements GameScene {
     this.interactionNotice = '';
     this.queuedSkillRefresh = false;
     this.visibilityPaused = false;
+    this.upgradeChoiceRemainingMs = null;
+    this.upgradeChoiceDeadlineMs = null;
+    this.simulationRate = new SimulationRateController(
+      FIXED_STEP_MS,
+      this.battleSpeed,
+      MAX_CATCH_UP_STEPS,
+    );
     this.frameLoopPaused = false;
     this.exitRequested = false;
     this.motion.reset(this.dependencies.engine.frame);
@@ -311,7 +338,10 @@ export class BattleScene implements GameScene {
       stepMs: FIXED_STEP_MS,
       maxFrameDeltaMs: 100,
       maxStepsPerFrame: MAX_CATCH_UP_STEPS,
-      update: (stepMs) => this.updateBattle(stepMs),
+      update: (stepMs) => this.simulationRate?.consume(
+        stepMs,
+        (worldStepMs) => this.updateBattle(worldStepMs),
+      ),
       render: () => this.renderBattle(),
     });
     this.refreshViewport();
@@ -336,9 +366,19 @@ export class BattleScene implements GameScene {
     this.renderBattle();
   }
 
+  public setBattleSpeed(speed: BattleSpeed): boolean {
+    if (!this.availableBattleSpeeds.includes(speed)) return false;
+    this.battleSpeed = speed;
+    this.simulationRate?.setSpeed(speed);
+    this.dependencies.onBattleSpeedChanged?.(speed);
+    this.renderBattle();
+    return true;
+  }
+
   public pauseForVisibility(): void {
     if (!this.host || this.visibilityPaused) return;
     this.visibilityPaused = true;
+    this.pauseUpgradeChoiceTimer();
     const status = this.dependencies.engine.frame.status;
     if (status === 'running' || status === 'boss-intro') {
       this.dependencies.engine.pause('visibility');
@@ -363,7 +403,10 @@ export class BattleScene implements GameScene {
     for (let index = 0; index < steps; index += 1) {
       const status = this.dependencies.engine.frame.status;
       if (status !== 'running' && status !== 'boss-intro') break;
-      this.updateBattle(FIXED_STEP_MS);
+      this.simulationRate?.consume(
+        FIXED_STEP_MS,
+        (worldStepMs) => this.updateBattle(worldStepMs),
+      );
       const nextStatus = this.dependencies.engine.frame.status;
       if (
         nextStatus === 'upgrade'
@@ -464,10 +507,8 @@ export class BattleScene implements GameScene {
     this.lifecycleVersion += 1;
     this.releaseRevivePresentationFreeze();
     this.stopAnimationLoop();
-    if (this.upgradeTimerId !== null) {
-      this.timerScheduler.clear(this.upgradeTimerId);
-      this.upgradeTimerId = null;
-    }
+    this.clearUpgradeResumeTimer();
+    this.clearUpgradeChoiceTimer();
     this.eventTarget?.removeEventListener('resize', this.onResize);
     if (this.diagnosticsListenerActive) {
       this.dependencies.diagnostics?.listenerRemoved();
@@ -485,6 +526,7 @@ export class BattleScene implements GameScene {
     this.hud = null;
     this.viewport = null;
     this.loop = null;
+    this.simulationRate = null;
     this.settlement = null;
     this.interactionNotice = '';
     this.queuedSkillRefresh = false;
@@ -520,9 +562,12 @@ export class BattleScene implements GameScene {
       }
       if (event.type === 'battle-lost') {
         this.sound.setBattlePhase('defeat');
+        this.clearUpgradeChoiceTimer();
       }
+      if (event.type === 'upgrade-offered') this.scheduleUpgradeChoiceTimer();
       if (event.type === 'battle-won') {
         this.sound.setBattlePhase('victory');
+        this.clearUpgradeChoiceTimer();
         const outcome = this.dependencies.engine.outcome;
         if (outcome?.victory === true && !this.outcomeHandled) {
           this.outcomeHandled = true;
@@ -571,6 +616,8 @@ export class BattleScene implements GameScene {
         settlement: this.settlement,
         pendingActions: this.pendingActions,
         visibilityResumeRequired: this.visibilityPaused,
+        battleSpeed: this.battleSpeed,
+        availableBattleSpeeds: this.availableBattleSpeeds,
       },
     ));
     this.updateDiagnostics(false);
@@ -678,6 +725,82 @@ export class BattleScene implements GameScene {
     resizeCanvas(this.canvas, this.viewport);
   }
 
+  private scheduleUpgradeChoiceTimer(delayMs = 6000): void {
+    if (!this.host || this.upgradeChoiceTimerId !== null) return;
+    this.upgradeChoiceRemainingMs = null;
+    this.upgradeChoiceDeadlineMs = this.monotonicNowMs() + delayMs;
+    this.upgradeChoiceTimerId = this.timerScheduler.set(() => {
+      this.upgradeChoiceTimerId = null;
+      this.upgradeChoiceDeadlineMs = null;
+      const first = this.dependencies.engine.frame.offeredUpgradeIds[0];
+      if (first) this.acceptUpgrade(first, 'timeout');
+    }, delayMs);
+  }
+
+  private pauseUpgradeChoiceTimer(): void {
+    if (this.upgradeChoiceTimerId === null) return;
+    const deadline = this.upgradeChoiceDeadlineMs;
+    this.upgradeChoiceRemainingMs = deadline === null
+      ? 6000
+      : Math.max(0, deadline - this.monotonicNowMs());
+    this.timerScheduler.clear(this.upgradeChoiceTimerId);
+    this.upgradeChoiceTimerId = null;
+    this.upgradeChoiceDeadlineMs = null;
+  }
+
+  private resumeUpgradeChoiceTimer(): void {
+    if (this.upgradeChoiceRemainingMs === null) return;
+    const remainingMs = this.upgradeChoiceRemainingMs;
+    this.upgradeChoiceRemainingMs = null;
+    this.scheduleUpgradeChoiceTimer(remainingMs);
+  }
+
+  private clearUpgradeChoiceTimer(): void {
+    if (this.upgradeChoiceTimerId !== null) {
+      this.timerScheduler.clear(this.upgradeChoiceTimerId);
+      this.upgradeChoiceTimerId = null;
+    }
+    this.upgradeChoiceDeadlineMs = null;
+    this.upgradeChoiceRemainingMs = null;
+  }
+
+  private clearUpgradeResumeTimer(): void {
+    if (this.upgradeTimerId === null) return;
+    this.timerScheduler.clear(this.upgradeTimerId);
+    this.upgradeTimerId = null;
+  }
+
+  private acceptUpgrade(
+    upgradeId: BattleUpgradeId,
+    source: 'manual' | 'timeout',
+  ): boolean {
+    if (
+      this.pendingActions.has('upgrade-choice')
+      || !this.dependencies.engine.chooseUpgrade(upgradeId)
+    ) {
+      return false;
+    }
+    void source;
+    this.clearUpgradeChoiceTimer();
+    this.pendingActions.add('upgrade-choice');
+    this.pendingActions.add('upgrade-resume');
+    this.dependencies.engine.pause('upgrade');
+    this.sound.pause();
+    this.upgradeTimerId = this.timerScheduler.set(() => {
+      this.upgradeTimerId = null;
+      if (!this.host) return;
+      this.pendingActions.delete('upgrade-choice');
+      this.pendingActions.delete('upgrade-resume');
+      if (this.visibilityPaused) {
+        this.renderBattle();
+        return;
+      }
+      this.dependencies.engine.resume();
+      void this.sound.resume();
+    }, 400);
+    return true;
+  }
+
   private createHudCallbacks(): BattleHudCallbacks {
     return {
       onSkill: (skillId) => {
@@ -685,28 +808,7 @@ export class BattleScene implements GameScene {
         this.dependencies.engine.useSkill(skillId);
       },
       onChooseUpgrade: (upgradeId) => {
-        if (
-          this.pendingActions.has('upgrade-choice')
-          || !this.dependencies.engine.chooseUpgrade(upgradeId)
-        ) {
-          return;
-        }
-        this.pendingActions.add('upgrade-choice');
-        this.pendingActions.add('upgrade-resume');
-        this.dependencies.engine.pause('upgrade');
-        this.sound.pause();
-        this.upgradeTimerId = this.timerScheduler.set(() => {
-          this.upgradeTimerId = null;
-          if (!this.host) return;
-          this.pendingActions.delete('upgrade-choice');
-          this.pendingActions.delete('upgrade-resume');
-          if (this.visibilityPaused) {
-            this.renderBattle();
-            return;
-          }
-          this.dependencies.engine.resume();
-          void this.sound.resume();
-        }, 400);
+        this.acceptUpgrade(upgradeId, 'manual');
       },
       onClaimInteraction: (actionId, attempt) => {
         if (this.pendingActions.has('interaction')) return;
@@ -739,6 +841,9 @@ export class BattleScene implements GameScene {
           }
         });
       },
+      onBattleSpeed: (speed) => {
+        this.setBattleSpeed(speed);
+      },
       onRequestSkillRefresh: () => {
         void this.runPending('skill-refresh', async () => {
           if (this.dependencies.engine.frame.status !== 'running') return;
@@ -770,6 +875,7 @@ export class BattleScene implements GameScene {
             await this.sound.resume();
             if (!this.host) return;
             this.visibilityPaused = false;
+            this.resumeUpgradeChoiceTimer();
             if (
               this.dependencies.engine.frame.status === 'paused'
               && !this.pendingActions.has('upgrade-resume')

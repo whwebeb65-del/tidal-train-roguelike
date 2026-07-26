@@ -261,6 +261,68 @@ function createHost(): {
 }
 
 describe('BattleScene', () => {
+  it('uses a six-second real-time deadline for upgrade auto-choice at 3x speed', () => {
+    vi.useFakeTimers();
+    try {
+      const scheduler = new ManualFrameScheduler();
+      const engine = createEngine(createFrameFixture({
+        status: 'running',
+        offeredUpgradeIds: ['multi-barrel'],
+      }));
+      const chooseUpgrade = vi.fn(() => true);
+      const originalUpdate = engine.update.bind(engine);
+      engine.update = vi.fn(() => {
+        originalUpdate(FIXED_STEP_MS);
+        engine.setFrame(createFrameFixture({
+          status: 'upgrade',
+          offeredUpgradeIds: ['multi-barrel'],
+        }));
+        engine.events.push({
+          type: 'upgrade-offered',
+          upgradeIds: ['multi-barrel'],
+        });
+      });
+      engine.chooseUpgrade = chooseUpgrade;
+      const hudCallbacks: { current?: BattleHudCallbacks } = {};
+      const { host } = createHost();
+      const scene = new BattleScene({
+        engine,
+        effects: {
+          view: EMPTY_EFFECT_FRAME_VIEW,
+          consume: vi.fn(),
+          update: vi.fn(),
+          reset: vi.fn(),
+        },
+        assets: { failedIds: [], get: () => null },
+        callbacks: createCallbacks(),
+        createRenderer: () => ({ render: vi.fn() }),
+        createHud: (callbacks) => {
+          hudCallbacks.current = callbacks;
+          return { mount: vi.fn(), update: vi.fn(), dispose: vi.fn() };
+        },
+        captainArtId: 'captainFemaleBase',
+        reducedMotion: false,
+        manualStepMode: true,
+        scheduler,
+        eventTarget: new EventTarget(),
+        getDevicePixelRatio: () => 1,
+      });
+
+      scene.mount(host);
+      hudCallbacks.current?.onBattleSpeed?.(3);
+      scene.advanceForE2E(FIXED_STEP_MS);
+      vi.advanceTimersByTime(5_999);
+      expect(chooseUpgrade).not.toHaveBeenCalled();
+
+      vi.advanceTimersByTime(1);
+      expect(chooseUpgrade).toHaveBeenCalledTimes(1);
+      expect(chooseUpgrade).toHaveBeenCalledWith('multi-barrel');
+      scene.unmount();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('owns one frame loop and consumes each event batch once', () => {
     const scheduler = new ManualFrameScheduler();
     const engine = createEngine();
