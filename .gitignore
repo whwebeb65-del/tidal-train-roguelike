@@ -5,4 +5,10 @@ library/
 local/
 .worktrees/
 .superpowers/
+!.superpowers/
+.superpowers/*
+!.superpowers/sdd/
+.superpowers/sdd/*
+!.superpowers/sdd/.gitignore
+!.superpowers/sdd/progression-p4-task-1-report.md
 *.vite-preview*.log
