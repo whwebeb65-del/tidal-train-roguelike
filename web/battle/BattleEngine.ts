@@ -9,6 +9,7 @@ import {
   SKILL_CONFIG,
   UPGRADE_IDS,
 } from './BattleConfig';
+import { BATTLE_UPGRADE_DEFINITIONS } from './BattleUpgradeCatalog';
 import { SeededRandom } from './SeededRandom';
 import type {
   BattleEvent,
@@ -89,7 +90,7 @@ export class BattleEngine {
   private readonly random: SeededRandom;
   private readonly modifiers = createBaseModifiers();
   private readonly upgradeLevels = Object.fromEntries(
-    UPGRADE_IDS.map((id) => [id, 0]),
+    Object.keys(BATTLE_UPGRADE_DEFINITIONS).map((id) => [id, 0]),
   ) as Record<BattleUpgradeId, number>;
 
   private status: BattleStatus = 'running';

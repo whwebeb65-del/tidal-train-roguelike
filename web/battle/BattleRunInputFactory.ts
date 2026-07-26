@@ -70,5 +70,11 @@ export function createBattleRunInput(input: {
     enemyHpFlatBonus: rule?.enemyHpBonus ?? 0,
     enemyHpMultiplier: difficulty.hp,
     enemyDamageMultiplier: difficulty.damage,
+    skillMasteryPower: {
+      'tidal-volley': 0,
+      'bubble-barrier': 0,
+      'extreme-tide': 0,
+    },
+    unlockedSkillVariants: [],
   };
 }

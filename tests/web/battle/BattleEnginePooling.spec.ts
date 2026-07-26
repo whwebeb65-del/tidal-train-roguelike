@@ -15,6 +15,8 @@ function runBattle(battleId: string): BattleEngine {
     enemyHpFlatBonus: 0,
     enemyHpMultiplier: 1,
     enemyDamageMultiplier: 1,
+    skillMasteryPower: { 'tidal-volley': 0, 'bubble-barrier': 0, 'extreme-tide': 0 },
+    unlockedSkillVariants: [],
   });
   for (let elapsed = 0; elapsed < 230_000; elapsed += FIXED_STEP_MS) {
     engine.update(FIXED_STEP_MS);

@@ -23,6 +23,8 @@ describe('BattleEngine auto fire', () => {
       enemyHpFlatBonus: 0,
       enemyHpMultiplier: 1,
       enemyDamageMultiplier: 1,
+      skillMasteryPower: { 'tidal-volley': 0, 'bubble-barrier': 0, 'extreme-tide': 0 },
+      unlockedSkillVariants: [],
     });
 
     runFor(engine, 2400);
@@ -46,6 +48,8 @@ describe('BattleEngine auto fire', () => {
       enemyHpFlatBonus: 0,
       enemyHpMultiplier: 1,
       enemyDamageMultiplier: 1,
+      skillMasteryPower: { 'tidal-volley': 0, 'bubble-barrier': 0, 'extreme-tide': 0 },
+      unlockedSkillVariants: [],
     });
     runFor(engine, 1000);
     engine.pause('manual');

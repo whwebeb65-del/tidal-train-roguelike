@@ -38,6 +38,12 @@ describe('createBattleRunInput', () => {
 
     expect(result.enemyHpMultiplier).toBe(0.85);
     expect(result.enemyDamageMultiplier).toBe(0.72);
+    expect(result.skillMasteryPower).toEqual({
+      'tidal-volley': 0,
+      'bubble-barrier': 0,
+      'extreme-tide': 0,
+    });
+    expect(result.unlockedSkillVariants).toEqual([]);
   });
 
   it('combines progression, squad, map and daily rule once', () => {

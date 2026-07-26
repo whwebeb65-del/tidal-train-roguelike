@@ -15,6 +15,8 @@ function createEngine(): BattleEngine {
     enemyHpFlatBonus: 0,
     enemyHpMultiplier: 1,
     enemyDamageMultiplier: 1,
+    skillMasteryPower: { 'tidal-volley': 0, 'bubble-barrier': 0, 'extreme-tide': 0 },
+    unlockedSkillVariants: [],
   });
 }
 

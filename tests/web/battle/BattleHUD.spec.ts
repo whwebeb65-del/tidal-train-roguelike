@@ -39,6 +39,27 @@ describe('BattleHUD', () => {
     expect(model.upgradeRerollVisible).toBe(true);
   });
 
+  it('uses catalog metadata for the fourth skill-rank level', () => {
+    const model = createBattleHudModel(createFrameFixture({
+      status: 'upgrade',
+      offeredUpgradeIds: ['rank-tidal-volley'],
+      upgradeLevels: {
+        ...createFrameFixture().upgradeLevels,
+        'rank-tidal-volley': 3,
+      },
+    }), {
+      mode: 'normal',
+      upgradeRerollAvailable: false,
+      skillRefreshAvailable: false,
+    });
+
+    expect(model.upgradeCards[0]).toMatchObject({
+      id: 'rank-tidal-volley',
+      currentLevel: 3,
+      nextLevel: 4,
+    });
+  });
+
   it('places an explicit resume overlay above paused battle outcomes', () => {
     const settlement = {
       title: 'Run complete',

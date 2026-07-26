@@ -77,8 +77,8 @@ export interface BattleRunInput {
   readonly enemyHpFlatBonus: number;
   readonly enemyHpMultiplier: number;
   readonly enemyDamageMultiplier: number;
-  readonly skillMasteryPower?: Readonly<Record<BattleSkillId, number>>;
-  readonly unlockedSkillVariants?: readonly SkillVariantId[];
+  readonly skillMasteryPower: Readonly<Record<BattleSkillId, number>>;
+  readonly unlockedSkillVariants: readonly SkillVariantId[];
 }
 
 export interface EnemyState {
@@ -158,7 +158,7 @@ export interface BattleFrameView {
   readonly experience: number;
   readonly nextExperienceThreshold: number | null;
   readonly offeredUpgradeIds: readonly BattleUpgradeId[];
-  readonly upgradeLevels: Readonly<Partial<Record<BattleUpgradeId, number>>>;
+  readonly upgradeLevels: Readonly<Record<BattleUpgradeId, number>>;
   readonly cooldowns: Readonly<Record<BattleSkillId, number>>;
   readonly adReviveUsed: boolean;
   readonly skillRefreshUsed: boolean;

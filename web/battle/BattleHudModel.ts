@@ -10,6 +10,7 @@ import {
   type AvailableBattleInteraction,
   type BattleInteractionClaims,
 } from './BattleInteractionSchedule';
+import { getBattleUpgradeDefinition } from './BattleUpgradeCatalog';
 import type {
   BattleFrameView,
   BattleSkillId,
@@ -189,7 +190,10 @@ export function createBattleHudModel(
       id,
       name: copy.name,
       currentLevel,
-      nextLevel: Math.min(3, currentLevel + 1),
+      nextLevel: Math.min(
+        getBattleUpgradeDefinition(id).maxLevel,
+        currentLevel + 1,
+      ),
       effect: copy.effect,
       synergy: copy.synergy,
     };
