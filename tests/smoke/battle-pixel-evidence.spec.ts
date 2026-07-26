@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { readFile } from 'node:fs/promises';
 
 const helperPath = '../../scripts/lib/battle-pixel-evidence.mjs';
 
@@ -47,6 +48,17 @@ function validDefeatEvidence() {
 }
 
 describe('battle pixel evidence helpers', () => {
+  it('keeps the battle HUD as a compact hand-drawn tide log with accessible rank states', async () => {
+    const css = await readFile(new URL('../../web/styles/battle-hud.css', import.meta.url), 'utf8');
+
+    expect(css).toContain('.battle-hud__tide-log');
+    expect(css).toContain('max-height: 108px');
+    expect(css).toContain('.battle-skill[data-rank="3"]');
+    expect(css).toContain('.battle-skill[data-rank="5"]');
+    expect(css).toContain('@media (prefers-reduced-motion: reduce)');
+    expect(css).not.toContain('backdrop-filter');
+  });
+
   it('maps logical bounds with production uniform scale, DPR and letterbox offsets', async () => {
     const helpers = await loadHelpers();
     expect(helpers.createEvidenceViewport).toBeTypeOf('function');
