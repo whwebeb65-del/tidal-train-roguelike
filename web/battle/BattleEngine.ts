@@ -6,9 +6,14 @@ import {
   LANE_X,
   MAIN_CANNON_INTERVAL_MS,
   MAIN_PROJECTILE_SPEED,
+  SKILL_COOLDOWN_MULTIPLIER,
   SKILL_CONFIG,
+  SKILL_STRENGTH_MULTIPLIER,
 } from './BattleConfig';
-import { BATTLE_UPGRADE_DEFINITIONS } from './BattleUpgradeCatalog';
+import {
+  BATTLE_UPGRADE_DEFINITIONS,
+  getBattleUpgradeDefinition,
+} from './BattleUpgradeCatalog';
 import { SeededRandom } from './SeededRandom';
 import type {
   BattleEvent,
@@ -18,6 +23,7 @@ import type {
   BattleSkillId,
   BattleStatus,
   BattleUpgradeId,
+  BattleBuildState,
   EnemyKind,
   EnemyState,
   LootState,
@@ -25,7 +31,9 @@ import type {
   ProjectileState,
 } from './BattleTypes';
 import {
+  applyBattleUpgrade,
   applyUpgrade,
+  createEmptyBattleBuild,
   createUpgradeOffer,
 } from './UpgradeSystem';
 import {
@@ -91,6 +99,7 @@ export class BattleEngine {
   private readonly upgradeLevels = Object.fromEntries(
     Object.keys(BATTLE_UPGRADE_DEFINITIONS).map((id) => [id, 0]),
   ) as Record<BattleUpgradeId, number>;
+  private battleBuild: BattleBuildState = createEmptyBattleBuild();
 
   private status: BattleStatus = 'running';
   private pausedFrom: Exclude<BattleStatus, 'paused'> | null = null;
@@ -108,7 +117,7 @@ export class BattleEngine {
   private kills = 0;
   private experience = 0;
   private offeredUpgradeIds: BattleUpgradeId[] = [];
-  private upgradeCheckpoint = 0;
+  private runLevel = 1;
   private upgradeOfferRoll = 0;
   private adReviveUsed = false;
   private skillRefreshUsed = false;
@@ -175,6 +184,9 @@ export class BattleEngine {
       kills: this.kills,
       experience: this.experience,
       nextExperienceThreshold: this.nextUpgradeThreshold(),
+      runLevel: this.runLevel,
+      skillRanks: this.battleBuild.skillRanks,
+      skillVariants: this.battleBuild.skillVariants,
       offeredUpgradeIds: this.offeredUpgradeIds,
       upgradeLevels: this.upgradeLevels,
       cooldowns: this.cooldowns,
@@ -217,7 +229,8 @@ export class BattleEngine {
       const damage = Math.floor(
         this.input.mainCannonDamage
           * 8
-          * this.modifiers.extremeDamageMultiplier,
+          * this.modifiers.extremeDamageMultiplier
+          * this.skillStrengthMultiplier(skillId),
       );
       for (const enemy of this.enemies) {
         if (enemy.alive) {
@@ -232,7 +245,8 @@ export class BattleEngine {
       }
       this.cooldowns[skillId] = Math.round(
         SKILL_CONFIG[skillId].cooldownMs
-          * this.modifiers.activeCooldownMultiplier,
+          * this.modifiers.activeCooldownMultiplier
+          * this.skillCooldownMultiplier(skillId),
       );
       if (skillId === 'tidal-volley') this.fireVolley();
       if (skillId === 'bubble-barrier') this.applyBarrier();
@@ -300,8 +314,9 @@ export class BattleEngine {
       this.upgradeOfferRoll += 1;
       next = [...createUpgradeOffer(
         this.input.seed,
-        this.upgradeCheckpoint + 1,
-        this.upgradeLevels,
+        this.runLevel,
+        this.battleBuild,
+        this.input.unlockedSkillVariants,
         this.upgradeOfferRoll,
       )];
     }
@@ -322,21 +337,37 @@ export class BattleEngine {
     ) {
       return false;
     }
-    const result = applyUpgrade(
-      this.modifiers,
-      this.upgradeLevels,
-      upgradeId,
-    );
-    if (!result.accepted) return false;
-    Object.assign(this.modifiers, result.modifiers);
-    Object.assign(this.upgradeLevels, result.levels);
-    this.upgradeCheckpoint += 1;
+    const nextBuild = applyBattleUpgrade(this.battleBuild, upgradeId);
+    if (JSON.stringify(nextBuild) === JSON.stringify(this.battleBuild)) return false;
+    this.battleBuild = nextBuild;
+    const definition = getBattleUpgradeDefinition(upgradeId);
+    if (definition.kind === 'general') {
+      const result = applyUpgrade(this.modifiers, this.upgradeLevels, upgradeId);
+      Object.assign(this.modifiers, result.modifiers);
+      Object.assign(this.upgradeLevels, result.levels);
+    } else if (definition.kind === 'skill-rank') {
+      this.upgradeLevels[upgradeId] = this.battleBuild.skillRanks[definition.skillId!] - 1;
+    } else {
+      this.upgradeLevels[upgradeId] = 1;
+    }
+    this.runLevel += 1;
     this.offeredUpgradeIds = [];
     this.status = 'running';
     this.events.push({
       type: 'upgrade-selected',
       upgradeId,
       level: this.upgradeLevels[upgradeId],
+      runLevel: this.runLevel,
+      nextExperienceThreshold: this.nextUpgradeThreshold(),
+      skillRanks: this.battleBuild.skillRanks,
+      skillVariants: this.battleBuild.skillVariants,
+    });
+    this.events.push({
+      type: 'run-level-reached',
+      runLevel: this.runLevel,
+      nextExperienceThreshold: this.nextUpgradeThreshold(),
+      skillRanks: this.battleBuild.skillRanks,
+      skillVariants: this.battleBuild.skillVariants,
     });
     return true;
   }
@@ -498,7 +529,7 @@ export class BattleEngine {
       this.bossIntroStarted
       || !this.eliteKilled
       || this.elapsedMs < 160_000
-      || this.upgradeCheckpoint < 3
+      || this.runLevel < 4
     ) {
       return;
     }
@@ -663,7 +694,9 @@ export class BattleEngine {
       .filter((enemy) => enemy.alive)
       .sort((left, right) => right.y - left.y || left.id - right.id);
     if (targets.length === 0) return;
-    const damage = Math.floor(this.input.mainCannonDamage * 0.7);
+    const damage = Math.floor(
+      this.input.mainCannonDamage * 0.7 * this.skillStrengthMultiplier('tidal-volley'),
+    );
     for (let index = 0; index < 8; index += 1) {
       const target = targets[index % targets.length];
       if (!target) continue;
@@ -682,12 +715,13 @@ export class BattleEngine {
   private applyBarrier(): void {
     const heal = Math.floor(
       this.input.maxTrainHp * this.modifiers.barrierHealPercent,
-    ) + this.input.repairBonus;
+    ) * this.skillStrengthMultiplier('bubble-barrier') + this.input.repairBonus;
     this.trainHp = Math.min(this.input.maxTrainHp, this.trainHp + heal);
     this.shield = Math.floor(
       this.input.maxTrainHp
         * 0.25
-        * this.modifiers.barrierShieldMultiplier,
+        * this.modifiers.barrierShieldMultiplier
+        * this.skillStrengthMultiplier('bubble-barrier'),
     );
     this.shieldRemainingMs = 4000;
     this.events.push({
@@ -987,29 +1021,18 @@ export class BattleEngine {
   }
 
   private nextUpgradeThreshold(): number | null {
-    return EXPERIENCE_THRESHOLDS[this.upgradeCheckpoint] ?? null;
+    return EXPERIENCE_THRESHOLDS[this.runLevel - 1] ?? null;
   }
 
   private maybeOfferUpgrade(): void {
-    const checkpoints = [
-      this.elapsedMs >= 30_000,
-      this.elapsedMs >= 95_000,
-      this.eliteKilled && this.elapsedMs >= 160_000,
-    ];
-    if (
-      this.upgradeCheckpoint >= checkpoints.length
-      || !checkpoints[this.upgradeCheckpoint]
-    ) {
-      return;
-    }
-    const threshold = EXPERIENCE_THRESHOLDS[this.upgradeCheckpoint];
-    if (threshold === undefined) return;
-    this.experience = Math.max(this.experience, threshold);
+    const threshold = this.nextUpgradeThreshold();
+    if (threshold === null || this.experience < threshold) return;
     this.upgradeOfferRoll = 0;
     this.offeredUpgradeIds = [...createUpgradeOffer(
       this.input.seed,
-      this.upgradeCheckpoint + 1,
-      this.upgradeLevels,
+      this.runLevel,
+      this.battleBuild,
+      this.input.unlockedSkillVariants,
       this.upgradeOfferRoll,
     )];
     this.status = 'upgrade';
@@ -1017,6 +1040,15 @@ export class BattleEngine {
       type: 'upgrade-offered',
       upgradeIds: this.offeredUpgradeIds,
     });
+  }
+
+  private skillStrengthMultiplier(skillId: BattleSkillId): number {
+    const rank = this.battleBuild.skillRanks[skillId];
+    return this.input.skillMasteryPower[skillId] * SKILL_STRENGTH_MULTIPLIER[rank - 1];
+  }
+
+  private skillCooldownMultiplier(skillId: Exclude<BattleSkillId, 'extreme-tide'>): number {
+    return SKILL_COOLDOWN_MULTIPLIER[this.battleBuild.skillRanks[skillId] - 1];
   }
 
   private finish(victory: boolean): void {

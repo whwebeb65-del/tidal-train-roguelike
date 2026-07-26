@@ -47,6 +47,9 @@ export function createFrameFixture(
     kills: 8,
     experience: 240,
     nextExperienceThreshold: 560,
+    runLevel: 2,
+    skillRanks: { 'tidal-volley': 1, 'bubble-barrier': 1, 'extreme-tide': 1 },
+    skillVariants: { 'tidal-volley': [], 'bubble-barrier': [], 'extreme-tide': [] },
     offeredUpgradeIds: [],
     upgradeLevels: {
       'multi-barrel': 0,

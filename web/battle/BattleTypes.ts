@@ -157,6 +157,9 @@ export interface BattleFrameView {
   readonly kills: number;
   readonly experience: number;
   readonly nextExperienceThreshold: number | null;
+  readonly runLevel: number;
+  readonly skillRanks: Readonly<SkillRanks>;
+  readonly skillVariants: Readonly<SkillVariantLoadout>;
   readonly offeredUpgradeIds: readonly BattleUpgradeId[];
   readonly upgradeLevels: Readonly<Record<BattleUpgradeId, number>>;
   readonly cooldowns: Readonly<Record<BattleSkillId, number>>;
@@ -231,6 +234,17 @@ export type BattleEvent =
       readonly type: 'upgrade-selected';
       readonly upgradeId: BattleUpgradeId;
       readonly level: number;
+      readonly runLevel: number;
+      readonly nextExperienceThreshold: number | null;
+      readonly skillRanks: Readonly<SkillRanks>;
+      readonly skillVariants: Readonly<SkillVariantLoadout>;
+    }
+  | {
+      readonly type: 'run-level-reached';
+      readonly runLevel: number;
+      readonly nextExperienceThreshold: number | null;
+      readonly skillRanks: Readonly<SkillRanks>;
+      readonly skillVariants: Readonly<SkillVariantLoadout>;
     }
   | { readonly type: 'elite-entered'; readonly enemyId: number }
   | { readonly type: 'boss-intro-started' }

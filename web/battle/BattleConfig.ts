@@ -12,7 +12,12 @@ export const FIXED_STEP_MS = 1000 / 60;
 export const MAX_CATCH_UP_STEPS = 5;
 export const MAIN_CANNON_INTERVAL_MS = 400;
 export const MAIN_PROJECTILE_SPEED = 620;
-export const EXPERIENCE_THRESHOLDS = [180, 560, 1080] as const;
+export const EXPERIENCE_THRESHOLDS = [
+  50, 110, 180, 260, 350, 450, 565, 695, 840, 1000,
+  1175, 1365, 1570, 1790, 2025, 2275, 2540, 2820, 3120,
+] as const;
+export const SKILL_STRENGTH_MULTIPLIER = [1, 1.15, 1.32, 1.52, 1.75] as const;
+export const SKILL_COOLDOWN_MULTIPLIER = [1, 0.96, 0.92, 0.88, 0.84] as const;
 export const LANE_X = [92, 195, 298] as const;
 
 export const ENEMY_CONFIG: Readonly<Record<EnemyKind, {
