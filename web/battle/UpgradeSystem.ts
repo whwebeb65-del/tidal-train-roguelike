@@ -45,6 +45,18 @@ export function createEmptyBattleBuild(
   };
 }
 
+function cloneBattleBuild(build: BattleBuildState): BattleBuildState {
+  return {
+    generalLevels: { ...build.generalLevels },
+    skillRanks: { ...build.skillRanks },
+    skillVariants: {
+      'tidal-volley': [...build.skillVariants['tidal-volley']],
+      'bubble-barrier': [...build.skillVariants['bubble-barrier']],
+      'extreme-tide': [...build.skillVariants['extreme-tide']],
+    },
+  };
+}
+
 function isUpgradeLegal(
   build: BattleBuildState,
   unlockedVariants: readonly SkillVariantId[],
@@ -145,31 +157,45 @@ export function applyBattleUpgrade(
   build: BattleBuildState,
   upgradeId: BattleUpgradeId,
 ): BattleBuildState {
+  const next = cloneBattleBuild(build);
   const definition = getBattleUpgradeDefinition(upgradeId);
   if (definition.kind === 'general') {
     const generalId = upgradeId as BattleGeneralUpgradeId;
-    if (build.generalLevels[generalId] >= definition.maxLevel) return { ...build };
-    return {
-      ...build,
-      generalLevels: { ...build.generalLevels, [generalId]: build.generalLevels[generalId] + 1 },
-    };
+    if (build.generalLevels[generalId] < definition.maxLevel) {
+      return {
+        ...next,
+        generalLevels: {
+          ...next.generalLevels,
+          [generalId]: build.generalLevels[generalId] + 1,
+        },
+      };
+    }
+    return next;
   }
   const skillId = definition.skillId as BattleSkillId;
   if (definition.kind === 'skill-rank') {
-    if (build.skillRanks[skillId] >= 5) return { ...build };
-    return {
-      ...build,
-      skillRanks: { ...build.skillRanks, [skillId]: build.skillRanks[skillId] + 1 },
-    };
+    if (build.skillRanks[skillId] < 5) {
+      return {
+        ...next,
+        skillRanks: {
+          ...next.skillRanks,
+          [skillId]: build.skillRanks[skillId] + 1,
+        },
+      };
+    }
+    return next;
   }
   const variants = build.skillVariants[skillId];
   if (build.skillRanks[skillId] < (definition.requiredRank ?? 1)
     || variants.includes(upgradeId as SkillVariantId) || variants.length >= 2) {
-    return { ...build };
+    return next;
   }
   return {
-    ...build,
-    skillVariants: { ...build.skillVariants, [skillId]: [...variants, upgradeId as SkillVariantId] },
+    ...next,
+    skillVariants: {
+      ...next.skillVariants,
+      [skillId]: [...variants, upgradeId as SkillVariantId],
+    },
   };
 }
 
