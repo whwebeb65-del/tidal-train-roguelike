@@ -128,14 +128,44 @@ describe('UpgradeSystem', () => {
         ).toBe(5);
       } else {
         expect(applied.skillVariants[skillId!]).toContain(definition.id);
-        expect(applyBattleUpgrade(applicable, definition.id).skillVariants[skillId!])
-          .toHaveLength(1);
+        const appliedAgain = applyBattleUpgrade(applied, definition.id);
+        expect(appliedAgain.skillVariants[skillId!]).toEqual(
+          applied.skillVariants[skillId!],
+        );
+        expect(appliedAgain.skillVariants[skillId!]).toHaveLength(1);
+        expect(appliedAgain).not.toBe(applied);
+        expect(appliedAgain.generalLevels).not.toBe(applied.generalLevels);
+        expect(appliedAgain.skillRanks).not.toBe(applied.skillRanks);
+        expect(appliedAgain.skillVariants).not.toBe(applied.skillVariants);
+        expect(appliedAgain.skillVariants[skillId!])
+          .not.toBe(applied.skillVariants[skillId!]);
         expect(
           applyBattleUpgrade(createEmptyBattleBuild({
             skillRanks: { 'tidal-volley': 1, 'bubble-barrier': 1, 'extreme-tide': 1 },
           }), definition.id).skillVariants[skillId!],
         ).toHaveLength(0);
       }
+    }
+  });
+
+  it('rejects a third variant while returning a fully detached equal build', () => {
+    const build = createEmptyBattleBuild({
+      skillRanks: { 'tidal-volley': 2, 'bubble-barrier': 1, 'extreme-tide': 1 },
+      skillVariants: {
+        'tidal-volley': ['split-tide-arrow', 'reef-piercer'],
+        'bubble-barrier': [],
+        'extreme-tide': [],
+      },
+    });
+    const result = applyBattleUpgrade(build, 'returning-volley');
+
+    expect(result).toEqual(build);
+    expect(result).not.toBe(build);
+    expect(result.generalLevels).not.toBe(build.generalLevels);
+    expect(result.skillRanks).not.toBe(build.skillRanks);
+    expect(result.skillVariants).not.toBe(build.skillVariants);
+    for (const skillId of ['tidal-volley', 'bubble-barrier', 'extreme-tide'] as const) {
+      expect(result.skillVariants[skillId]).not.toBe(build.skillVariants[skillId]);
     }
   });
 });
