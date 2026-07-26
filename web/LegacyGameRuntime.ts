@@ -117,6 +117,7 @@ import { MockAds, MockShare, MockStore } from '../src/platform/MockPlatform';
 import type { RewardedPlacement } from '../src/platform/PlatformContracts';
 import {
   createMemorySaveRepository,
+  appendSettledBattleId,
   type PlayerSave,
 } from '../src/save/SaveRepository';
 import { createMemoryTelemetry } from '../src/telemetry/TelemetryClient';
@@ -1242,10 +1243,6 @@ function settledBattlePresentation(outcome: BattleOutcome): BattleSettlementPres
   };
 }
 
-function appendSettledBattleId(current: PlayerSave, battleId: string): string[] {
-  return [...current.settledBattleIds, battleId].slice(-32);
-}
-
 function settleDynamicDailyTrial(
   outcome: BattleOutcome,
 ): BattleSettlementPresentation {
@@ -1315,7 +1312,7 @@ function settleDynamicNormalRun(
       accountLevel: progression.accountProgression!.level,
       accountXp: progression.accountProgression!.xp,
       skillMasteryXp: progression.skillMasteryXp,
-      settledBattleIds: appendSettledBattleId(save, outcome.battleId),
+      settledBattleIds: appendSettledBattleId(save.settledBattleIds, outcome.battleId),
     });
     track('run_settled', { victory: false });
     notice = '列车已撤回车站；本局互动奖励保留，通关奖励未发放。';
@@ -1356,7 +1353,7 @@ function settleDynamicNormalRun(
     accountLevel: progression.accountProgression!.level,
     accountXp: progression.accountProgression!.xp,
     skillMasteryXp: progression.skillMasteryXp,
-    settledBattleIds: appendSettledBattleId(save, outcome.battleId),
+    settledBattleIds: appendSettledBattleId(save.settledBattleIds, outcome.battleId),
   });
   track('economy_reward_granted', {
     source: firstClear.granted ? 'first-clear' : 'repeat-victory',

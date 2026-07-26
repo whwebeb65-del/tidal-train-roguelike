@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createMemorySaveRepository, defaultSave, normalizePlayerSave } from '../../src/save/SaveRepository';
+import { appendSettledBattleId, createMemorySaveRepository, defaultSave, normalizePlayerSave } from '../../src/save/SaveRepository';
 
 describe('SaveRepository', () => {
   it('returns a safe default save when no data exists', () => {
@@ -189,5 +189,17 @@ describe('SaveRepository', () => {
       ...defaultSave(),
       settledBattleIds: ['same', 'same'],
     })).toThrow('Settlement battle IDs must be unique');
+    expect(() => repository.save({
+      ...defaultSave(),
+      settledBattleIds: Array.from({ length: 33 }, (_, index) => `run-${index}`),
+    })).toThrow('Settlement battle IDs must contain at most 32 entries');
+    expect(() => repository.save({ ...defaultSave(), settledBattleIds: [''] }))
+      .toThrow('Settlement battle IDs must be non-empty strings');
+    expect(() => repository.save({ ...defaultSave(), settledBattleIds: [1] as never }))
+      .toThrow('Settlement battle IDs must be non-empty strings');
+    expect(appendSettledBattleId(ids, 'run-32')).toEqual([
+      ...ids.slice(1),
+      'run-32',
+    ]);
   });
 });

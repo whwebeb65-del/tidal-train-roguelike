@@ -53,6 +53,13 @@ export interface SaveRepository {
   save(next: PlayerSave): void;
 }
 
+export function appendSettledBattleId(
+  settledBattleIds: readonly string[],
+  battleId: string,
+): string[] {
+  return [...settledBattleIds, battleId].slice(-32);
+}
+
 const EQUIPMENT_SLOTS: readonly EquipmentSlot[] = [
   'cannon',
   'carriage',
