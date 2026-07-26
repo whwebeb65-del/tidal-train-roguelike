@@ -5,6 +5,7 @@
 - Repaired the tide-log header DOM hierarchy so speed and pause controls remain inside one header.
 - Disabled the speed control when its cross-stage callback is unavailable, preventing a no-op interaction.
 - Added mounted HUD assertions for Rank 5, two variant glyphs, accessible labels, speed display, speed cycling, and the disabled fallback.
+- The mounted accessibility assertion requires a present `aria-label` containing at least one non-whitespace character.
 
 ## Test support
 

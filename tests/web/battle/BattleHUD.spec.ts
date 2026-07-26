@@ -113,7 +113,7 @@ describe('BattleHUD', () => {
     expect(extremeTide.querySelectorAll(
       '[data-skill-variant]:not([hidden])',
     )).toHaveLength(2);
-    expect(extremeTide.getAttribute('aria-label')).not.toBe('');
+    expect(extremeTide.getAttribute('aria-label')).toMatch(/\S/);
     expect(speed.textContent).toBe('1.5×');
     expect(speed.disabled).toBe(false);
 
