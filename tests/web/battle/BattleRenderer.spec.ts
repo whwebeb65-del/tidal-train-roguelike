@@ -15,6 +15,7 @@ import {
 } from './helpers/BattleFixtures';
 import { createRecordingPainter } from './helpers/RecordingPainter';
 import { getRenderBudget } from '../../../web/battle/QualityMonitor';
+import { ENEMY_GEOMETRY } from '../../../web/battle/EnemyGeometry';
 
 interface TestPose {
   readonly offsetX: number;
@@ -121,6 +122,28 @@ function trainSignatureFeature(commands: readonly BattleDrawCommand[]) {
 }
 
 describe('BattleRenderer', () => {
+  it('draws one name and health bar per living enemy below the HUD-safe edge', () => {
+    const frame = createFrameFixture();
+    const commands = renderCommands({
+      frame: {
+        enemies: frame.enemies.map((enemy) => ({
+          ...enemy,
+          y: 120 + ENEMY_GEOMETRY[enemy.kind].height * 0.52,
+          alive: true,
+        })),
+      },
+      reducedMotion: true,
+    });
+    const livingEnemies = frame.enemies.filter((enemy) => enemy.alive);
+    expect(commands.filter((item) => item.kind === 'enemy-name')).toHaveLength(livingEnemies.length);
+    expect(commands.filter((item) => item.kind === 'enemy-hp-track')).toHaveLength(livingEnemies.length);
+    expect(commands.filter((item) => item.kind === 'enemy-hp')).toHaveLength(livingEnemies.length);
+    const topmost = commands
+      .filter((item) => item.kind === 'enemy-name' || item.kind === 'enemy-hp-track' || item.kind === 'enemy-hp')
+      .flatMap((item) => 'y' in item ? [item.y] : item.points.map((point) => point.y));
+    expect(Math.min(...topmost)).toBeGreaterThanOrEqual(120);
+  });
+
   it.each([
     ['bubble-fin', 78, 78],
     ['needle-jelly', 72, 84],

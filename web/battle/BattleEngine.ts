@@ -41,6 +41,7 @@ import {
   getWaveAtTime,
   type SpawnInstruction,
 } from './WaveScheduler';
+import { enemySpawnY } from './EnemyGeometry';
 import {
   EntityPool,
   type EntityPoolStats,
@@ -167,7 +168,7 @@ export class BattleEngine {
   private eliteEnraged = false;
   private bossIntroStarted = false;
   private bossId: number | null = null;
-  private bossPressureAtMs = 6000;
+  private bossPressureAtMs = 420_000;
   private bossSummonIndex = 0;
   private bossChargeIndex = 0;
   private pendingBossChargeAtMs: number | null = null;
@@ -453,6 +454,10 @@ export class BattleEngine {
 
       this.elapsedMs += stepMs;
       this.phaseElapsedMs += stepMs;
+      if (this.elapsedMs >= 480_000) {
+        this.finish(false);
+        return;
+      }
       this.updateTimers(stepMs);
       this.runDelayedVolleyActions();
       this.runDelayedExtremeCrestActions();
@@ -532,7 +537,7 @@ export class BattleEngine {
       kind,
       lane,
       x: (LANE_X[lane] ?? LANE_X[1]) + xOffset,
-      y: kind === 'deep-echo-boss' ? 96 : 72,
+      y: enemySpawnY(kind),
       hp: maxHp,
       maxHp,
       shield: 0,
@@ -552,7 +557,7 @@ export class BattleEngine {
   }
 
   private maybeSpawnElite(): void {
-    if (this.eliteSpawned || this.elapsedMs < 130_000) return;
+    if (this.eliteSpawned || this.elapsedMs < 300_000) return;
     this.eliteSpawned = true;
     const elite = this.spawnEnemy('storm-ray-elite', 1);
     this.events.push({
@@ -590,14 +595,13 @@ export class BattleEngine {
       elite.attackCooldownMs *= 0.7;
     }
 
-    if (elite.ageMs >= 75_000) this.finish(false);
   }
 
   private maybeStartBossIntro(): void {
     if (
       this.bossIntroStarted
       || !this.eliteKilled
-      || this.elapsedMs < 160_000
+      || this.elapsedMs < 360_000
       || this.runLevel < 4
     ) {
       return;
@@ -613,7 +617,7 @@ export class BattleEngine {
     if (this.phaseElapsedMs < 6000) return;
     const boss = this.spawnEnemy('deep-echo-boss', 1);
     boss.x = 195;
-    boss.y = 96;
+    boss.y = enemySpawnY('deep-echo-boss');
     this.bossId = boss.id;
     this.status = 'running';
     this.phaseElapsedMs = 0;
@@ -631,13 +635,13 @@ export class BattleEngine {
     if (!boss) return;
     boss.ageMs += stepMs;
 
-    while (this.phaseElapsedMs >= this.bossPressureAtMs) {
+    while (this.elapsedMs >= this.bossPressureAtMs) {
       this.damageTrain(
         this.input.maxTrainHp * 0.09 * this.input.enemyDamageMultiplier,
         0,
       );
       if (this.status !== 'running') return;
-      this.bossPressureAtMs += this.phaseElapsedMs >= 55_000
+      this.bossPressureAtMs += this.elapsedMs >= 450_000
         ? 4200
         : 6000;
     }
@@ -683,7 +687,6 @@ export class BattleEngine {
       if (this.status !== 'running') return;
     }
 
-    if (this.phaseElapsedMs >= 90_000) this.finish(false);
   }
 
   private moveEnemies(stepMs: number): void {

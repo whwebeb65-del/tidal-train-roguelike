@@ -22,6 +22,7 @@ import type {
 } from './BattleTypes';
 import type { RenderBudget } from './QualityMonitor';
 import type { TrainMotionFrameView } from './TrainMotionTypes';
+import { ENEMY_GEOMETRY, ENEMY_LABELS } from './EnemyGeometry';
 
 export interface BattleRenderInput {
   readonly frame: BattleFrameView;
@@ -44,18 +45,6 @@ const ENEMY_ART: Readonly<Record<EnemyKind, BattleArtId>> = {
   'reef-crab': 'reefCrab',
   'storm-ray-elite': 'stormRayElite',
   'deep-echo-boss': 'deepEchoBoss',
-};
-
-const ENEMY_SIZE: Readonly<Record<EnemyKind, {
-  readonly width: number;
-  readonly height: number;
-  readonly fallback: string;
-}>> = {
-  'bubble-fin': { width: 78, height: 78, fallback: '#7bd4de' },
-  'needle-jelly': { width: 72, height: 84, fallback: '#77cbe9' },
-  'reef-crab': { width: 84, height: 72, fallback: '#77cbd2' },
-  'storm-ray-elite': { width: 158, height: 114, fallback: '#516ec7' },
-  'deep-echo-boss': { width: 238, height: 178, fallback: '#304f9a' },
 };
 
 const captainRig = createCaptainRig();
@@ -279,7 +268,7 @@ export class BattleRenderer {
     input: BattleRenderInput,
     enemy: EnemyState,
   ): void {
-    const size = ENEMY_SIZE[enemy.kind];
+    const size = ENEMY_GEOMETRY[enemy.kind];
     const artId = ENEMY_ART[enemy.kind];
     const source = input.assets.get(artId);
     const bob = input.reducedMotion || enemy.kind === 'deep-echo-boss'
@@ -328,12 +317,26 @@ export class BattleRenderer {
 
     const barWidth = size.width * 0.72;
     const hpRatio = enemy.maxHp > 0 ? enemy.hp / enemy.maxHp : 0;
+    const infoY = y - size.height * 0.52;
+    this.painter.text({
+      kind: 'enemy-name',
+      layer: 'enemies',
+      text: ENEMY_LABELS[enemy.kind],
+      x: enemy.x,
+      y: infoY,
+      fill: '#17344c',
+      font: enemy.kind === 'deep-echo-boss' ? '700 15px sans-serif' : '700 12px sans-serif',
+      align: 'center',
+      baseline: 'top',
+      stroke: '#fff4df',
+      lineWidth: 2,
+    });
     this.painter.line({
       kind: 'enemy-hp-track',
       layer: 'enemies',
       points: [
-        { x: enemy.x - barWidth / 2, y: y - size.height * 0.52 },
-        { x: enemy.x + barWidth / 2, y: y - size.height * 0.52 },
+        { x: enemy.x - barWidth / 2, y: infoY + 13 },
+        { x: enemy.x + barWidth / 2, y: infoY + 13 },
       ],
       stroke: 'rgba(14, 49, 74, 0.42)',
       lineWidth: enemy.kind === 'deep-echo-boss' ? 6 : 4,
@@ -342,10 +345,10 @@ export class BattleRenderer {
       kind: 'enemy-hp',
       layer: 'enemies',
       points: [
-        { x: enemy.x - barWidth / 2, y: y - size.height * 0.52 },
+        { x: enemy.x - barWidth / 2, y: infoY + 13 },
         {
           x: enemy.x - barWidth / 2 + barWidth * hpRatio,
-          y: y - size.height * 0.52,
+          y: infoY + 13,
         },
       ],
       stroke: enemy.kind === 'storm-ray-elite'

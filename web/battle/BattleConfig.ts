@@ -11,7 +11,7 @@ export const DEFENCE_LINE_Y = 716;
 export const FIXED_STEP_MS = 1000 / 60;
 export const MAX_CATCH_UP_STEPS = 5;
 export const MAIN_CANNON_INTERVAL_MS = 400;
-export const MAIN_PROJECTILE_SPEED = 620;
+export const MAIN_PROJECTILE_SPEED = 480;
 export const EXPERIENCE_THRESHOLDS = [
   50, 110, 180, 260, 350, 450, 565, 695, 840, 1000,
   1175, 1365, 1570, 1790, 2025, 2275, 2540, 2820, 3120,
@@ -28,21 +28,21 @@ export const ENEMY_CONFIG: Readonly<Record<EnemyKind, {
   readonly experience: number;
 }>> = {
   'bubble-fin': {
-    hp: 80,
+    hp: 100,
     speedPerSecond: 52,
     defenceDamage: 7,
     attackIntervalMs: 1200,
     experience: 10,
   },
   'needle-jelly': {
-    hp: 45,
+    hp: 56,
     speedPerSecond: 85,
     defenceDamage: 4,
     attackIntervalMs: 800,
     experience: 8,
   },
   'reef-crab': {
-    hp: 180,
+    hp: 225,
     speedPerSecond: 34,
     defenceDamage: 12,
     attackIntervalMs: 1500,

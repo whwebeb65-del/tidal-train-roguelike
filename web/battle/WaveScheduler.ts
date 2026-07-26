@@ -16,26 +16,38 @@ const WAVES = [
   {
     wave: 1,
     startMs: 0,
-    endMs: 27_000,
-    counts: { 'bubble-fin': 18, 'needle-jelly': 0, 'reef-crab': 0 },
+    endMs: 55_000,
+    counts: { 'bubble-fin': 25, 'needle-jelly': 0, 'reef-crab': 0 },
   },
   {
     wave: 2,
-    startMs: 30_000,
-    endMs: 59_000,
-    counts: { 'bubble-fin': 14, 'needle-jelly': 8, 'reef-crab': 0 },
+    startMs: 58_000,
+    endMs: 113_000,
+    counts: { 'bubble-fin': 25, 'needle-jelly': 15, 'reef-crab': 0 },
   },
   {
     wave: 3,
-    startMs: 62_000,
-    endMs: 92_000,
-    counts: { 'bubble-fin': 12, 'needle-jelly': 8, 'reef-crab': 6 },
+    startMs: 116_000,
+    endMs: 171_000,
+    counts: { 'bubble-fin': 20, 'needle-jelly': 20, 'reef-crab': 10 },
   },
   {
     wave: 4,
-    startMs: 95_000,
-    endMs: 127_000,
-    counts: { 'bubble-fin': 16, 'needle-jelly': 12, 'reef-crab': 6 },
+    startMs: 174_000,
+    endMs: 229_000,
+    counts: { 'bubble-fin': 24, 'needle-jelly': 20, 'reef-crab': 15 },
+  },
+  {
+    wave: 5,
+    startMs: 232_000,
+    endMs: 287_000,
+    counts: { 'bubble-fin': 28, 'needle-jelly': 24, 'reef-crab': 18 },
+  },
+  {
+    wave: 6,
+    startMs: 290_000,
+    endMs: 344_999,
+    counts: { 'bubble-fin': 30, 'needle-jelly': 24, 'reef-crab': 20 },
   },
 ] as const;
 
@@ -77,9 +89,11 @@ export function createWaveSchedule(
 }
 
 export function getWaveAtTime(elapsedMs: number): number {
-  if (elapsedMs < 30_000) return 1;
-  if (elapsedMs < 62_000) return 2;
-  if (elapsedMs < 95_000) return 3;
-  if (elapsedMs < 130_000) return 4;
-  return 5;
+  if (elapsedMs < 58_000) return 1;
+  if (elapsedMs < 116_000) return 2;
+  if (elapsedMs < 174_000) return 3;
+  if (elapsedMs < 232_000) return 4;
+  if (elapsedMs < 290_000) return 5;
+  if (elapsedMs < 345_000) return 6;
+  return 7;
 }

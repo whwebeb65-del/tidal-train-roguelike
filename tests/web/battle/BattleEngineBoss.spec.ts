@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { FIXED_STEP_MS } from '../../../web/battle/BattleConfig';
+import {
+  ENEMY_CONFIG,
+  FIXED_STEP_MS,
+  MAIN_PROJECTILE_SPEED,
+} from '../../../web/battle/BattleConfig';
+import {
+  ENEMY_GEOMETRY,
+  enemySpawnY,
+} from '../../../web/battle/EnemyGeometry';
+import type { EnemyKind } from '../../../web/battle/BattleTypes';
 import { BattleEngine } from '../../../web/battle/BattleEngine';
 
 function createEngine(): BattleEngine {
@@ -31,9 +40,24 @@ function runFor(engine: BattleEngine, durationMs: number): void {
 }
 
 describe('BattleEngine elite and boss', () => {
+  it('uses the approved balance and starts every enemy below the HUD', () => {
+    expect(ENEMY_CONFIG['bubble-fin'].hp).toBe(100);
+    expect(ENEMY_CONFIG['needle-jelly'].hp).toBe(56);
+    expect(ENEMY_CONFIG['reef-crab'].hp).toBe(225);
+    expect(ENEMY_CONFIG['storm-ray-elite'].hp).toBe(1200);
+    expect(ENEMY_CONFIG['deep-echo-boss'].hp).toBe(4200);
+    expect(MAIN_PROJECTILE_SPEED).toBe(480);
+
+    for (const kind of Object.keys(ENEMY_GEOMETRY) as EnemyKind[]) {
+      const y = enemySpawnY(kind, 108);
+      const top = y - ENEMY_GEOMETRY[kind].height * 0.52;
+      expect(top).toBeGreaterThanOrEqual(120);
+    }
+  });
+
   it('enters elite, pauses for boss intro and settles victory once', () => {
     const engine = createEngine();
-    runFor(engine, 230_000);
+    runFor(engine, 390_000);
     const events = engine.drainEvents();
 
     expect(
@@ -59,14 +83,25 @@ describe('BattleEngine elite and boss', () => {
     ).toHaveLength(0);
   });
 
-  it('fails an elite after its timeout', () => {
+  it('does not start the boss sequence before the six-minute milestone', () => {
+    const engine = createEngine();
+    runFor(engine, 359_000);
+    expect(engine.drainEvents().some((event) => event.type === 'boss-intro-started')).toBe(false);
+
+    runFor(engine, 8_000);
+    const events = engine.drainEvents();
+    expect(events.filter((event) => event.type === 'boss-intro-started')).toHaveLength(1);
+    expect(events.filter((event) => event.type === 'boss-intro-ended')).toHaveLength(1);
+  });
+
+  it('ends an unresolved encounter at the eight-minute hard cap', () => {
     const eliteFailure = new BattleEngine({
       ...createEngine().inputForTest(),
       battleId: 'elite-timeout',
       mainCannonDamage: 0,
       enemyDamageMultiplier: 0,
     });
-    runFor(eliteFailure, 210_000);
+    runFor(eliteFailure, 480_100);
 
     expect(eliteFailure.outcome?.victory).toBe(false);
   });
