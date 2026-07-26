@@ -218,6 +218,10 @@ export interface LegacyRuntimeDependencies {
     engine: BattleEngine,
     assets: BattleAssetSet<BattleArtId>,
   ) => BattleScene;
+  readonly onBattleSpeedResolved?: (
+    initial: number,
+    available: readonly number[],
+  ) => void;
 }
 
 export function createLegacyGameRuntime(
@@ -598,6 +602,7 @@ function getInitialBattleSpeed(accountLevel: number) {
   if (initialBattleSpeed !== preferred) {
     settingsBridge.updateSettings({ preferredBattleSpeed: initialBattleSpeed });
   }
+  dependencies.onBattleSpeedResolved?.(initialBattleSpeed, speeds);
   return initialBattleSpeed;
 }
 
@@ -1136,6 +1141,7 @@ async function startRun(
     }));
     activeBattleEngine = candidateEngine;
     preparedBattleAccountLevel = candidateSave.accountLevel;
+    getInitialBattleSpeed(candidateSave.accountLevel);
     preparedBattleScene = dependencies.prepareBattleScene?.(
       candidateEngine,
       currentBattleAssets,
