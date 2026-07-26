@@ -11,6 +11,14 @@ import {
 import type { MapId } from '../../src/domain/station/MapProgression';
 import type { RunMode } from '../app/AppTypes';
 import type { BattleRunInput } from './BattleTypes';
+import {
+  skillMasteryLevelFromXp,
+  skillMasteryPowerMultiplier,
+  unlockedSkillVariants,
+  createSkillMasteryXp,
+  type SkillMasteryXp,
+} from '../../src/domain/progression/SkillMasterySystem';
+import { BATTLE_SKILL_IDS } from '../../src/domain/skill/SkillProgressionTypes';
 
 const MAP_DIFFICULTY: Readonly<Record<MapId, {
   readonly hp: number;
@@ -30,7 +38,9 @@ export function createBattleRunInput(input: {
   readonly progression: ProgressionSnapshot;
   readonly social: SocialExpeditionState;
   readonly dailyTrial: DailyTrialDefinition | null;
+  readonly skillMasteryXp?: Readonly<SkillMasteryXp>;
 }): BattleRunInput {
+  const skillMasteryXp = input.skillMasteryXp ?? createSkillMasteryXp();
   const squad = getSquadBonuses(input.social);
   const rule = input.dailyTrial?.rule;
   const difficulty = MAP_DIFFICULTY[input.mapId];
@@ -70,11 +80,17 @@ export function createBattleRunInput(input: {
     enemyHpFlatBonus: rule?.enemyHpBonus ?? 0,
     enemyHpMultiplier: difficulty.hp,
     enemyDamageMultiplier: difficulty.damage,
-    skillMasteryPower: {
-      'tidal-volley': 1,
-      'bubble-barrier': 1,
-      'extreme-tide': 1,
-    },
-    unlockedSkillVariants: [],
+    skillMasteryPower: Object.fromEntries(BATTLE_SKILL_IDS.map((skillId) => [
+      skillId,
+      skillMasteryPowerMultiplier(skillMasteryLevelFromXp(
+        skillMasteryXp[skillId] ?? 0,
+      )),
+    ])) as BattleRunInput['skillMasteryPower'],
+    unlockedSkillVariants: BATTLE_SKILL_IDS.flatMap((skillId) => (
+      unlockedSkillVariants(
+        skillId,
+        skillMasteryLevelFromXp(skillMasteryXp[skillId] ?? 0),
+      )
+    )),
   };
 }

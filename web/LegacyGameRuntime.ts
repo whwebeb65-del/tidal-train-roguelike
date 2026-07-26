@@ -53,6 +53,15 @@ import {
   type ProgressionSnapshot,
 } from '../src/domain/progression/ProgressionStatService';
 import {
+  availableBattleSpeeds,
+  grantAccountXp,
+  maximumBattleSpeed,
+} from '../src/domain/progression/AccountProgressionSystem';
+import {
+  recoverStamina,
+  spendNormalRunStamina,
+} from '../src/domain/progression/StaminaSystem';
+import {
   applyForBeta,
   claimBetaGift,
   claimLaunchGift,
@@ -196,6 +205,7 @@ export function createLegacyGameRuntime(
   reducedMotion: boolean,
   audio: AudioManager,
   settingsBridge: RuntimeSettingsBridge,
+  dependencies: { readonly nowMs?: () => number } = {},
 ): LegacyGameRuntime {
 const appStateRepository = createBrowserAppStateRepository(storage);
 const initialState = appStateRepository.load();
@@ -249,6 +259,8 @@ let activeBattleEngine: BattleEngine | null = null;
 let activeBattleProgression: ProgressionSnapshot | null = null;
 let activeBattleSettlement: BattleSettlementPresentation | null = null;
 let activeBattleScene: BattleScene | null = null;
+let activeRunAccountStart = save.accountLevel;
+let activeRunStaminaSpent = 0;
 let activeStationScene: StationScene | null = null;
 let activeStationRunToken: symbol | null = null;
 let battleStartPending = false;
@@ -364,9 +376,11 @@ const sceneFactory: SceneFactory = (sceneId) => {
     createHud: (callbacks) => new BattleHUD(callbacks),
     captainArtId: getActiveCaptainArtId(),
     reducedMotion: effectiveReducedMotion,
-    initialBattleSpeed: 1,
-    availableBattleSpeeds: [1],
-    onBattleSpeedChanged: () => undefined,
+    initialBattleSpeed: getInitialBattleSpeed(),
+    availableBattleSpeeds: availableBattleSpeeds(save.accountLevel),
+    onBattleSpeedChanged: (speed) => {
+      settingsBridge.updateSettings({ preferredBattleSpeed: speed });
+    },
     qualityPreference,
     diagnostics,
     manualStepMode: e2eEnabled,
@@ -535,6 +549,28 @@ function getProgressionSnapshot(): ProgressionSnapshot {
     ownedSkinIds: save.ownedSkinIds,
     equipmentState: getEquipmentStateFromSave(),
   });
+}
+
+function getInitialBattleSpeed() {
+  const speeds = availableBattleSpeeds(save.accountLevel);
+  const preferred = settingsBridge.getSettings().preferredBattleSpeed;
+  const initialBattleSpeed = speeds.includes(preferred)
+    ? preferred
+    : maximumBattleSpeed(save.accountLevel);
+  if (initialBattleSpeed !== preferred) {
+    settingsBridge.updateSettings({ preferredBattleSpeed: initialBattleSpeed });
+  }
+  return initialBattleSpeed;
+}
+
+function syncStamina(): void {
+  const recovered = recoverStamina(save, dependencies.nowMs?.() ?? Date.now());
+  if (
+    recovered.stamina !== save.stamina
+    || recovered.staminaUpdatedAtMs !== save.staminaUpdatedAtMs
+  ) {
+    commit({ ...save, ...recovered });
+  }
 }
 
 function getActiveCaptainId(): CaptainId {
@@ -900,6 +936,7 @@ function handleEquipmentReroll(instanceId: string): void {
 }
 
 async function syncView(): Promise<void> {
+  if (phase === 'station') syncStamina();
   shell.setCurrencies({
     gears: save.gears,
     routeMarks: save.routeMarks,
@@ -997,6 +1034,28 @@ async function startRun(
       ? `daily-${dailyDefinition?.dayId}-${Date.now()}`
       : `run-${Date.now()}`;
 
+    const staminaResult = mode === 'normal'
+      ? spendNormalRunStamina(save)
+      : null;
+    if (staminaResult && !staminaResult.accepted) {
+      notice = '还需要 5 点体力才能发车。';
+      return;
+    }
+    const account = mode === 'normal'
+      ? grantAccountXp(
+        { level: save.accountLevel, xp: save.accountXp },
+        50,
+      )
+      : { level: save.accountLevel, xp: save.accountXp };
+    const candidateSave: PlayerSave = mode === 'normal'
+      ? {
+        ...save,
+        ...staminaResult!.state,
+        accountLevel: account.level,
+        accountXp: account.xp,
+      }
+      : save;
+
     recoveryState = createRecoveryState();
     pendingRecoveryActions.clear();
     trackedAdOffers.clear();
@@ -1009,7 +1068,7 @@ async function startRun(
     };
     activeBattleSettlement = null;
     activeBattleProgression = getProgressionSnapshot();
-    activeBattleEngine = new BattleEngine(createBattleRunInput({
+    const candidateEngine = new BattleEngine(createBattleRunInput({
       battleId: runId,
       seed,
       mode,
@@ -1017,7 +1076,12 @@ async function startRun(
       progression: activeBattleProgression,
       social: socialState,
       dailyTrial: dailyDefinition,
+      skillMasteryXp: candidateSave.skillMasteryXp,
     }));
+    activeRunAccountStart = save.accountLevel;
+    if (mode === 'normal') commit(candidateSave);
+    activeRunStaminaSpent = staminaResult?.spent ?? 0;
+    activeBattleEngine = candidateEngine;
 
     phase = 'combat';
     scheduleDeferredBattleAssets();

@@ -34,6 +34,11 @@ describe('createBattleRunInput', () => {
       },
       social: createSocialExpeditionState('2026-W29'),
       dailyTrial: null,
+      skillMasteryXp: {
+        'tidal-volley': 0,
+        'bubble-barrier': 0,
+        'extreme-tide': 0,
+      },
     });
 
     expect(result.enemyHpMultiplier).toBe(0.85);
@@ -44,6 +49,48 @@ describe('createBattleRunInput', () => {
       'extreme-tide': 1,
     });
     expect(result.unlockedSkillVariants).toEqual([]);
+  });
+
+  it('freezes mastery powers and unlocked variants from the save snapshot', () => {
+    const zeroModifiers = {
+      maxHpFlat: 0,
+      maxHpPercent: 0,
+      damageFlat: 0,
+      damagePercent: 0,
+      gearsPercent: 0,
+      initialMomentum: 0,
+      repairFlat: 0,
+    };
+    const result = createBattleRunInput({
+      battleId: 'mastery-snapshot',
+      seed: 17,
+      mode: 'normal',
+      mapId: 'drift-suburb',
+      progression: {
+        maxPlayerHp: 100,
+        damageFlat: 0,
+        damageMultiplier: 1,
+        gearsMultiplier: 1,
+        initialMomentum: 0,
+        repairBonus: 0,
+        skinModifiers: zeroModifiers,
+        equipmentModifiers: zeroModifiers,
+      },
+      social: createSocialExpeditionState('2026-W29'),
+      dailyTrial: null,
+      skillMasteryXp: {
+        'tidal-volley': 20,
+        'bubble-barrier': 0,
+        'extreme-tide': Number.MAX_SAFE_INTEGER,
+      },
+    });
+
+    expect(result.skillMasteryPower).toEqual({
+      'tidal-volley': 1.0075,
+      'bubble-barrier': 1,
+      'extreme-tide': 1.1425,
+    });
+    expect(result.unlockedSkillVariants).toContain('double-crest');
   });
 
   it('combines progression, squad, map and daily rule once', () => {
@@ -98,6 +145,11 @@ describe('createBattleRunInput', () => {
           initialMomentumBonus: 20,
           damageBonus: 0,
         },
+      },
+      skillMasteryXp: {
+        'tidal-volley': 0,
+        'bubble-barrier': 0,
+        'extreme-tide': 0,
       },
     });
 
