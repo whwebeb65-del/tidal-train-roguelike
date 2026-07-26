@@ -20,6 +20,7 @@ import {
 import type {
   BattleFrameView,
 } from '../../../../web/battle/BattleTypes';
+import type { BattleHudModelOptions } from '../../../../web/battle/BattleHudModel';
 import {
   getRenderBudget,
 } from '../../../../web/battle/QualityMonitor';
@@ -144,6 +145,14 @@ export function createFrameFixture(
       },
     ],
     ...patch,
+  };
+}
+
+export function createHudModelOptionsFixture(): BattleHudModelOptions {
+  return {
+    mode: 'normal',
+    upgradeRerollAvailable: false,
+    skillRefreshAvailable: false,
   };
 }
 

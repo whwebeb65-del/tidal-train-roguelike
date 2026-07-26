@@ -3,7 +3,10 @@ import {
   createBattleHudModel,
   renderBattleHudShell,
 } from '../../../web/battle/BattleHUD';
-import { createFrameFixture } from './helpers/BattleFixtures';
+import {
+  createFrameFixture,
+  createHudModelOptionsFixture,
+} from './helpers/BattleFixtures';
 
 describe('BattleHUD', () => {
   it('renders skills, pause, upgrade, failure and settlement hooks', () => {
@@ -79,6 +82,62 @@ describe('BattleHUD', () => {
       currentLevel: 3,
       nextLevel: 4,
     });
+  });
+
+  it('exposes run rank, acquired variants, catalog art, and the next speed unlock', () => {
+    const frame = createFrameFixture({
+      runLevel: 7,
+      skillRanks: {
+        'tidal-volley': 3,
+        'bubble-barrier': 2,
+        'extreme-tide': 5,
+      },
+      skillVariants: {
+        'tidal-volley': ['split-tide-arrow'],
+        'bubble-barrier': [],
+        'extreme-tide': ['undertow-eye', 'double-crest'],
+      },
+    });
+    const availableBattleSpeeds = [1, 1.5] as const;
+    const model = createBattleHudModel(frame, {
+      ...createHudModelOptionsFixture(),
+      battleSpeed: 1.5,
+      availableBattleSpeeds,
+      nextSpeedUnlockLevel: 20,
+    });
+
+    expect(model.runLevelLabel).toBe('Lv.7');
+    expect(model.skills).toMatchObject([
+      {
+        rank: 3,
+        variantIds: ['split-tide-arrow'],
+        iconUrl: expect.stringContaining('tidal-volley-badge'),
+      },
+      { rank: 2, variantIds: [] },
+      { rank: 5, variantIds: ['undertow-eye', 'double-crest'] },
+    ]);
+    expect(model.speed).toEqual({
+      current: 1.5,
+      available: [1, 1.5],
+      nextUnlockLevel: 20,
+    });
+    expect(model.skills[0]?.variantIds).not.toBe(frame.skillVariants['tidal-volley']);
+    expect(model.speed.available).not.toBe(availableBattleSpeeds);
+  });
+
+  it.each([
+    { available: [1] as const, nextUnlockLevel: 10 },
+    { available: [1, 1.5] as const, nextUnlockLevel: 20 },
+    { available: [1, 1.5, 2] as const, nextUnlockLevel: 30 },
+    { available: [1, 1.5, 2, 3] as const, nextUnlockLevel: null },
+  ])('reports the next speed unlock for $available', ({ available, nextUnlockLevel }) => {
+    const model = createBattleHudModel(createFrameFixture(), {
+      ...createHudModelOptionsFixture(),
+      battleSpeed: available.at(-1) ?? 1,
+      availableBattleSpeeds: available,
+    });
+
+    expect(model.speed.nextUnlockLevel).toBe(nextUnlockLevel);
   });
 
   it('places an explicit resume overlay above paused battle outcomes', () => {

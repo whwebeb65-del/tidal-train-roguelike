@@ -11,11 +11,14 @@ import {
   type BattleInteractionClaims,
 } from './BattleInteractionSchedule';
 import { getBattleUpgradeDefinition } from './BattleUpgradeCatalog';
+import { BATTLE_ART_URLS } from '../assets/BattleArtCatalog';
 import type {
   BattleFrameView,
   BattleSkillId,
   BattleUpgradeId,
+  SkillVariantId,
 } from './BattleTypes';
+import type { BattleSpeed } from '../../src/domain/progression/AccountProgressionSystem';
 
 export interface BattleUpgradeCardModel {
   readonly id: BattleUpgradeId;
@@ -34,11 +37,21 @@ export interface BattleSkillModel {
   readonly cooldownLabel: string;
   readonly ready: boolean;
   readonly energyRequired: boolean;
+  readonly rank: number;
+  readonly variantIds: readonly SkillVariantId[];
+  readonly iconUrl: string;
+}
+
+export interface BattleSpeedModel {
+  readonly current: BattleSpeed;
+  readonly available: readonly BattleSpeed[];
+  readonly nextUnlockLevel: number | null;
 }
 
 export interface BattleHudModel {
   readonly status: BattleFrameView['status'];
   readonly waveLabel: string;
+  readonly runLevelLabel: string;
   readonly timerLabel: string;
   readonly hpLabel: string;
   readonly hpPercent: number;
@@ -50,6 +63,7 @@ export interface BattleHudModel {
   readonly experiencePercent: number;
   readonly upgradeIcons: readonly string[];
   readonly skills: readonly BattleSkillModel[];
+  readonly speed: BattleSpeedModel;
   readonly upgradeVisible: boolean;
   readonly upgradeCountdownVisible: boolean;
   readonly upgradeCards: readonly BattleUpgradeCardModel[];
@@ -77,6 +91,9 @@ export interface BattleHudModelOptions {
   readonly reviveAvailable?: boolean;
   readonly settlement?: BattleSettlementPresentation | null;
   readonly pendingActions?: ReadonlySet<string>;
+  readonly battleSpeed?: BattleSpeed;
+  readonly availableBattleSpeeds?: readonly BattleSpeed[];
+  readonly nextSpeedUnlockLevel?: number | null;
 }
 
 const UPGRADE_COPY: Readonly<Record<BattleUpgradeId, {
@@ -185,10 +202,12 @@ export function createBattleHudModel(
   const upgradeCountdownVisible = pendingActions.has('upgrade-resume');
   const visibilityResumeRequired =
     options.visibilityResumeRequired ?? false;
+  const availableBattleSpeeds = options.availableBattleSpeeds ?? [1];
 
   return {
     status: frame.status,
     waveLabel: `第 ${frame.wave} 波`,
+    runLevelLabel: `Lv.${frame.runLevel}`,
     timerLabel: formatBattleTime(frame.elapsedMs),
     hpLabel: `${Math.ceil(frame.trainHp)} / ${frame.maxTrainHp}`,
     hpPercent: percent(frame.trainHp, frame.maxTrainHp),
@@ -211,6 +230,11 @@ export function createBattleHudModel(
         `${UPGRADE_COPY[id as BattleUpgradeId].name} ${level}`
       )),
     skills: createSkillModels(frame),
+    speed: {
+      current: options.battleSpeed ?? 1,
+      available: [...availableBattleSpeeds],
+      nextUnlockLevel: nextSpeedUnlockLevel(availableBattleSpeeds),
+    },
     upgradeVisible:
       !visibilityResumeRequired
       && (frame.status === 'upgrade' || upgradeCountdownVisible),
@@ -273,8 +297,31 @@ function createSkillModels(
         : cooldownMs <= 0 ? '就绪' : `${(cooldownMs / 1000).toFixed(1)}s`,
       ready,
       energyRequired,
+      rank: frame.skillRanks[id],
+      variantIds: [...frame.skillVariants[id]],
+      iconUrl: skillIconUrl(id),
     };
   });
+}
+
+function skillIconUrl(id: BattleSkillId): string {
+  switch (id) {
+    case 'tidal-volley':
+      return BATTLE_ART_URLS.skillTidalVolley;
+    case 'bubble-barrier':
+      return BATTLE_ART_URLS.skillBubbleBarrier;
+    case 'extreme-tide':
+      return BATTLE_ART_URLS.skillExtremeTide;
+  }
+}
+
+function nextSpeedUnlockLevel(
+  available: readonly BattleSpeed[],
+): number | null {
+  if (!available.includes(1.5)) return 10;
+  if (!available.includes(2)) return 20;
+  if (!available.includes(3)) return 30;
+  return null;
 }
 
 function formatBattleTime(elapsedMs: number): string {
