@@ -56,7 +56,13 @@ type MutableProjectileState = Mutable<ProjectileState> & {
   splitMultiplier: number;
 };
 type MutableLootState = Mutable<LootState>;
-type DelayedVolleyAction = { readonly dueAtMs: number; readonly damage: number; readonly count: number };
+type DelayedVolleyAction = {
+  readonly dueAtMs: number;
+  readonly damage: number;
+  readonly count: number;
+  readonly pierceRemaining: number;
+  readonly splitMultiplier: number;
+};
 
 export interface BattleEntityPoolStats {
   readonly projectiles: EntityPoolStats;
@@ -733,23 +739,25 @@ export class BattleEngine {
       dueAtMs: this.elapsedMs + 500,
       damage: Math.floor(damage * profile.returningMultiplier),
       count: profile.returningCount,
+      pierceRemaining: profile.pierceCount,
+      splitMultiplier: profile.splitMultiplier,
     });
   }
 
   private applyBarrier(effectRatio = 1, origin: 'manual' | 'emergency' = 'manual'): void {
     const profile = barrierProfile(this.battleBuild.skillVariants['bubble-barrier']);
-    const heal = Math.floor(
+    const baseHeal = Math.floor(
       this.input.maxTrainHp * this.modifiers.barrierHealPercent,
-    ) * this.skillStrengthMultiplier('bubble-barrier') * effectRatio + this.input.repairBonus;
-    const appliedHeal = Math.min(this.input.maxTrainHp - this.trainHp, Math.floor(heal));
-    const overflow = Math.max(0, Math.floor(heal) - appliedHeal);
+    ) * this.skillStrengthMultiplier('bubble-barrier') + this.input.repairBonus;
+    const heal = effectRatio === 1 ? baseHeal : Math.floor(baseHeal * effectRatio);
+    const appliedHeal = Math.min(this.input.maxTrainHp - this.trainHp, heal);
+    const overflow = Math.max(0, heal - appliedHeal);
     this.trainHp += appliedHeal;
-    this.shield = Math.floor(
-      this.input.maxTrainHp
+    this.shield = this.input.maxTrainHp
         * 0.25
         * this.modifiers.barrierShieldMultiplier
-        * this.skillStrengthMultiplier('bubble-barrier') * effectRatio,
-    ) + Math.min(overflow, Math.floor(this.input.maxTrainHp * profile.overflowShieldCapRatio));
+        * this.skillStrengthMultiplier('bubble-barrier') * effectRatio
+      + Math.min(overflow, this.input.maxTrainHp * profile.overflowShieldCapRatio);
     this.shieldRemainingMs = 4000;
     this.barrierOrigin = origin;
     this.barrierAbsorbedDamage = 0;
@@ -1066,6 +1074,8 @@ export class BattleEngine {
         this.createProjectile({
           source: 'volley', targetId: target.id, damage: action.damage,
           critical: false, splashRadius: 0, chainRemaining: 0,
+          pierceRemaining: action.pierceRemaining,
+          splitMultiplier: action.splitMultiplier,
           xOffset: (projectileIndex - (action.count - 1) / 2) * 5,
         });
       }

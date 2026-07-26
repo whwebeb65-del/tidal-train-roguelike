@@ -50,6 +50,52 @@ describe('BattleEngine skills', () => {
     ))).toBe(true);
   });
 
+  it('preserves split and pierce properties on returning volley projectiles', () => {
+    const engine = new BattleEngine(input);
+    runFor(engine, 500);
+    (engine as unknown as { battleBuild: unknown }).battleBuild = {
+      generalLevels: {},
+      skillRanks: { 'tidal-volley': 2, 'bubble-barrier': 1, 'extreme-tide': 1 },
+      skillVariants: {
+        'tidal-volley': ['split-tide-arrow', 'reef-piercer', 'returning-volley'],
+        'bubble-barrier': [],
+        'extreme-tide': [],
+      },
+    };
+
+    engine.useSkill('tidal-volley');
+    const originalProjectileId = Math.max(...engine.frame.projectiles.map((projectile) => projectile.id));
+    runFor(engine, 510);
+    const returningProjectiles = engine.frame.projectiles.filter((projectile) => (
+      projectile.id > originalProjectileId && projectile.source === 'volley'
+    ));
+
+    expect(returningProjectiles).toHaveLength(4);
+    expect(returningProjectiles.every((projectile) => (
+      projectile.pierceRemaining === 1 && projectile.splitMultiplier === 0.35
+    ))).toBe(true);
+  });
+
+  it('scales the complete emergency barrier heal and retains non-variant shield precision', () => {
+    const emergencyEngine = new BattleEngine(input);
+    (emergencyEngine as unknown as { battleBuild: unknown }).battleBuild = {
+      generalLevels: {},
+      skillRanks: { 'tidal-volley': 1, 'bubble-barrier': 1, 'extreme-tide': 1 },
+      skillVariants: {
+        'tidal-volley': [],
+        'bubble-barrier': ['emergency-trigger'],
+        'extreme-tide': [],
+      },
+    };
+    emergencyEngine.debugDamageTrain(76);
+    expect(emergencyEngine.frame.trainHp).toBe(32);
+    expect(emergencyEngine.frame.shield).toBe(15);
+
+    const baselineEngine = new BattleEngine({ ...input, maxTrainHp: 101 });
+    expect(baselineEngine.useSkill('bubble-barrier')).toBe(true);
+    expect(baselineEngine.frame.shield).toBe(25.25);
+  });
+
   it('fires volley, applies barrier and spends full extreme energy', () => {
     const engine = new BattleEngine(input);
     runFor(engine, 500);
