@@ -98,10 +98,9 @@ export function renderBattleHudShell(): string {
           <small data-hud-combo>等待命中</small>
         </div>
       </div>
-        <div class="battle-hud__progress">
+      <div class="battle-hud__progress">
         <div><span>经验轨道</span><b data-hud-experience-label>0 / 180</b></div>
         <div class="battle-meter battle-meter--experience"><i data-hud-experience-fill></i></div>
-      </div>
       </div>
       <button class="battle-hud__speed" type="button" data-battle-action="speed" aria-label="战斗速度 1×">1×</button>
       <button class="battle-hud__pause" type="button" data-battle-action="pause" aria-label="暂停战斗">暂停</button>
@@ -309,6 +308,10 @@ export class BattleHUD {
       'aria-label',
       `战斗速度 ${formatBattleSpeed(model.speed.current)}${model.speed.nextUnlockLevel === null ? '' : `，下一级解锁 Lv.${model.speed.nextUnlockLevel}`}`,
     );
+    const speedEnabled = this.callbacks.onBattleSpeed !== undefined
+      && model.speed.available.length > 0;
+    nodes.speedButton.disabled = !speedEnabled;
+    nodes.speedButton.setAttribute('aria-disabled', String(!speedEnabled));
 
     for (const skill of model.skills) {
       const button = nodes.skillButtons.get(skill.id);

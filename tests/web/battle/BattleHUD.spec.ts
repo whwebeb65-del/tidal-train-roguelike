@@ -1,7 +1,11 @@
-import { describe, expect, it } from 'vitest';
+// @vitest-environment jsdom
+
+import { describe, expect, it, vi } from 'vitest';
 import {
+  BattleHUD,
   createBattleHudModel,
   renderBattleHudShell,
+  type BattleHudCallbacks,
 } from '../../../web/battle/BattleHUD';
 import {
   createFrameFixture,
@@ -9,6 +13,25 @@ import {
 } from './helpers/BattleFixtures';
 
 describe('BattleHUD', () => {
+  function createCallbacks(
+    overrides: Partial<BattleHudCallbacks> = {},
+  ): BattleHudCallbacks {
+    return {
+      onSkill: vi.fn(),
+      onChooseUpgrade: vi.fn(),
+      onClaimInteraction: vi.fn(),
+      onRequestUpgradeReroll: vi.fn(),
+      onRequestSkillRefresh: vi.fn(),
+      onPause: vi.fn(),
+      onResume: vi.fn(),
+      onRequestRevive: vi.fn(),
+      onRequestDoubleSettlement: vi.fn(),
+      onGiveUp: vi.fn(),
+      onReturnStation: vi.fn(),
+      ...overrides,
+    };
+  }
+
   it('renders skills, pause, upgrade, failure and settlement hooks', () => {
     const html = renderBattleHudShell();
 
@@ -47,6 +70,80 @@ describe('BattleHUD', () => {
 
     expect(model).not.toHaveProperty('bossBar');
     expect(model.hpLabel).toBe('88 / 100');
+  });
+
+  it('updates mounted badges and cycles an enabled speed control', () => {
+    const onBattleSpeed = vi.fn();
+    const hud = new BattleHUD(createCallbacks({ onBattleSpeed }), window);
+    const host = document.createElement('div');
+    document.body.append(host);
+    hud.mount(host);
+    hud.update(createBattleHudModel(createFrameFixture({
+      skillRanks: {
+        'tidal-volley': 1,
+        'bubble-barrier': 1,
+        'extreme-tide': 5,
+      },
+      skillVariants: {
+        'tidal-volley': [],
+        'bubble-barrier': [],
+        'extreme-tide': ['undertow-eye', 'double-crest'],
+      },
+    }), {
+      ...createHudModelOptionsFixture(),
+      battleSpeed: 1.5,
+      availableBattleSpeeds: [1, 1.5],
+    }));
+
+    const tideLog = host.querySelector('.battle-hud__tide-log');
+    const speed = host.querySelector<HTMLButtonElement>(
+      '[data-battle-action="speed"]',
+    );
+    const pause = host.querySelector('[data-battle-action="pause"]');
+    const extremeTide = host.querySelector<HTMLButtonElement>(
+      '[data-battle-skill="extreme-tide"]',
+    );
+    if (!tideLog || !speed || !pause || !extremeTide) {
+      throw new Error('Expected mounted tide-log controls');
+    }
+
+    expect(speed.parentElement).toBe(tideLog);
+    expect(pause.parentElement).toBe(tideLog);
+    expect(extremeTide.dataset.rank).toBe('5');
+    expect(extremeTide.querySelectorAll(
+      '[data-skill-variant]:not([hidden])',
+    )).toHaveLength(2);
+    expect(extremeTide.getAttribute('aria-label')).not.toBe('');
+    expect(speed.textContent).toBe('1.5×');
+    expect(speed.disabled).toBe(false);
+
+    speed.click();
+    expect(onBattleSpeed).toHaveBeenCalledWith(1);
+
+    hud.dispose();
+    host.remove();
+  });
+
+  it('disables the speed control when the callback is unavailable', () => {
+    const hud = new BattleHUD(createCallbacks(), window);
+    const host = document.createElement('div');
+    document.body.append(host);
+    hud.mount(host);
+    hud.update(createBattleHudModel(createFrameFixture(), {
+      ...createHudModelOptionsFixture(),
+      battleSpeed: 1.5,
+      availableBattleSpeeds: [1, 1.5],
+    }));
+    const speed = host.querySelector<HTMLButtonElement>(
+      '[data-battle-action="speed"]',
+    );
+    if (!speed) throw new Error('Expected mounted speed control');
+
+    expect(speed.disabled).toBe(true);
+    expect(speed.getAttribute('aria-disabled')).toBe('true');
+
+    hud.dispose();
+    host.remove();
   });
 
   it('shows cooldown, shield, energy and upgrade information', () => {
