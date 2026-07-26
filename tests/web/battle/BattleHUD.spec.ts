@@ -14,6 +14,27 @@ describe('BattleHUD', () => {
     expect(html).toContain('data-upgrade-options');
     expect(html).toContain('data-failure-overlay');
     expect(html).toContain('data-settlement-overlay');
+    expect(html).not.toContain('data-boss-bar');
+    expect(html).not.toContain('data-boss-label');
+  });
+
+  it('keeps elite and Boss health out of the DOM HUD model', () => {
+    const model = createBattleHudModel(createFrameFixture({
+      enemies: [{
+        ...createFrameFixture().enemies[0]!,
+        kind: 'deep-echo-boss',
+        hp: 2100,
+        maxHp: 4200,
+        shield: 420,
+      }],
+    }), {
+      mode: 'normal',
+      upgradeRerollAvailable: false,
+      skillRefreshAvailable: false,
+    });
+
+    expect(model).not.toHaveProperty('bossBar');
+    expect(model.hpLabel).toBe('88 / 100');
   });
 
   it('shows cooldown, shield, energy and upgrade information', () => {

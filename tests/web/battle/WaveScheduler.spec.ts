@@ -24,6 +24,11 @@ describe('WaveScheduler', () => {
       ENEMY_CONFIG['storm-ray-elite'].experience,
     );
     expect(scheduledExperience).toBeGreaterThanOrEqual(3370);
+    const normalPlayExperience = first.reduce(
+      (total, item) => total + ENEMY_CONFIG[item.kind].experience,
+      0,
+    ) * 0.85 * 0.9 + ENEMY_CONFIG['storm-ray-elite'].experience;
+    expect(normalPlayExperience).toBeGreaterThanOrEqual(3120);
     expect(getWaveAtTime(0)).toBe(1);
     expect(getWaveAtTime(61_000)).toBe(2);
     expect(getWaveAtTime(181_000)).toBe(4);

@@ -2,6 +2,7 @@ import type { EnemyKind } from './BattleTypes';
 
 export const HUD_SAFE_BOTTOM_Y = 108;
 export const ENEMY_HUD_GAP = 12;
+export const ENEMY_MAX_BOB_UP_Y = 2.5;
 
 export const ENEMY_GEOMETRY: Readonly<Record<EnemyKind, {
   readonly width: number;
@@ -28,6 +29,9 @@ export function enemySpawnY(
   hudBottomY = HUD_SAFE_BOTTOM_Y,
 ): number {
   return Math.ceil(
-    hudBottomY + ENEMY_HUD_GAP + ENEMY_GEOMETRY[kind].height * 0.52,
+    hudBottomY
+      + ENEMY_HUD_GAP
+      + ENEMY_MAX_BOB_UP_Y
+      + ENEMY_GEOMETRY[kind].height * 0.55,
   );
 }

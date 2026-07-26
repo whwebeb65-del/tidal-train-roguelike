@@ -40,10 +40,6 @@ interface HudNodes {
   readonly combo: HTMLElement;
   readonly experienceLabel: HTMLElement;
   readonly experienceFill: HTMLElement;
-  readonly boss: HTMLElement;
-  readonly bossLabel: HTMLElement;
-  readonly bossHpFill: HTMLElement;
-  readonly bossShieldFill: HTMLElement;
   readonly upgradeIcons: readonly HTMLElement[];
   readonly skillButtons: ReadonlyMap<BattleSkillId, HTMLButtonElement>;
   readonly upgradeOverlay: HTMLElement;
@@ -86,13 +82,6 @@ export function renderBattleHudShell(): string {
         <span data-hud-time>00:00</span>
       </div>
       <button class="battle-hud__pause" type="button" data-battle-action="pause" aria-label="暂停战斗">Ⅱ</button>
-      <div class="battle-hud__boss" data-boss-bar hidden>
-        <div><strong data-boss-label></strong><span>目标锁定</span></div>
-        <div class="battle-meter battle-meter--boss">
-          <i data-boss-hp-fill></i>
-          <b data-boss-shield-fill></b>
-        </div>
-      </div>
       <div class="battle-hud__vitals">
         <div class="battle-vital battle-vital--hp">
           <span>列车耐久</span><b data-hud-hp-label>100 / 100</b>
@@ -305,11 +294,6 @@ export class BattleHUD {
     setText(nodes.experienceLabel, model.experienceLabel);
     setWidth(nodes.experienceFill, model.experiencePercent);
 
-    nodes.boss.hidden = !model.bossBar.visible;
-    setText(nodes.bossLabel, model.bossBar.label);
-    setWidth(nodes.bossHpFill, model.bossBar.hpPercent);
-    setWidth(nodes.bossShieldFill, model.bossBar.shieldPercent);
-
     nodes.upgradeIcons.forEach((node, index) => {
       const label = model.upgradeIcons[index];
       node.hidden = !label;
@@ -476,10 +460,6 @@ function collectNodes(host: HTMLElement): HudNodes {
     combo: requireElement(host, '[data-hud-combo]'),
     experienceLabel: requireElement(host, '[data-hud-experience-label]'),
     experienceFill: requireElement(host, '[data-hud-experience-fill]'),
-    boss: requireElement(host, '[data-boss-bar]'),
-    bossLabel: requireElement(host, '[data-boss-label]'),
-    bossHpFill: requireElement(host, '[data-boss-hp-fill]'),
-    bossShieldFill: requireElement(host, '[data-boss-shield-fill]'),
     upgradeIcons: [...host.querySelectorAll<HTMLElement>(
       '[data-upgrade-icon]',
     )],

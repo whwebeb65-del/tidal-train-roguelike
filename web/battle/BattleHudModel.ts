@@ -15,7 +15,6 @@ import type {
   BattleFrameView,
   BattleSkillId,
   BattleUpgradeId,
-  EnemyKind,
 } from './BattleTypes';
 
 export interface BattleUpgradeCardModel {
@@ -37,13 +36,6 @@ export interface BattleSkillModel {
   readonly energyRequired: boolean;
 }
 
-export interface BattleBossBarModel {
-  readonly visible: boolean;
-  readonly label: string;
-  readonly hpPercent: number;
-  readonly shieldPercent: number;
-}
-
 export interface BattleHudModel {
   readonly status: BattleFrameView['status'];
   readonly waveLabel: string;
@@ -58,7 +50,6 @@ export interface BattleHudModel {
   readonly experiencePercent: number;
   readonly upgradeIcons: readonly string[];
   readonly skills: readonly BattleSkillModel[];
-  readonly bossBar: BattleBossBarModel;
   readonly upgradeVisible: boolean;
   readonly upgradeCountdownVisible: boolean;
   readonly upgradeCards: readonly BattleUpgradeCardModel[];
@@ -164,25 +155,11 @@ const SKILL_COPY: Readonly<Record<BattleSkillId, {
   'extreme-tide': { name: '极潮爆发', shortcut: '3' },
 };
 
-const BOSS_LABELS: Partial<Record<EnemyKind, string>> = {
-  'storm-ray-elite': '雷鳐督军',
-  'deep-echo-boss': '深海回响',
-};
-
 export function createBattleHudModel(
   frame: BattleFrameView,
   options: BattleHudModelOptions,
 ): BattleHudModel {
   const nextThreshold = frame.nextExperienceThreshold;
-  const activeBoss = frame.enemies.find(
-    (enemy) => (
-      enemy.alive
-      && (
-        enemy.kind === 'storm-ray-elite'
-        || enemy.kind === 'deep-echo-boss'
-      )
-    ),
-  );
   const upgradeCards = frame.offeredUpgradeIds.map((id) => {
     const copy = UPGRADE_COPY[id];
     const currentLevel = frame.upgradeLevels[id] ?? 0;
@@ -234,19 +211,6 @@ export function createBattleHudModel(
         `${UPGRADE_COPY[id as BattleUpgradeId].name} ${level}`
       )),
     skills: createSkillModels(frame),
-    bossBar: activeBoss
-      ? {
-          visible: true,
-          label: BOSS_LABELS[activeBoss.kind] ?? '精英潮兽',
-          hpPercent: percent(activeBoss.hp, activeBoss.maxHp),
-          shieldPercent: percent(activeBoss.shield, activeBoss.maxHp),
-        }
-      : {
-          visible: false,
-          label: '',
-          hpPercent: 0,
-          shieldPercent: 0,
-        },
     upgradeVisible:
       !visibilityResumeRequired
       && (frame.status === 'upgrade' || upgradeCountdownVisible),

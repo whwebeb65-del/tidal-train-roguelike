@@ -15,7 +15,11 @@ import {
 } from './helpers/BattleFixtures';
 import { createRecordingPainter } from './helpers/RecordingPainter';
 import { getRenderBudget } from '../../../web/battle/QualityMonitor';
-import { ENEMY_GEOMETRY } from '../../../web/battle/EnemyGeometry';
+import {
+  ENEMY_GEOMETRY,
+  enemySpawnY,
+} from '../../../web/battle/EnemyGeometry';
+import type { EnemyKind } from '../../../web/battle/BattleTypes';
 
 interface TestPose {
   readonly offsetX: number;
@@ -122,6 +126,40 @@ function trainSignatureFeature(commands: readonly BattleDrawCommand[]) {
 }
 
 describe('BattleRenderer', () => {
+  it.each(Object.keys(ENEMY_GEOMETRY) as EnemyKind[])(
+    'keeps animated %s sprite, label, and health bar below the HUD gap',
+    (kind) => {
+      const source = createFrameFixture().enemies[0]!;
+      const commands = renderCommands({
+        reducedMotion: false,
+        frame: {
+          enemies: [{
+            ...source,
+            id: 1,
+            kind,
+            y: enemySpawnY(kind),
+            alive: true,
+          }],
+        },
+      });
+      const sprite = findCommand<ImageDrawCommand>(
+        commands,
+        (item) => item.kind === 'enemy' && item.enemyKind === kind,
+      );
+      const label = findCommand<BattleDrawCommand>(
+        commands,
+        (item) => item.kind === 'enemy-name',
+      );
+      const health = findCommand<LineDrawCommand>(
+        commands,
+        (item) => item.kind === 'enemy-hp-track',
+      );
+      expect(sprite.y - sprite.height).toBeGreaterThanOrEqual(120);
+      expect('y' in label ? label.y : 0).toBeGreaterThanOrEqual(120);
+      expect(health.points[0]?.y).toBeGreaterThanOrEqual(120);
+    },
+  );
+
   it('draws one name and health bar per living enemy below the HUD-safe edge', () => {
     const frame = createFrameFixture();
     const commands = renderCommands({
