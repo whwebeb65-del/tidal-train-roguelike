@@ -7,6 +7,8 @@ import type {
   BattleSkillId,
   BattleUpgradeId,
 } from './BattleTypes';
+import type { BattleSpeed } from '../../src/domain/progression/AccountProgressionSystem';
+import { BATTLE_ART_URLS, BATTLE_VARIANT_GLYPH_URLS } from '../assets/BattleArtCatalog';
 
 export {
   createBattleHudModel,
@@ -27,11 +29,13 @@ export interface BattleHudCallbacks {
   onRequestDoubleSettlement(): void;
   onGiveUp(): void;
   onReturnStation(): void;
+  onBattleSpeed?(speed: BattleSpeed): void;
 }
 
 interface HudNodes {
   readonly wave: HTMLElement;
   readonly timer: HTMLElement;
+  readonly runLevel: HTMLElement;
   readonly hpLabel: HTMLElement;
   readonly hpFill: HTMLElement;
   readonly shield: HTMLElement;
@@ -40,8 +44,8 @@ interface HudNodes {
   readonly combo: HTMLElement;
   readonly experienceLabel: HTMLElement;
   readonly experienceFill: HTMLElement;
-  readonly upgradeIcons: readonly HTMLElement[];
   readonly skillButtons: ReadonlyMap<BattleSkillId, HTMLButtonElement>;
+  readonly speedButton: HTMLButtonElement;
   readonly upgradeOverlay: HTMLElement;
   readonly upgradeOptions: HTMLElement;
   readonly upgradeButtons: readonly HTMLButtonElement[];
@@ -76,13 +80,13 @@ const SKILL_IDS: readonly BattleSkillId[] = [
 
 export function renderBattleHudShell(): string {
   return `<div class="battle-hud" data-battle-hud-root>
-    <header class="battle-hud__top">
+    <header class="battle-hud__tide-log">
       <div class="battle-hud__run">
         <strong data-hud-wave>第 1 波</strong>
         <span data-hud-time>00:00</span>
+        <b data-hud-run-level>Lv.1</b>
       </div>
-      <button class="battle-hud__pause" type="button" data-battle-action="pause" aria-label="暂停战斗">Ⅱ</button>
-      <div class="battle-hud__vitals">
+      <div class="battle-hud__rails">
         <div class="battle-vital battle-vital--hp">
           <span>列车耐久</span><b data-hud-hp-label>100 / 100</b>
           <div class="battle-meter"><i data-hud-hp-fill></i></div>
@@ -94,20 +98,18 @@ export function renderBattleHudShell(): string {
           <small data-hud-combo>等待命中</small>
         </div>
       </div>
-      <div class="battle-hud__progress">
-        <div><span>本局强化</span><b data-hud-experience-label>0 / 180</b></div>
+        <div class="battle-hud__progress">
+        <div><span>经验轨道</span><b data-hud-experience-label>0 / 180</b></div>
         <div class="battle-meter battle-meter--experience"><i data-hud-experience-fill></i></div>
-        <div class="battle-hud__upgrade-icons" aria-label="已获得强化">
-          ${Array.from({ length: 6 }, (_, index) => (
-            `<span data-upgrade-icon="${index}" hidden></span>`
-          )).join('')}
-        </div>
       </div>
+      </div>
+      <button class="battle-hud__speed" type="button" data-battle-action="speed" aria-label="战斗速度 1×">1×</button>
+      <button class="battle-hud__pause" type="button" data-battle-action="pause" aria-label="暂停战斗">暂停</button>
     </header>
 
     <aside class="battle-interaction" aria-live="polite">
       <button type="button" data-battle-action="claim-interaction" hidden>
-        <span class="battle-interaction__symbol" aria-hidden="true">◇</span>
+        <span class="battle-interaction__symbol" aria-hidden="true">潮</span>
         <span><b data-interaction-title></b><small data-interaction-meta></small></span>
         <strong>领取</strong>
       </button>
@@ -115,9 +117,9 @@ export function renderBattleHudShell(): string {
     </aside>
 
     <div class="battle-hud__skills" aria-label="主动技能">
-      ${skillButton('tidal-volley', '潮汐齐射', '1', '≈')}
-      ${skillButton('bubble-barrier', '泡泡屏障', '2', '◌')}
-      ${skillButton('extreme-tide', '极潮爆发', '3', '✦')}
+      ${skillButton('tidal-volley', '潮汐齐射', '1', BATTLE_ART_URLS.skillTidalVolley)}
+      ${skillButton('bubble-barrier', '泡泡屏障', '2', BATTLE_ART_URLS.skillBubbleBarrier)}
+      ${skillButton('extreme-tide', '极潮爆发', '3', BATTLE_ART_URLS.skillExtremeTide)}
       <button class="battle-hud__refresh" type="button" data-battle-action="skill-refresh" hidden>广告刷新技能</button>
     </div>
 
@@ -161,9 +163,9 @@ export function renderBattleHudShell(): string {
         <h2 data-settlement-title></h2>
         <p data-settlement-description></p>
         <div class="battle-settlement-rewards">
-          <span><i>⚙</i><b data-settlement-gears>0</b><small>齿轮</small></span>
-          <span><i>◇</i><b data-settlement-route-marks>0</b><small>航线徽记</small></span>
-          <span><i>✦</i><b data-settlement-star-tickets>0</b><small>星票</small></span>
+          <span><i>齿轮</i><b data-settlement-gears>0</b><small>齿轮</small></span>
+          <span><i>徽记</i><b data-settlement-route-marks>0</b><small>航线徽记</small></span>
+          <span><i>星票</i><b data-settlement-star-tickets>0</b><small>星票</small></span>
         </div>
         <div class="battle-settlement-meta">
           <span data-settlement-expedition hidden></span>
@@ -203,6 +205,13 @@ export class BattleHUD {
       return;
     }
     const action = button.dataset.battleAction;
+    if (action === 'speed' && this.model) {
+      const available = this.model.speed.available;
+      const currentIndex = available.indexOf(this.model.speed.current);
+      const nextSpeed = available[(currentIndex + 1) % available.length];
+      if (nextSpeed !== undefined) this.callbacks.onBattleSpeed?.(nextSpeed);
+      return;
+    }
     if (action === 'pause') this.callbacks.onPause();
     if (action === 'resume') this.callbacks.onResume();
     if (action === 'upgrade-reroll') {
@@ -285,6 +294,7 @@ export class BattleHUD {
 
     setText(nodes.wave, model.waveLabel);
     setText(nodes.timer, model.timerLabel);
+    setText(nodes.runLevel, model.runLevelLabel);
     setText(nodes.hpLabel, model.hpLabel);
     setWidth(nodes.hpFill, model.hpPercent);
     setText(nodes.shield, model.shieldLabel);
@@ -294,15 +304,32 @@ export class BattleHUD {
     setText(nodes.experienceLabel, model.experienceLabel);
     setWidth(nodes.experienceFill, model.experiencePercent);
 
-    nodes.upgradeIcons.forEach((node, index) => {
-      const label = model.upgradeIcons[index];
-      node.hidden = !label;
-      if (label) setText(node, label);
-    });
+    setText(nodes.speedButton, formatBattleSpeed(model.speed.current));
+    nodes.speedButton.setAttribute(
+      'aria-label',
+      `战斗速度 ${formatBattleSpeed(model.speed.current)}${model.speed.nextUnlockLevel === null ? '' : `，下一级解锁 Lv.${model.speed.nextUnlockLevel}`}`,
+    );
 
     for (const skill of model.skills) {
       const button = nodes.skillButtons.get(skill.id);
       if (!button) continue;
+      button.dataset.rank = String(skill.rank);
+      setText(requireElement(button, '[data-skill-rank]'), `Rank ${skill.rank}`);
+      const icon = requireElement<HTMLImageElement>(button, '[data-skill-icon]');
+      if (icon.src !== skill.iconUrl) icon.src = skill.iconUrl;
+      const glyphs = [...button.querySelectorAll<HTMLImageElement>('[data-skill-variant]')];
+      glyphs.forEach((glyph, index) => {
+        const variantId = skill.variantIds[index];
+        glyph.hidden = !variantId;
+        if (!variantId) {
+          glyph.removeAttribute('src');
+          glyph.removeAttribute('alt');
+          return;
+        }
+        const glyphUrl = BATTLE_VARIANT_GLYPH_URLS[variantId];
+        if (glyph.src !== glyphUrl) glyph.src = glyphUrl;
+        glyph.alt = variantId;
+      });
       setText(
         requireElement(button, '[data-skill-cooldown]'),
         skill.cooldownLabel,
@@ -313,7 +340,12 @@ export class BattleHUD {
         model.status !== 'running'
         || model.pendingActions.has(`skill:${skill.id}`)
       );
-      button.setAttribute('aria-label', `${skill.name} ${skill.cooldownLabel}`);
+      const variantStatus = skill.variantIds.length > 0
+        ? `，变体 ${skill.variantIds.join('、')}`
+        : '';
+      const status = `${skill.name}，Rank ${skill.rank}${variantStatus}，${skill.cooldownLabel}`;
+      setText(requireElement(button, '[data-skill-status]'), status);
+      button.setAttribute('aria-label', status);
     }
 
     nodes.skillRefreshButton.hidden = !model.skillRefreshVisible;
@@ -423,12 +455,15 @@ function skillButton(
   id: BattleSkillId,
   label: string,
   shortcut: string,
-  icon: string,
+  iconUrl: string,
 ): string {
-  return `<button class="battle-skill" type="button" data-battle-skill="${id}">
+  return `<button class="battle-skill" type="button" data-battle-skill="${id}" data-rank="1" aria-label="${label}，Rank 1">
     <span class="battle-skill__key">${shortcut}</span>
-    <span class="battle-skill__icon" aria-hidden="true">${icon}</span>
+    <span class="battle-skill__icon"><img data-skill-icon src="${iconUrl}" alt="" /></span>
+    <span class="battle-skill__rank" data-skill-rank>Rank 1</span>
+    <span class="battle-skill__variants" data-skill-variants aria-hidden="true"><img data-skill-variant hidden /><img data-skill-variant hidden /></span>
     <span class="battle-skill__copy"><b>${label}</b><small data-skill-cooldown>就绪</small></span>
+    <span class="sr-only" data-skill-status>${label}，Rank 1</span>
   </button>`;
 }
 
@@ -452,6 +487,7 @@ function collectNodes(host: HTMLElement): HudNodes {
   return {
     wave: requireElement(host, '[data-hud-wave]'),
     timer: requireElement(host, '[data-hud-time]'),
+    runLevel: requireElement(host, '[data-hud-run-level]'),
     hpLabel: requireElement(host, '[data-hud-hp-label]'),
     hpFill: requireElement(host, '[data-hud-hp-fill]'),
     shield: requireElement(host, '[data-hud-shield]'),
@@ -460,10 +496,8 @@ function collectNodes(host: HTMLElement): HudNodes {
     combo: requireElement(host, '[data-hud-combo]'),
     experienceLabel: requireElement(host, '[data-hud-experience-label]'),
     experienceFill: requireElement(host, '[data-hud-experience-fill]'),
-    upgradeIcons: [...host.querySelectorAll<HTMLElement>(
-      '[data-upgrade-icon]',
-    )],
     skillButtons,
+    speedButton: requireElement(host, '[data-battle-action="speed"]'),
     upgradeOverlay: requireElement(host, '[data-upgrade-overlay]'),
     upgradeOptions: requireElement(host, '[data-upgrade-options]'),
     upgradeButtons: [...host.querySelectorAll<HTMLButtonElement>(
@@ -521,4 +555,8 @@ function setText(node: HTMLElement, value: string): void {
 function setWidth(node: HTMLElement, percent: number): void {
   const value = `${Math.min(100, Math.max(0, percent)).toFixed(2)}%`;
   if (node.style.width !== value) node.style.width = value;
+}
+
+function formatBattleSpeed(speed: BattleSpeed): string {
+  return `${speed}×`;
 }

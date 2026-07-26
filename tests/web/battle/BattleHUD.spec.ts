@@ -17,6 +17,15 @@ describe('BattleHUD', () => {
     expect(html).toContain('data-upgrade-options');
     expect(html).toContain('data-failure-overlay');
     expect(html).toContain('data-settlement-overlay');
+    expect(html).toContain('data-hud-run-level');
+    expect(html).toContain('data-battle-action="speed"');
+    expect(html).toContain('data-skill-rank');
+    expect(html).toContain('data-skill-variants');
+    expect(html.match(/data-skill-icon/g)).toHaveLength(3);
+    expect(html.match(/data-skill-variant\b/g)).toHaveLength(6);
+    expect(html).not.toContain('≈');
+    expect(html).not.toContain('◌');
+    expect(html).not.toContain('✦');
     expect(html).not.toContain('data-boss-bar');
     expect(html).not.toContain('data-boss-label');
   });
