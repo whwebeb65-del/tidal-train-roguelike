@@ -170,6 +170,7 @@ import { renderSocialHubView } from './views/SocialHubView';
 import { mountAppShell } from './app/AppShell';
 import { StationDepartureController } from './app/StationDepartureController';
 import { StationRunCoordinator } from './app/StationRunCoordinator';
+import type { StationRunResult, StationRunTask } from './app/StationRunCoordinator';
 import { SceneRouter } from './app/SceneRouter';
 import { BattleScene } from './scenes/BattleScene';
 import { createCaptainScene } from './scenes/CaptainScene';
@@ -199,13 +200,33 @@ export interface RuntimeSettingsBridge {
   ): GameSettings;
 }
 
+export interface LegacyRuntimeTestSnapshot {
+  readonly phase: 'station' | 'combat';
+  readonly stamina: number;
+  readonly accountXp: number;
+  readonly activeRunStaminaSpent: number;
+  readonly preparedBattleScene: boolean;
+}
+
+export interface LegacyRuntimeDependencies {
+  readonly nowMs?: () => number;
+  readonly onTestSnapshot?: (snapshot: LegacyRuntimeTestSnapshot) => void;
+  readonly prepareStationRun?: (
+    task: StationRunTask<BattleAssetSet<BattleArtId>>,
+  ) => Promise<StationRunResult<BattleAssetSet<BattleArtId>>>;
+  readonly prepareBattleScene?: (
+    engine: BattleEngine,
+    assets: BattleAssetSet<BattleArtId>,
+  ) => BattleScene;
+}
+
 export function createLegacyGameRuntime(
   app: HTMLElement,
   storage: Storage,
   reducedMotion: boolean,
   audio: AudioManager,
   settingsBridge: RuntimeSettingsBridge,
-  dependencies: { readonly nowMs?: () => number } = {},
+  dependencies: LegacyRuntimeDependencies = {},
 ): LegacyGameRuntime {
 const appStateRepository = createBrowserAppStateRepository(storage);
 const initialState = appStateRepository.load();
@@ -972,6 +993,13 @@ async function syncView(): Promise<void> {
 
   if (router.currentSceneId === targetScene) {
     if (targetScene !== 'battle') await router.refresh();
+    dependencies.onTestSnapshot?.({
+      phase,
+      stamina: save.stamina,
+      accountXp: save.accountXp,
+      activeRunStaminaSpent,
+      preparedBattleScene: preparedBattleScene !== null,
+    });
     return;
   }
 
@@ -981,6 +1009,13 @@ async function syncView(): Promise<void> {
       ? 'back'
       : 'forward';
   await router.go(targetScene, direction);
+  dependencies.onTestSnapshot?.({
+    phase,
+    stamina: save.stamina,
+    accountXp: save.accountXp,
+    activeRunStaminaSpent,
+    preparedBattleScene: preparedBattleScene !== null,
+  });
 }
 
 function render(): void {
@@ -1012,16 +1047,20 @@ async function startRun(
     effectiveReducedMotion,
   );
   try {
-    const preparation = await stationRunCoordinator.prepare({
+    const stationTask: StationRunTask<BattleAssetSet<BattleArtId>> = {
       beginCharging: () => departure.beginCharging(),
       loadAssets: () => loadCriticalBattleAssets(getActiveCaptainArtId()),
       playDeparture: () => departure.playDeparture(),
       cancelDeparture: () => departure.dispose(),
-    });
+    };
+    const preparation = await (dependencies.prepareStationRun
+      ? dependencies.prepareStationRun(stationTask)
+      : stationRunCoordinator.prepare(stationTask));
     let currentBattleAssets: BattleAssetSet<BattleArtId>;
     switch (preparation.status) {
       case 'ready':
         currentBattleAssets = preparation.assets;
+        battleAssets = currentBattleAssets;
         break;
       case 'local-abort':
         notice = stationNotice;
@@ -1097,7 +1136,10 @@ async function startRun(
     }));
     activeBattleEngine = candidateEngine;
     preparedBattleAccountLevel = candidateSave.accountLevel;
-    preparedBattleScene = createBattleScene(candidateEngine, currentBattleAssets);
+    preparedBattleScene = dependencies.prepareBattleScene?.(
+      candidateEngine,
+      currentBattleAssets,
+    ) ?? createBattleScene(candidateEngine, currentBattleAssets);
     activeBattleScene = preparedBattleScene;
     phase = 'combat';
     await syncView();
