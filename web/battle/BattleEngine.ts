@@ -7,7 +7,6 @@ import {
   MAIN_CANNON_INTERVAL_MS,
   MAIN_PROJECTILE_SPEED,
   SKILL_CONFIG,
-  UPGRADE_IDS,
 } from './BattleConfig';
 import { BATTLE_UPGRADE_DEFINITIONS } from './BattleUpgradeCatalog';
 import { SeededRandom } from './SeededRandom';

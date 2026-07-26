@@ -71,9 +71,9 @@ export function createBattleRunInput(input: {
     enemyHpMultiplier: difficulty.hp,
     enemyDamageMultiplier: difficulty.damage,
     skillMasteryPower: {
-      'tidal-volley': 0,
-      'bubble-barrier': 0,
-      'extreme-tide': 0,
+      'tidal-volley': 1,
+      'bubble-barrier': 1,
+      'extreme-tide': 1,
     },
     unlockedSkillVariants: [],
   };
