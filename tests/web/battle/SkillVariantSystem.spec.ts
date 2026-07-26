@@ -1,12 +1,30 @@
 import { describe, expect, it } from 'vitest';
 import {
   barrierProfile,
+  extremeProfile,
   reflectBarrierDamage,
   shouldEmergencyTrigger,
   volleyProfile,
 } from '../../../web/battle/SkillVariantSystem';
 
 describe('SkillVariantSystem', () => {
+  it('builds all extreme tide variant values', () => {
+    expect(extremeProfile([
+      'undertow-eye',
+      'lingering-vortex',
+      'energy-return',
+      'double-crest',
+    ])).toEqual({
+      pullDurationMs: 2000,
+      vortexDurationMs: 4000,
+      vortexTotalDamageMultiplier: 2,
+      energyPerKill: 2,
+      energyRefundCap: 20,
+      secondCrestDelayMs: 1200,
+      secondCrestDamageRatio: 0.45,
+    });
+  });
+
   it('builds the approved volley mutation profile', () => {
     expect(volleyProfile([
       'split-tide-arrow',

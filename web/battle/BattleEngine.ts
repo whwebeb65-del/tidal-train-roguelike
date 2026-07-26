@@ -45,7 +45,7 @@ import {
   EntityPool,
   type EntityPoolStats,
 } from './EntityPool';
-import { barrierProfile, reflectBarrierDamage, shouldEmergencyTrigger, volleyProfile } from './SkillVariantSystem';
+import { barrierProfile, extremeProfile, reflectBarrierDamage, shouldEmergencyTrigger, volleyProfile } from './SkillVariantSystem';
 
 type Mutable<T> = {
   -readonly [Property in keyof T]: T[Property];
@@ -63,6 +63,21 @@ type DelayedVolleyAction = {
   readonly pierceRemaining: number;
   readonly splitMultiplier: number;
 };
+type DelayedExtremeCrestAction = {
+  readonly dueAtMs: number;
+  readonly damage: number;
+  readonly durationMs: number;
+};
+type ActiveExtremeEffect = {
+  pullRemainingMs: number;
+  vortexRemainingMs: number;
+  vortexTickElapsedMs: number;
+  vortexTicksApplied: number;
+  readonly vortexTotalDamage: number;
+  readonly energyPerKill: number;
+  readonly energyRefundCap: number;
+  energyRefunded: number;
+};
 
 export interface BattleEntityPoolStats {
   readonly projectiles: EntityPoolStats;
@@ -75,6 +90,7 @@ export class BattleEngine {
   private readonly projectiles: MutableProjectileState[] = [];
   private readonly loot: MutableLootState[] = [];
   private readonly delayedVolleyActions: DelayedVolleyAction[] = [];
+  private readonly delayedExtremeCrestActions: DelayedExtremeCrestAction[] = [];
   private readonly projectilePool = new EntityPool<MutableProjectileState>(
     () => ({
       id: 0,
@@ -154,6 +170,7 @@ export class BattleEngine {
   private bossSummonIndex = 0;
   private bossChargeIndex = 0;
   private pendingBossChargeAtMs: number | null = null;
+  private activeExtremeEffect: ActiveExtremeEffect | null = null;
   private readonly cooldowns: Record<BattleSkillId, number> = {
     'tidal-volley': 0,
     'bubble-barrier': 0,
@@ -250,12 +267,39 @@ export class BattleEngine {
           * this.modifiers.extremeDamageMultiplier
           * this.skillStrengthMultiplier(skillId),
       );
+      const profile = extremeProfile(this.battleBuild.skillVariants['extreme-tide']);
+      this.activeExtremeEffect = {
+        pullRemainingMs: profile.pullDurationMs,
+        vortexRemainingMs: profile.vortexDurationMs,
+        vortexTickElapsedMs: 0,
+        vortexTicksApplied: 0,
+        vortexTotalDamage: Math.floor(
+          this.input.mainCannonDamage
+            * profile.vortexTotalDamageMultiplier
+            * this.skillStrengthMultiplier(skillId),
+        ),
+        energyPerKill: profile.energyPerKill,
+        energyRefundCap: profile.energyRefundCap,
+        energyRefunded: 0,
+      };
       for (const enemy of this.enemies) {
         if (enemy.alive) {
           this.applyDamage(enemy, damage, false, 'extreme-tide');
         }
       }
-      this.energy = 0;
+      if (profile.pullDurationMs > 0) {
+        this.events.push({ type: 'extreme-pull-started', durationMs: profile.pullDurationMs });
+      }
+      if (profile.vortexDurationMs > 0) {
+        this.events.push({ type: 'extreme-vortex-started', durationMs: profile.vortexDurationMs });
+      }
+      if (profile.secondCrestDelayMs > 0) {
+        this.delayedExtremeCrestActions.push({
+          dueAtMs: this.elapsedMs + profile.secondCrestDelayMs,
+          damage: Math.floor(damage * profile.secondCrestDamageRatio),
+          durationMs: profile.secondCrestDelayMs,
+        });
+      }
     } else {
       if (this.cooldowns[skillId] > 0) return false;
       if (skillId === 'tidal-volley' && !this.hasLivingTarget()) {
@@ -409,8 +453,10 @@ export class BattleEngine {
       this.phaseElapsedMs += stepMs;
       this.updateTimers(stepMs);
       this.runDelayedVolleyActions();
+      this.runDelayedExtremeCrestActions();
       this.spawnScheduledEnemies();
       this.maybeSpawnElite();
+      this.updateExtremeEffects(stepMs);
       this.moveEnemies(stepMs);
       this.updateEliteMechanics();
       this.updateBossMechanics(stepMs);
@@ -957,10 +1003,21 @@ export class BattleEngine {
     enemy.alive = false;
     enemy.hp = 0;
     this.kills += 1;
-    this.energy = Math.min(
-      100,
-      this.energy + Math.floor(4 * this.modifiers.energyGainMultiplier),
-    );
+    const effect = this.activeExtremeEffect;
+    if (!effect) {
+      this.energy = Math.min(
+        100,
+        this.energy + Math.floor(4 * this.modifiers.energyGainMultiplier),
+      );
+    } else if (effect.energyPerKill > 0 && effect.energyRefunded < effect.energyRefundCap) {
+      const amount = Math.min(
+        effect.energyPerKill,
+        effect.energyRefundCap - effect.energyRefunded,
+      );
+      effect.energyRefunded += amount;
+      this.energy = Math.min(100, this.energy + amount);
+      this.events.push({ type: 'extreme-energy-refunded', amount });
+    }
     this.events.push({
       type: 'enemy-killed',
       enemyId: enemy.id,
@@ -1079,6 +1136,62 @@ export class BattleEngine {
           xOffset: (projectileIndex - (action.count - 1) / 2) * 5,
         });
       }
+    }
+  }
+
+  private runDelayedExtremeCrestActions(): void {
+    for (let index = this.delayedExtremeCrestActions.length - 1; index >= 0; index -= 1) {
+      const action = this.delayedExtremeCrestActions[index];
+      if (!action || action.dueAtMs > this.elapsedMs) continue;
+      this.delayedExtremeCrestActions.splice(index, 1);
+      for (const enemy of this.enemies) {
+        if (enemy.alive) this.applyDamage(enemy, action.damage, false, 'extreme-tide');
+      }
+      this.events.push({
+        type: 'extreme-second-crest',
+        durationMs: action.durationMs,
+        amount: action.damage,
+      });
+    }
+  }
+
+  private updateExtremeEffects(stepMs: number): void {
+    const effect = this.activeExtremeEffect;
+    if (!effect) return;
+    if (effect.pullRemainingMs > 0) {
+      const activeMs = Math.min(stepMs, effect.pullRemainingMs);
+      const maxDistance = 220 * activeMs / 1000;
+      for (const enemy of this.enemies) {
+        if (!enemy.alive) continue;
+        const deltaX = 195 - enemy.x;
+        const deltaY = DEFENCE_LINE_Y - enemy.y;
+        const distance = Math.hypot(deltaX, deltaY);
+        if (distance <= maxDistance || distance === 0) {
+          enemy.x = 195;
+          enemy.y = Math.min(DEFENCE_LINE_Y, enemy.y + deltaY);
+        } else {
+          enemy.x += deltaX / distance * maxDistance;
+          enemy.y = Math.min(DEFENCE_LINE_Y, enemy.y + deltaY / distance * maxDistance);
+        }
+      }
+      effect.pullRemainingMs -= activeMs;
+    }
+    if (effect.vortexRemainingMs > 0) {
+      const activeMs = Math.min(stepMs, effect.vortexRemainingMs);
+      effect.vortexRemainingMs -= activeMs;
+      effect.vortexTickElapsedMs += activeMs;
+      while (effect.vortexTickElapsedMs >= 500 && effect.vortexTicksApplied < 8) {
+        effect.vortexTickElapsedMs -= 500;
+        effect.vortexTicksApplied += 1;
+        const damage = Math.floor(effect.vortexTotalDamage * effect.vortexTicksApplied / 8)
+          - Math.floor(effect.vortexTotalDamage * (effect.vortexTicksApplied - 1) / 8);
+        for (const enemy of this.enemies) {
+          if (enemy.alive) this.applyDamage(enemy, damage, false, 'extreme-tide');
+        }
+      }
+    }
+    if (effect.pullRemainingMs <= 0 && effect.vortexRemainingMs <= 0) {
+      this.activeExtremeEffect = null;
     }
   }
 

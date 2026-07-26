@@ -25,6 +25,64 @@ function runFor(engine: BattleEngine, durationMs: number): void {
 }
 
 describe('BattleEngine skills', () => {
+  it('simulates extreme tide variants at exact deterministic timings', () => {
+    const engine = new BattleEngine(input);
+    runFor(engine, 500);
+    const internals = engine as unknown as {
+      battleBuild: unknown;
+      nextSpawnIndex: number;
+      spawnEnemy: (kind: 'bubble-fin', lane: 0 | 1 | 2) => { hp: number; maxHp: number; y: number };
+    };
+    internals.nextSpawnIndex = Number.MAX_SAFE_INTEGER;
+    internals.battleBuild = {
+      generalLevels: {},
+      skillRanks: { 'tidal-volley': 1, 'bubble-barrier': 1, 'extreme-tide': 2 },
+      skillVariants: {
+        'tidal-volley': [],
+        'bubble-barrier': [],
+        'extreme-tide': ['undertow-eye', 'lingering-vortex', 'energy-return', 'double-crest'],
+      },
+    };
+    for (const enemy of engine.frame.enemies) {
+      enemy.alive = false;
+    }
+    const target = internals.spawnEnemy('bubble-fin', 0);
+    target.hp = target.maxHp = 10_000;
+    target.y = 300;
+    engine.drainEvents();
+
+    expect(engine.useSkill('extreme-tide')).toBe(true);
+    expect(engine.drainEvents()).toEqual(expect.arrayContaining([
+      expect.objectContaining({ type: 'extreme-pull-started', durationMs: 2000 }),
+      expect.objectContaining({ type: 'extreme-vortex-started', durationMs: 4000 }),
+    ]));
+    runFor(engine, 1200);
+    const earlyEvents = engine.drainEvents();
+    const crestEvents = earlyEvents.filter((event) => (
+      event.type === 'extreme-second-crest'
+    ));
+    expect(crestEvents).toHaveLength(1);
+    expect(crestEvents[0]).toMatchObject({ durationMs: 1200 });
+
+    const earlyVortexHits = earlyEvents.filter((event) => (
+      event.type === 'projectile-hit' && event.source === 'extreme-tide'
+    ));
+    runFor(engine, 4000);
+    const laterVortexHits = engine.drainEvents().filter((event) => (
+      event.type === 'projectile-hit' && event.source === 'extreme-tide'
+    ));
+    expect([...earlyVortexHits, ...laterVortexHits]).toHaveLength(9);
+
+    const refundEngine = new BattleEngine(input);
+    const refundInternals = refundEngine as unknown as typeof internals;
+    refundInternals.battleBuild = internals.battleBuild;
+    for (let index = 0; index < 10; index += 1) refundInternals.spawnEnemy('bubble-fin', 1);
+    expect(refundEngine.useSkill('extreme-tide')).toBe(true);
+    expect(refundEngine.frame.energy).toBe(20);
+    expect(refundEngine.drainEvents().filter((event) => event.type === 'extreme-energy-refunded'))
+      .toHaveLength(10);
+  });
+
   it('applies volley variants alongside the rank multiplier', () => {
     const engine = new BattleEngine(input);
     runFor(engine, 500);

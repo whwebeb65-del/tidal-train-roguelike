@@ -224,6 +224,14 @@ export type BattleEvent =
   | { readonly type: 'shield-changed'; readonly shield: number }
   | { readonly type: 'barrier-burst' }
   | { readonly type: 'skill-used'; readonly skillId: BattleSkillId }
+  | { readonly type: 'extreme-pull-started'; readonly durationMs: number }
+  | { readonly type: 'extreme-vortex-started'; readonly durationMs: number }
+  | {
+      readonly type: 'extreme-second-crest';
+      readonly durationMs: number;
+      readonly amount: number;
+    }
+  | { readonly type: 'extreme-energy-refunded'; readonly amount: number }
   | { readonly type: 'skill-cooldowns-refreshed' }
   | {
       readonly type: 'upgrade-offered';

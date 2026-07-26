@@ -18,6 +18,16 @@ export interface BarrierProfile {
   readonly emergencyEffectRatio: number;
 }
 
+export interface ExtremeProfile {
+  readonly pullDurationMs: number;
+  readonly vortexDurationMs: number;
+  readonly vortexTotalDamageMultiplier: number;
+  readonly energyPerKill: number;
+  readonly energyRefundCap: number;
+  readonly secondCrestDelayMs: number;
+  readonly secondCrestDamageRatio: number;
+}
+
 export interface EmergencyTriggerInput {
   readonly currentHp: number;
   readonly maxHp: number;
@@ -43,6 +53,16 @@ const BASE_BARRIER_PROFILE: BarrierProfile = {
   emergencyEffectRatio: 0,
 };
 
+const BASE_EXTREME_PROFILE: ExtremeProfile = {
+  pullDurationMs: 0,
+  vortexDurationMs: 0,
+  vortexTotalDamageMultiplier: 0,
+  energyPerKill: 0,
+  energyRefundCap: 0,
+  secondCrestDelayMs: 0,
+  secondCrestDamageRatio: 0,
+};
+
 export function volleyProfile(
   variants: readonly SkillVariantId[],
 ): VolleyProfile {
@@ -66,6 +86,27 @@ export function barrierProfile(
     ...(variants.includes('reflective-spines') ? { reflectRatio: 0.35 } : {}),
     ...(variants.includes('overflow-membrane') ? { overflowShieldCapRatio: 0.15 } : {}),
     ...(variants.includes('emergency-trigger') ? { emergencyEffectRatio: 0.6 } : {}),
+  };
+}
+
+export function extremeProfile(
+  variants: readonly SkillVariantId[],
+): ExtremeProfile {
+  return {
+    ...BASE_EXTREME_PROFILE,
+    ...(variants.includes('undertow-eye') ? { pullDurationMs: 2000 } : {}),
+    ...(variants.includes('lingering-vortex') ? {
+      vortexDurationMs: 4000,
+      vortexTotalDamageMultiplier: 2,
+    } : {}),
+    ...(variants.includes('energy-return') ? {
+      energyPerKill: 2,
+      energyRefundCap: 20,
+    } : {}),
+    ...(variants.includes('double-crest') ? {
+      secondCrestDelayMs: 1200,
+      secondCrestDamageRatio: 0.45,
+    } : {}),
   };
 }
 
