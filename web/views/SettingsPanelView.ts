@@ -89,7 +89,7 @@ export function renderSettingsPanel(model: SettingsPanelModel): string {
         </label>
       </section>
       <footer class="settings-sheet__footer">
-        设置会立即生效并保存在当前设备。
+        设置会立即生效并保存在当前设备。战斗速度由战斗内控制按钮管理。
       </footer>
     </aside>
   </div>`;

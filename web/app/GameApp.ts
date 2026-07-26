@@ -109,7 +109,7 @@ export class GameApp {
     this.settings = {
       ...this.settings,
       ...patch,
-      version: 1,
+      version: 2,
     };
     this.settingsRepository.save(this.settings);
     this.audio?.applySettings(this.settings);

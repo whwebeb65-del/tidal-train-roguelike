@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
+  LEGACY_SETTINGS_STORAGE_KEY,
   SETTINGS_STORAGE_KEY,
   createBrowserSettingsRepository,
   defaultGameSettings,
+  normalizeGameSettings,
 } from '../../web/app/SettingsRepository';
 
 class MemoryStorage implements Storage {
@@ -34,6 +36,68 @@ class MemoryStorage implements Storage {
 }
 
 describe('SettingsRepository', () => {
+  it('migrates version one settings with a one-times speed default', () => {
+    expect(normalizeGameSettings({
+      version: 1,
+      musicEnabled: false,
+      sfxEnabled: true,
+      reducedMotion: false,
+      qualityPreference: 'high',
+    })).toMatchObject({
+      version: 2,
+      musicEnabled: false,
+      preferredBattleSpeed: 1,
+    });
+  });
+
+  it('accepts only supported battle speeds', () => {
+    expect(normalizeGameSettings({
+      ...defaultGameSettings(),
+      preferredBattleSpeed: 3,
+    }).preferredBattleSpeed).toBe(3);
+    expect(normalizeGameSettings({
+      ...defaultGameSettings(),
+      preferredBattleSpeed: 9,
+    }).preferredBattleSpeed).toBe(1);
+  });
+
+  it('migrates legacy storage into version two storage', () => {
+    const storage = new MemoryStorage();
+    storage.setItem(LEGACY_SETTINGS_STORAGE_KEY, JSON.stringify({
+      version: 1,
+      musicEnabled: false,
+      sfxEnabled: true,
+      reducedMotion: false,
+      qualityPreference: 'high',
+    }));
+    const repository = createBrowserSettingsRepository(storage);
+
+    expect(repository.load()).toMatchObject({
+      version: 2,
+      musicEnabled: false,
+      preferredBattleSpeed: 1,
+    });
+    expect(JSON.parse(storage.getItem(SETTINGS_STORAGE_KEY) ?? '{}')).toMatchObject({
+      version: 2,
+      preferredBattleSpeed: 1,
+    });
+  });
+
+  it('persists a normalized version two record after correcting invalid speed', () => {
+    const storage = new MemoryStorage();
+    storage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify({
+      ...defaultGameSettings(),
+      preferredBattleSpeed: 9,
+    }));
+    const repository = createBrowserSettingsRepository(storage);
+
+    expect(repository.load().preferredBattleSpeed).toBe(1);
+    expect(JSON.parse(storage.getItem(SETTINGS_STORAGE_KEY) ?? '{}')).toMatchObject({
+      version: 2,
+      preferredBattleSpeed: 1,
+    });
+  });
+
   it('loads defaults, normalizes invalid values and preserves unrelated keys', () => {
     const storage = new MemoryStorage();
     storage.setItem('unrelated', 'keep');

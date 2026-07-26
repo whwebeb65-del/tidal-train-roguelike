@@ -19,6 +19,8 @@ describe('SettingsPanelView', () => {
     expect(html).toContain('data-setting="sfxEnabled"');
     expect(html).toContain('data-setting="reducedMotion"');
     expect(html).toContain('data-setting="qualityPreference"');
+    expect(html).not.toContain('data-setting="preferredBattleSpeed"');
+    expect(html).toContain('战斗速度由战斗内控制按钮管理');
     expect(html).toContain('<option value="auto"');
     expect(html).toContain('<option value="high"');
     expect(html).toContain('<option value="medium" selected');
