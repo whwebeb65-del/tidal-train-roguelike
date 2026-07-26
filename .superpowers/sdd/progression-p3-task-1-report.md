@@ -32,3 +32,4 @@ Viewed the generated full-resolution sources and a final 256px/64px contact shee
 - `f88fa24` repeated chroma removal with edge contraction and removed remaining key-colour fringe pixels from alpha output.
 - Smoke coverage now invokes the available Python/Pillow decoder and asserts decoded alpha extrema `(0, 255)`, rather than only inspecting WebP container flags.
 - Final validation passed: focused asset test 17/17; `npm run typecheck`; full `npm test` (91 files / 477 tests); `npm run check:assets`; dimensions/alpha/key-colour scan; and `git diff --check`.
+- Final polish: cleared only the detached four-pixel alpha fragment at `overflow-membrane-glyph.webp` bottom edge (`y=63`, `x=20–23`); rechecked 64×64 dimensions, decoded alpha extrema `(0, 255)`, key-colour absence, focused asset test, asset budget, and diff check.
