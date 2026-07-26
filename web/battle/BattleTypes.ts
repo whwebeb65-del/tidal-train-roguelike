@@ -18,6 +18,8 @@ export type BattleStatus =
   | 'victory'
   | 'defeat';
 
+export type UpgradeSelectionSource = 'manual' | 'timeout';
+
 export type EnemyKind =
   | 'bubble-fin'
   | 'needle-jelly'
@@ -244,6 +246,7 @@ export type BattleEvent =
   | {
       readonly type: 'upgrade-selected';
       readonly upgradeId: BattleUpgradeId;
+      readonly source: UpgradeSelectionSource;
       readonly level: number;
       readonly runLevel: number;
       readonly nextExperienceThreshold: number | null;

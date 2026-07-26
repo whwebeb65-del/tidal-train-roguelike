@@ -29,6 +29,7 @@ import type {
   LootState,
   PauseReason,
   ProjectileState,
+  UpgradeSelectionSource,
 } from './BattleTypes';
 import {
   applyBattleUpgrade,
@@ -398,7 +399,10 @@ export class BattleEngine {
     return true;
   }
 
-  public chooseUpgrade(upgradeId: BattleUpgradeId): boolean {
+  public chooseUpgrade(
+    upgradeId: BattleUpgradeId,
+    source: UpgradeSelectionSource,
+  ): boolean {
     if (
       this.status !== 'upgrade'
       || !this.offeredUpgradeIds.includes(upgradeId)
@@ -424,6 +428,7 @@ export class BattleEngine {
     this.events.push({
       type: 'upgrade-selected',
       upgradeId,
+      source,
       level: this.upgradeLevels[upgradeId],
       runLevel: this.runLevel,
       nextExperienceThreshold: this.nextUpgradeThreshold(),

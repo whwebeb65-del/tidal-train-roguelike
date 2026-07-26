@@ -34,7 +34,7 @@ function runFor(engine: BattleEngine, durationMs: number): void {
     engine.update(FIXED_STEP_MS);
     if (engine.frame.status === 'upgrade') {
       const choice = engine.frame.offeredUpgradeIds[0];
-      if (choice) engine.chooseUpgrade(choice);
+      if (choice) engine.chooseUpgrade(choice, 'manual');
     }
   }
 }

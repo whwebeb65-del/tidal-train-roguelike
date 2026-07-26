@@ -31,6 +31,7 @@ import type {
   BattleSkillId,
   BattleUpgradeId,
   PauseReason,
+  UpgradeSelectionSource,
 } from '../battle/BattleTypes';
 import { requireElement } from '../app/dom';
 import type {
@@ -77,7 +78,7 @@ export interface BattleEnginePort {
   useSkill(skillId: BattleSkillId): boolean;
   chooseUpgrade(
     upgradeId: BattleUpgradeId,
-    source?: 'manual' | 'timeout',
+    source: UpgradeSelectionSource,
   ): boolean;
   rerollUpgradeOffer(): boolean;
   refreshActiveSkillCooldowns(): boolean;
@@ -775,7 +776,7 @@ export class BattleScene implements GameScene {
 
   private acceptUpgrade(
     upgradeId: BattleUpgradeId,
-    source: 'manual' | 'timeout',
+    source: UpgradeSelectionSource,
   ): boolean {
     if (
       this.pendingActions.has('upgrade-choice')

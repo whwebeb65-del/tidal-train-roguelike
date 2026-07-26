@@ -73,13 +73,14 @@ describe('BattleEngine upgrade reroll', () => {
     const engine = reachFirstUpgrade('normal');
     const upgradeId = engine.frame.offeredUpgradeIds[0]!;
 
-    expect(engine.chooseUpgrade(upgradeId)).toBe(true);
+    expect(engine.chooseUpgrade(upgradeId, 'manual')).toBe(true);
     expect(engine.frame.runLevel).toBe(2);
     expect(engine.frame.nextExperienceThreshold).toBe(EXPECTED_EXPERIENCE_THRESHOLDS[1]);
     const events = engine.drainEvents();
     expect(events).toContainEqual(expect.objectContaining({
       type: 'upgrade-selected',
       upgradeId,
+      source: 'manual',
       runLevel: 2,
       nextExperienceThreshold: EXPECTED_EXPERIENCE_THRESHOLDS[1],
       skillRanks: engine.frame.skillRanks,

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { AudioManager } from '../../../web/audio/AudioManager';
 import { FIXED_STEP_MS } from '../../../web/battle/BattleConfig';
+import { BattleEngine } from '../../../web/battle/BattleEngine';
 import type {
   BattleEvent,
   BattleFrameView,
@@ -104,6 +105,28 @@ function createEngine(
       frame = next;
     },
   };
+}
+
+function createRealEngine(): BattleEngine {
+  return new BattleEngine({
+    battleId: 'scene-upgrade-source',
+    seed: 17,
+    mode: 'normal',
+    mapId: 'drift-suburb',
+    maxTrainHp: 10_000,
+    mainCannonDamage: 500,
+    initialEnergy: 0,
+    repairBonus: 0,
+    enemyHpFlatBonus: 0,
+    enemyHpMultiplier: 1,
+    enemyDamageMultiplier: 1,
+    skillMasteryPower: {
+      'tidal-volley': 1,
+      'bubble-barrier': 1,
+      'extreme-tide': 1,
+    },
+    unlockedSkillVariants: [],
+  });
 }
 
 function createMotion() {
@@ -268,6 +291,52 @@ function createHost(): {
 }
 
 describe('BattleScene', () => {
+  it.each([
+    ['manual', (scene: BattleScene): boolean => scene.chooseFirstUpgradeForE2E()],
+    ['timeout', (_scene: BattleScene): boolean => {
+      vi.advanceTimersByTime(6_000);
+      return true;
+    }],
+  ] as const)(
+    'emits a real engine upgrade-selected event with %s source',
+    (source, choose) => {
+      vi.useFakeTimers();
+      try {
+        const engine = createRealEngine();
+        const { host } = createHost();
+        const scene = new BattleScene({
+          ...TEST_BATTLE_SPEED_DEPENDENCIES,
+          engine,
+          effects: {
+            view: EMPTY_EFFECT_FRAME_VIEW,
+            consume: vi.fn(), update: vi.fn(), reset: vi.fn(),
+          },
+          assets: { failedIds: [], get: () => null },
+          callbacks: createCallbacks(),
+          createRenderer: () => ({ render: vi.fn() }),
+          createHud: () => ({ mount: vi.fn(), update: vi.fn(), dispose: vi.fn() }),
+          captainArtId: 'captainFemaleBase',
+          reducedMotion: false,
+          manualStepMode: true,
+          scheduler: new ManualFrameScheduler(),
+          eventTarget: new EventTarget(),
+          getDevicePixelRatio: () => 1,
+        });
+        scene.mount(host);
+        scene.advanceForE2E(300_000);
+
+        expect(engine.frame.status).toBe('upgrade');
+        expect(choose(scene)).toBe(true);
+        expect(engine.drainEvents()).toContainEqual(expect.objectContaining({
+          type: 'upgrade-selected', source,
+        }));
+        scene.unmount();
+      } finally {
+        vi.useRealTimers();
+      }
+    },
+  );
+
   it('keeps the same engine frame and event trace at equal simulated horizons', () => {
     const run = (speed: 1 | 3, realSteps: number) => {
       const scheduler = new ManualFrameScheduler();

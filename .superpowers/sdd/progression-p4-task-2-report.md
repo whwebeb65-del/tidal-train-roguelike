@@ -9,6 +9,8 @@
   bridge until progression/settings persistence wiring is completed.
 - Upgrade auto-choice uses a 6,000 ms wall-clock timer. Visibility pauses retain
   the remaining choice budget; manual, timeout, and E2E choices share the same
-  acceptance path and record their source at the engine port boundary.
+  acceptance path. The production `upgrade-selected` event now carries the
+  required `manual` or `timeout` source, verified through real scene + engine
+  integration tests.
 - Validation: focused speed/scene/fixed-loop tests, full suite, typecheck,
   production build, asset budget check, and whitespace diff check.

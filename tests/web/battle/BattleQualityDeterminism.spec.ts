@@ -37,7 +37,7 @@ function runAtQuality(level: QualityLevel) {
     effects.update(FIXED_STEP_MS);
     if (engine.frame.status === 'upgrade') {
       const choice = engine.frame.offeredUpgradeIds[0];
-      if (choice) engine.chooseUpgrade(choice);
+      if (choice) engine.chooseUpgrade(choice, 'manual');
     }
   }
 
