@@ -1,5 +1,6 @@
 import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
+import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
@@ -107,5 +108,7 @@ describe('production skill art', () => {
     const metadata = parseWebpMetadata(buffer);
     expect(metadata.dimensions).toEqual([width, height]);
     expect(metadata.hasAlpha, `${name} alpha channel`).toBe(true);
+    const extrema = execFileSync('python', ['-c', "from PIL import Image; import sys; print(Image.open(sys.argv[1]).convert('RGBA').getchannel('A').getextrema())", assetPath], { encoding: 'utf8' });
+    expect(extrema.trim(), `${name} decoded alpha pixels`).toMatch(/^\(0, 255\)$/);
   });
 });
