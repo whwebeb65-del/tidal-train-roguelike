@@ -107,6 +107,8 @@ export interface ProjectileState {
   readonly damage: number;
   readonly splashRadius: number;
   readonly chainRemaining: number;
+  pierceRemaining?: number;
+  readonly splitMultiplier?: number;
   readonly critical: boolean;
   active: boolean;
 }
@@ -220,6 +222,7 @@ export type BattleEvent =
       readonly impactDirectionX: -1 | 0 | 1;
     }
   | { readonly type: 'shield-changed'; readonly shield: number }
+  | { readonly type: 'barrier-burst' }
   | { readonly type: 'skill-used'; readonly skillId: BattleSkillId }
   | { readonly type: 'skill-cooldowns-refreshed' }
   | {

@@ -45,13 +45,18 @@ import {
   EntityPool,
   type EntityPoolStats,
 } from './EntityPool';
+import { barrierProfile, reflectBarrierDamage, shouldEmergencyTrigger, volleyProfile } from './SkillVariantSystem';
 
 type Mutable<T> = {
   -readonly [Property in keyof T]: T[Property];
 };
 
-type MutableProjectileState = Mutable<ProjectileState>;
+type MutableProjectileState = Mutable<ProjectileState> & {
+  pierceRemaining: number;
+  splitMultiplier: number;
+};
 type MutableLootState = Mutable<LootState>;
+type DelayedVolleyAction = { readonly dueAtMs: number; readonly damage: number; readonly count: number };
 
 export interface BattleEntityPoolStats {
   readonly projectiles: EntityPoolStats;
@@ -63,6 +68,7 @@ export class BattleEngine {
   private readonly enemies: EnemyState[] = [];
   private readonly projectiles: MutableProjectileState[] = [];
   private readonly loot: MutableLootState[] = [];
+  private readonly delayedVolleyActions: DelayedVolleyAction[] = [];
   private readonly projectilePool = new EntityPool<MutableProjectileState>(
     () => ({
       id: 0,
@@ -74,6 +80,8 @@ export class BattleEngine {
       damage: 0,
       splashRadius: 0,
       chainRemaining: 0,
+      pierceRemaining: 0,
+      splitMultiplier: 0,
       critical: false,
       active: false,
     }),
@@ -112,6 +120,10 @@ export class BattleEngine {
   private trainHp: number;
   private shield = 0;
   private shieldRemainingMs = 0;
+  private barrierOrigin: 'manual' | 'emergency' | null = null;
+  private barrierAbsorbedDamage = 0;
+  private barrierLastAttackerId: number | null = null;
+  private emergencyBarrierConsumed = false;
   private energy: number;
   private combo = 0;
   private kills = 0;
@@ -246,7 +258,10 @@ export class BattleEngine {
       this.cooldowns[skillId] = Math.round(
         SKILL_CONFIG[skillId].cooldownMs
           * this.modifiers.activeCooldownMultiplier
-          * this.skillCooldownMultiplier(skillId),
+          * this.skillCooldownMultiplier(skillId)
+          * (skillId === 'tidal-volley'
+            ? volleyProfile(this.battleBuild.skillVariants['tidal-volley']).cooldownMultiplier
+            : 1),
       );
       if (skillId === 'tidal-volley') this.fireVolley();
       if (skillId === 'bubble-barrier') this.applyBarrier();
@@ -387,6 +402,7 @@ export class BattleEngine {
       this.elapsedMs += stepMs;
       this.phaseElapsedMs += stepMs;
       this.updateTimers(stepMs);
+      this.runDelayedVolleyActions();
       this.spawnScheduledEnemies();
       this.maybeSpawnElite();
       this.moveEnemies(stepMs);
@@ -415,8 +431,7 @@ export class BattleEngine {
     if (this.shieldRemainingMs > 0) {
       this.shieldRemainingMs = Math.max(0, this.shieldRemainingMs - stepMs);
       if (this.shieldRemainingMs === 0 && this.shield > 0) {
-        this.shield = 0;
-        this.events.push({ type: 'shield-changed', shield: 0 });
+        this.breakBarrier();
       }
     }
   }
@@ -635,6 +650,7 @@ export class BattleEngine {
       this.damageTrain(
         definition.defenceDamage * this.input.enemyDamageMultiplier,
         enemy.x < 195 ? 1 : enemy.x > 195 ? -1 : 0,
+        enemy.id,
       );
       const attackIntervalMultiplier = (
         enemy.kind === 'storm-ray-elite' && this.eliteEnraged
@@ -694,10 +710,11 @@ export class BattleEngine {
       .filter((enemy) => enemy.alive)
       .sort((left, right) => right.y - left.y || left.id - right.id);
     if (targets.length === 0) return;
+    const profile = volleyProfile(this.battleBuild.skillVariants['tidal-volley']);
     const damage = Math.floor(
-      this.input.mainCannonDamage * 0.7 * this.skillStrengthMultiplier('tidal-volley'),
+      this.input.mainCannonDamage * 0.7 * this.skillStrengthMultiplier('tidal-volley') * profile.projectileDamageMultiplier,
     );
-    for (let index = 0; index < 8; index += 1) {
+    for (let index = 0; index < profile.projectileCount; index += 1) {
       const target = targets[index % targets.length];
       if (!target) continue;
       this.createProjectile({
@@ -707,23 +724,36 @@ export class BattleEngine {
         critical: false,
         splashRadius: 0,
         chainRemaining: 0,
-        xOffset: (index - 3.5) * 5,
+        pierceRemaining: profile.pierceCount,
+        splitMultiplier: profile.splitMultiplier,
+        xOffset: (index - (profile.projectileCount - 1) / 2) * 5,
       });
     }
+    if (profile.returningCount > 0) this.delayedVolleyActions.push({
+      dueAtMs: this.elapsedMs + 500,
+      damage: Math.floor(damage * profile.returningMultiplier),
+      count: profile.returningCount,
+    });
   }
 
-  private applyBarrier(): void {
+  private applyBarrier(effectRatio = 1, origin: 'manual' | 'emergency' = 'manual'): void {
+    const profile = barrierProfile(this.battleBuild.skillVariants['bubble-barrier']);
     const heal = Math.floor(
       this.input.maxTrainHp * this.modifiers.barrierHealPercent,
-    ) * this.skillStrengthMultiplier('bubble-barrier') + this.input.repairBonus;
-    this.trainHp = Math.min(this.input.maxTrainHp, this.trainHp + heal);
+    ) * this.skillStrengthMultiplier('bubble-barrier') * effectRatio + this.input.repairBonus;
+    const appliedHeal = Math.min(this.input.maxTrainHp - this.trainHp, Math.floor(heal));
+    const overflow = Math.max(0, Math.floor(heal) - appliedHeal);
+    this.trainHp += appliedHeal;
     this.shield = Math.floor(
       this.input.maxTrainHp
         * 0.25
         * this.modifiers.barrierShieldMultiplier
-        * this.skillStrengthMultiplier('bubble-barrier'),
-    );
+        * this.skillStrengthMultiplier('bubble-barrier') * effectRatio,
+    ) + Math.min(overflow, Math.floor(this.input.maxTrainHp * profile.overflowShieldCapRatio));
     this.shieldRemainingMs = 4000;
+    this.barrierOrigin = origin;
+    this.barrierAbsorbedDamage = 0;
+    this.barrierLastAttackerId = null;
     this.events.push({
       type: 'shield-changed',
       shield: this.shield,
@@ -737,6 +767,8 @@ export class BattleEngine {
     readonly critical: boolean;
     readonly splashRadius: number;
     readonly chainRemaining: number;
+    readonly pierceRemaining?: number;
+    readonly splitMultiplier?: number;
     readonly xOffset?: number;
     readonly startX?: number;
     readonly startY?: number;
@@ -751,6 +783,8 @@ export class BattleEngine {
     projectile.damage = Math.max(0, input.damage);
     projectile.splashRadius = Math.max(0, input.splashRadius);
     projectile.chainRemaining = Math.max(0, input.chainRemaining);
+    projectile.pierceRemaining = Math.max(0, input.pierceRemaining ?? 0);
+    projectile.splitMultiplier = Math.max(0, input.splitMultiplier ?? 0);
     projectile.critical = input.critical;
     projectile.active = true;
     this.projectiles.push(projectile);
@@ -784,8 +818,17 @@ export class BattleEngine {
       if (distance <= maxDistance || distance <= 14) {
         projectile.x = target.x;
         projectile.y = target.y;
-        projectile.active = false;
         this.hitEnemy(projectile, target);
+        if (projectile.pierceRemaining > 0) {
+          const nextTarget = this.findSecondaryTarget(target);
+          if (nextTarget) {
+            projectile.pierceRemaining -= 1;
+            projectile.damage = Math.floor(projectile.damage * volleyProfile(this.battleBuild.skillVariants['tidal-volley']).pierceRetention);
+            projectile.targetId = nextTarget.id;
+            continue;
+          }
+        }
+        projectile.active = false;
         continue;
       }
       projectile.x += deltaX / distance * maxDistance;
@@ -808,6 +851,16 @@ export class BattleEngine {
       this.energy + Math.floor(2 * this.modifiers.energyGainMultiplier),
     );
     this.combo += 1;
+
+    if (projectile.splitMultiplier > 0) {
+      const splitTarget = this.findSecondaryTarget(enemy);
+      if (splitTarget) this.createProjectile({
+        source: 'volley', targetId: splitTarget.id,
+        damage: Math.floor(projectile.damage * projectile.splitMultiplier),
+        critical: false, splashRadius: 0, chainRemaining: 0,
+        startX: enemy.x, startY: enemy.y,
+      });
+    }
 
     if (projectile.splashRadius > 0) {
       const splashDamage = Math.floor(
@@ -997,11 +1050,37 @@ export class BattleEngine {
     return this.enemies.some((enemy) => enemy.alive);
   }
 
-  private damageTrain(rawAmount: number, impactDirectionX: -1 | 0 | 1 = 0): void {
+  private findSecondaryTarget(excluded: EnemyState): EnemyState | undefined {
+    return this.enemies.filter((enemy) => enemy.alive && enemy.id !== excluded.id)
+      .sort((left, right) => right.y - left.y || left.id - right.id)[0];
+  }
+
+  private runDelayedVolleyActions(): void {
+    for (let index = this.delayedVolleyActions.length - 1; index >= 0; index -= 1) {
+      const action = this.delayedVolleyActions[index];
+      if (!action || action.dueAtMs > this.elapsedMs) continue;
+      this.delayedVolleyActions.splice(index, 1);
+      for (let projectileIndex = 0; projectileIndex < action.count; projectileIndex += 1) {
+        const target = this.findTarget();
+        if (!target) break;
+        this.createProjectile({
+          source: 'volley', targetId: target.id, damage: action.damage,
+          critical: false, splashRadius: 0, chainRemaining: 0,
+          xOffset: (projectileIndex - (action.count - 1) / 2) * 5,
+        });
+      }
+    }
+  }
+
+  private damageTrain(rawAmount: number, impactDirectionX: -1 | 0 | 1 = 0, attackerId: number | null = null): void {
     if (this.reviveProtectionMs > 0 || this.isTerminal()) return;
     const damage = Math.max(0, Math.floor(rawAmount));
     const shieldAbsorbed = Math.min(this.shield, damage);
     this.shield -= shieldAbsorbed;
+    if (shieldAbsorbed > 0 && this.barrierOrigin) {
+      this.barrierAbsorbedDamage += shieldAbsorbed;
+      this.barrierLastAttackerId = attackerId;
+    }
     if (shieldAbsorbed > 0) {
       this.events.push({
         type: 'shield-changed',
@@ -1017,7 +1096,36 @@ export class BattleEngine {
       remainingHp: this.trainHp,
       impactDirectionX,
     });
+    if (this.shield === 0 && shieldAbsorbed > 0) this.breakBarrier();
+    const profile = barrierProfile(this.battleBuild.skillVariants['bubble-barrier']);
+    if (shouldEmergencyTrigger({ currentHp: this.trainHp, maxHp: this.input.maxTrainHp,
+      consumed: this.emergencyBarrierConsumed, effectRatio: profile.emergencyEffectRatio })) {
+      this.emergencyBarrierConsumed = true;
+      this.applyBarrier(profile.emergencyEffectRatio, 'emergency');
+    }
     if (this.trainHp <= 0) this.finish(false);
+  }
+
+  private breakBarrier(): void {
+    if (!this.barrierOrigin) return;
+    const profile = barrierProfile(this.battleBuild.skillVariants['bubble-barrier']);
+    this.shield = 0;
+    this.shieldRemainingMs = 0;
+    this.events.push({ type: 'shield-changed', shield: 0 });
+    if (profile.breakDamageMultiplier > 0) {
+      const damage = Math.floor(this.input.mainCannonDamage * profile.breakDamageMultiplier);
+      for (const enemy of this.enemies) {
+        if (enemy.alive && enemy.y <= DEFENCE_LINE_Y) this.applyDamage(enemy, damage, false, 'splash');
+      }
+      this.events.push({ type: 'barrier-burst' });
+    }
+    if (this.barrierLastAttackerId !== null && profile.reflectRatio > 0) {
+      const attacker = this.enemies.find((enemy) => enemy.id === this.barrierLastAttackerId);
+      if (attacker) this.applyDamage(attacker, reflectBarrierDamage(this.barrierAbsorbedDamage, profile.reflectRatio), false, 'splash');
+    }
+    this.barrierOrigin = null;
+    this.barrierAbsorbedDamage = 0;
+    this.barrierLastAttackerId = null;
   }
 
   private nextUpgradeThreshold(): number | null {
@@ -1085,6 +1193,8 @@ function resetProjectile(projectile: MutableProjectileState): void {
   projectile.damage = 0;
   projectile.splashRadius = 0;
   projectile.chainRemaining = 0;
+  projectile.pierceRemaining = 0;
+  projectile.splitMultiplier = 0;
   projectile.critical = false;
   projectile.active = false;
 }

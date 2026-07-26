@@ -25,6 +25,31 @@ function runFor(engine: BattleEngine, durationMs: number): void {
 }
 
 describe('BattleEngine skills', () => {
+  it('applies volley variants alongside the rank multiplier', () => {
+    const engine = new BattleEngine(input);
+    runFor(engine, 500);
+    engine.drainEvents();
+    (engine as unknown as { battleBuild: unknown }).battleBuild = {
+      generalLevels: {},
+      skillRanks: { 'tidal-volley': 2, 'bubble-barrier': 1, 'extreme-tide': 1 },
+      skillVariants: {
+        'tidal-volley': ['split-tide-arrow', 'reef-piercer', 'returning-volley', 'rainstorm-school'],
+        'bubble-barrier': [],
+        'extreme-tide': [],
+      },
+    };
+
+    expect(engine.useSkill('tidal-volley')).toBe(true);
+    expect(engine.frame.cooldowns['tidal-volley']).toBe(13_824);
+    const volleyProjectiles = engine.frame.projectiles.filter((projectile) => projectile.source === 'volley');
+    expect(volleyProjectiles).toHaveLength(16);
+    expect(volleyProjectiles.every((projectile) => (
+      projectile.damage === 15
+      && projectile.pierceRemaining === 1
+      && projectile.splitMultiplier === 0.35
+    ))).toBe(true);
+  });
+
   it('fires volley, applies barrier and spends full extreme energy', () => {
     const engine = new BattleEngine(input);
     runFor(engine, 500);
