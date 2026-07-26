@@ -274,5 +274,8 @@ export interface BattleOutcome {
   readonly completedWaves: number;
   readonly remainingHp: number;
   readonly kills: number;
+  readonly killCounts?: Readonly<Record<'normal' | 'elite' | 'boss', number>>;
+  readonly skillCastCounts?: Readonly<Record<BattleSkillId, number>>;
+  readonly hardCapReached?: boolean;
   readonly adReviveUsed: boolean;
 }

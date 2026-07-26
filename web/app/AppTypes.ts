@@ -41,4 +41,15 @@ export interface BattleSettlementPresentation {
   readonly dailyTrialScore: number | null;
   readonly doubleSettlementAvailable: boolean;
   readonly doubled: boolean;
+  readonly accountProgression?: {
+    readonly gainedXp: number;
+    readonly staminaSpendXp: number;
+    readonly level: number;
+    readonly xp: number;
+    readonly levelsGained: number;
+  };
+  readonly skillMastery?: Readonly<Record<string, {
+    readonly gainedXp: number;
+    readonly level: number;
+  }>>;
 }

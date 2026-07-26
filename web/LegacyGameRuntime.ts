@@ -54,10 +54,15 @@ import {
 } from '../src/domain/progression/ProgressionStatService';
 import {
   availableBattleSpeeds,
+  calculateBattleAccountXp,
   grantAccountXp,
   maximumBattleSpeed,
   type BattleSpeed,
 } from '../src/domain/progression/AccountProgressionSystem';
+import {
+  settleSkillMastery,
+  skillMasteryLevelFromXp,
+} from '../src/domain/progression/SkillMasterySystem';
 import {
   recoverStamina,
   spendNormalRunStamina,
@@ -1259,6 +1264,8 @@ function settleDynamicDailyTrial(
     dailyTrialScore: result.score,
     doubleSettlementAvailable: false,
     doubled: false,
+    accountProgression: emptyAccountProgression(),
+    skillMastery: {},
   };
 }
 
@@ -1281,6 +1288,13 @@ function settleDynamicNormalRun(
 
   if (!outcome.victory) {
     settlementDoubleClaimed = false;
+    const progression = settleRunProgression(outcome, false);
+    commit({
+      ...save,
+      accountLevel: progression.accountProgression!.level,
+      accountXp: progression.accountProgression!.xp,
+      skillMasteryXp: progression.skillMasteryXp,
+    });
     track('run_settled', { victory: false });
     notice = '列车已撤回车站；本局互动奖励保留，通关奖励未发放。';
     render();
@@ -1292,6 +1306,7 @@ function settleDynamicNormalRun(
       dailyTrialScore: null,
       doubleSettlementAvailable: false,
       doubled: false,
+      ...progression,
     };
   }
 
@@ -1309,12 +1324,16 @@ function settleDynamicNormalRun(
     routeMarks: firstClear.granted ? 10 : 2,
     starTickets: firstClear.granted ? 3 : 0,
   };
+  const progression = settleRunProgression(outcome, firstClear.granted);
   commit({
     ...save,
     gears: save.gears + rewards.gears,
     routeMarks: save.routeMarks + rewards.routeMarks,
     starTickets: save.starTickets + rewards.starTickets,
     firstClearMapIds: [...firstClearState.claimedMapIds],
+    accountLevel: progression.accountProgression!.level,
+    accountXp: progression.accountProgression!.xp,
+    skillMasteryXp: progression.skillMasteryXp,
   });
   track('economy_reward_granted', {
     source: firstClear.granted ? 'first-clear' : 'repeat-victory',
@@ -1340,6 +1359,66 @@ function settleDynamicNormalRun(
     dailyTrialScore: null,
     doubleSettlementAvailable: !firstClear.granted,
     doubled: false,
+    accountProgression: progression.accountProgression,
+    skillMastery: progression.skillMastery,
+  };
+}
+
+function emptyAccountProgression(): BattleSettlementPresentation['accountProgression'] {
+  return {
+    gainedXp: 0,
+    staminaSpendXp: 0,
+    level: save.accountLevel,
+    xp: save.accountXp,
+    levelsGained: 0,
+  };
+}
+
+function settleRunProgression(
+  outcome: BattleOutcome,
+  firstClear: boolean,
+): {
+  readonly accountProgression: BattleSettlementPresentation['accountProgression'];
+  readonly skillMastery: BattleSettlementPresentation['skillMastery'];
+  readonly skillMasteryXp: PlayerSave['skillMasteryXp'];
+} {
+  const accountXp = calculateBattleAccountXp({
+    normalKills: outcome.killCounts?.normal ?? outcome.kills,
+    eliteKills: outcome.killCounts?.elite ?? 0,
+    bossKills: outcome.killCounts?.boss ?? 0,
+    firstClear,
+    staminaSpent: 0,
+  });
+  const account = grantAccountXp({
+    level: save.accountLevel,
+    xp: save.accountXp,
+  }, accountXp.total);
+  const mastery = settleSkillMastery(save.skillMasteryXp, {
+    castCounts: outcome.skillCastCounts ?? {
+      'tidal-volley': 0,
+      'bubble-barrier': 0,
+      'extreme-tide': 0,
+    },
+    firstClear,
+  });
+  const skillMastery = Object.fromEntries(
+    Object.entries(mastery.gainedXp)
+      .filter(([, gainedXp]) => gainedXp > 0)
+      .map(([skillId, gainedXp]) => [skillId, {
+        gainedXp,
+        level: skillMasteryLevelFromXp(mastery.nextXp[skillId as BattleSkillId]),
+      }]),
+  );
+  return {
+    accountProgression: {
+      gainedXp: accountXp.total + activeRunStaminaSpent * 10,
+      staminaSpendXp: activeRunStaminaSpent * 10,
+      level: account.level,
+      xp: account.xp,
+      levelsGained: account.level - activeRunAccountStart,
+    },
+    skillMastery,
+    skillMasteryXp: mastery.nextXp,
   };
 }
 
@@ -1618,6 +1697,8 @@ function exitBattle(): void {
   activeBattleProgression = null;
   activeBattleSettlement = null;
   activeBattleScene = null;
+  activeRunStaminaSpent = 0;
+  activeRunAccountStart = save.accountLevel;
   notice = '列车已经返回潮汐车站，可以整备后再次出发。';
   render();
 }

@@ -81,6 +81,35 @@ describe('dynamic battle integration', () => {
     expect(events.some((event) => event.type === 'weapon-fired')).toBe(true);
   });
 
+  it('freezes authoritative kill, successful cast, and hard-cap summaries in its outcome', () => {
+    const engine = new BattleEngine(createBattleRunInput({
+      battleId: 'outcome-summaries',
+      seed: 17,
+      mode: 'normal',
+      mapId: 'old-port',
+      progression: createProgressionSnapshot({
+        baseMaxHp: 100,
+        ownedSkinIds: defaultSave().ownedSkinIds,
+        equipmentState: equipmentState(defaultSave()),
+      }),
+      social: createSocialExpeditionState('2026-W29'),
+      dailyTrial: null,
+    }));
+
+    expect(engine.useSkill('bubble-barrier')).toBe(true);
+    engine.update(480_000);
+
+    expect(engine.outcome).toMatchObject({
+      killCounts: { normal: expect.any(Number), elite: expect.any(Number), boss: expect.any(Number) },
+      skillCastCounts: {
+        'tidal-volley': 0,
+        'bubble-barrier': 1,
+        'extreme-tide': 0,
+      },
+      hardCapReached: true,
+    });
+  });
+
   it('deduplicates settlement and caps repeated interaction rewards', () => {
     const adapter = new BattleSettlementAdapter<{ gears: number }>();
     const outcome: BattleOutcome = {
@@ -90,6 +119,13 @@ describe('dynamic battle integration', () => {
       completedWaves: 6,
       remainingHp: 42,
       kills: 100,
+      killCounts: { normal: 100, elite: 0, boss: 0 },
+      skillCastCounts: {
+        'tidal-volley': 2,
+        'bubble-barrier': 0,
+        'extreme-tide': 0,
+      },
+      hardCapReached: false,
       adReviveUsed: false,
     };
     const firstSettlement = adapter.settle(

@@ -11,6 +11,13 @@ describe('BattleSettlementAdapter', () => {
       completedWaves: 6,
       remainingHp: 50,
       kills: 100,
+      killCounts: { normal: 100, elite: 0, boss: 0 },
+      skillCastCounts: {
+        'tidal-volley': 2,
+        'bubble-barrier': 0,
+        'extreme-tide': 0,
+      },
+      hardCapReached: false,
       adReviveUsed: false,
     };
     const first = adapter.settle({ gears: 0 }, outcome, (state) => ({

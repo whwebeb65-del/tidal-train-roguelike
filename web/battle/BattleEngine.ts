@@ -152,6 +152,12 @@ export class BattleEngine {
   private energy: number;
   private combo = 0;
   private kills = 0;
+  private readonly killCounts = { normal: 0, elite: 0, boss: 0 };
+  private readonly skillCastCounts: Record<BattleSkillId, number> = {
+    'tidal-volley': 0,
+    'bubble-barrier': 0,
+    'extreme-tide': 0,
+  };
   private experience = 0;
   private offeredUpgradeIds: BattleUpgradeId[] = [];
   private runLevel = 1;
@@ -321,6 +327,7 @@ export class BattleEngine {
       if (skillId === 'bubble-barrier') this.applyBarrier();
     }
     this.events.push({ type: 'skill-used', skillId });
+    this.skillCastCounts[skillId] += 1;
     return true;
   }
 
@@ -460,7 +467,7 @@ export class BattleEngine {
       this.elapsedMs += stepMs;
       this.phaseElapsedMs += stepMs;
       if (this.elapsedMs >= 480_000) {
-        this.finish(false);
+        this.finish(false, true);
         return;
       }
       this.updateTimers(stepMs);
@@ -1013,6 +1020,9 @@ export class BattleEngine {
     enemy.alive = false;
     enemy.hp = 0;
     this.kills += 1;
+    if (enemy.kind === 'storm-ray-elite') this.killCounts.elite += 1;
+    else if (enemy.kind === 'deep-echo-boss') this.killCounts.boss += 1;
+    else this.killCounts.normal += 1;
     const effect = this.activeExtremeEffect;
     if (!effect) {
       this.energy = Math.min(
@@ -1293,10 +1303,10 @@ export class BattleEngine {
     return SKILL_COOLDOWN_MULTIPLIER[this.battleBuild.skillRanks[skillId] - 1];
   }
 
-  private finish(victory: boolean): void {
+  private finish(victory: boolean, hardCapReached = false): void {
     if (this.resolvedOutcome) return;
     this.status = victory ? 'victory' : 'defeat';
-    this.resolvedOutcome = {
+    this.resolvedOutcome = Object.freeze({
       battleId: this.input.battleId,
       victory,
       elapsedMs: this.elapsedMs,
@@ -1305,8 +1315,11 @@ export class BattleEngine {
         : Math.min(5, getWaveAtTime(this.elapsedMs)),
       remainingHp: Math.max(0, this.trainHp),
       kills: this.kills,
+      killCounts: Object.freeze({ ...this.killCounts }),
+      skillCastCounts: Object.freeze({ ...this.skillCastCounts }),
+      hardCapReached,
       adReviveUsed: this.adReviveUsed,
-    };
+    });
     this.events.push({
       type: victory ? 'battle-won' : 'battle-lost',
     });
