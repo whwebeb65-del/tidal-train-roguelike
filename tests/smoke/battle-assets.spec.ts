@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import {
   BATTLE_ART_URLS,
+  BATTLE_VARIANT_GLYPH_URLS,
   DEFERRED_BATTLE_ART_IDS,
   getCriticalBattleArtIds,
 } from '../../web/assets/BattleArtCatalog';
@@ -62,6 +63,19 @@ function parseWebpMetadata(buffer: Buffer): {
 }
 
 describe('battle art catalog', () => {
+  it('registers the three base skill badges and every variant glyph', () => {
+    expect(BATTLE_ART_URLS.skillTidalVolley).toContain('tidal-volley-badge');
+    expect(BATTLE_ART_URLS.skillBubbleBarrier).toContain('bubble-barrier-badge');
+    expect(BATTLE_ART_URLS.skillExtremeTide).toContain('extreme-tide-badge');
+    expect(Object.keys(BATTLE_VARIANT_GLYPH_URLS)).toHaveLength(12);
+
+    for (const [id, href] of Object.entries(BATTLE_VARIANT_GLYPH_URLS)) {
+      const url = new URL(href);
+      expect(url.protocol, `${id} must be a local source asset`).toBe('file:');
+      expect(existsSync(fileURLToPath(url)), `${id} source asset`).toBe(true);
+    }
+  });
+
   it('references local source files that exist', () => {
     for (const [id, href] of Object.entries(BATTLE_ART_URLS)) {
       const url = new URL(href);
@@ -86,6 +100,9 @@ describe('battle art catalog', () => {
       'bubbleFin',
       'needleJelly',
       'reefCrab',
+      'skillTidalVolley',
+      'skillBubbleBarrier',
+      'skillExtremeTide',
     ]);
     expect(critical).not.toContain('stormRayElite');
     expect(critical).not.toContain('deepEchoBoss');

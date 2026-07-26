@@ -1,4 +1,5 @@
 import { CHIBI_ART } from './ChibiArtCatalog';
+import type { SkillVariantId } from '../../src/domain/skill/SkillProgressionTypes';
 
 export const BATTLE_ART_URLS = {
   backgroundSky: new URL('./chibi/battle-sky-dusk.webp', import.meta.url).href,
@@ -35,9 +36,68 @@ export const BATTLE_ART_URLS = {
   stormRayElite:
     new URL('./chibi/storm-ray-elite.webp', import.meta.url).href,
   deepEchoBoss: CHIBI_ART.tidalBoss,
+  skillTidalVolley:
+    new URL('./chibi/skills/tidal-volley-badge.webp', import.meta.url).href,
+  skillBubbleBarrier:
+    new URL('./chibi/skills/bubble-barrier-badge.webp', import.meta.url).href,
+  skillExtremeTide:
+    new URL('./chibi/skills/extreme-tide-badge.webp', import.meta.url).href,
 } as const;
 
 export type BattleArtId = keyof typeof BATTLE_ART_URLS;
+
+export const BATTLE_VARIANT_GLYPH_URLS: Readonly<
+  Record<SkillVariantId, string>
+> = {
+  'split-tide-arrow': new URL(
+    './chibi/skills/split-tide-arrow-glyph.webp',
+    import.meta.url,
+  ).href,
+  'reef-piercer': new URL(
+    './chibi/skills/reef-piercer-glyph.webp',
+    import.meta.url,
+  ).href,
+  'returning-volley': new URL(
+    './chibi/skills/returning-volley-glyph.webp',
+    import.meta.url,
+  ).href,
+  'rainstorm-school': new URL(
+    './chibi/skills/rainstorm-school-glyph.webp',
+    import.meta.url,
+  ).href,
+  'bursting-bubble': new URL(
+    './chibi/skills/bursting-bubble-glyph.webp',
+    import.meta.url,
+  ).href,
+  'reflective-spines': new URL(
+    './chibi/skills/reflective-spines-glyph.webp',
+    import.meta.url,
+  ).href,
+  'overflow-membrane': new URL(
+    './chibi/skills/overflow-membrane-glyph.webp',
+    import.meta.url,
+  ).href,
+  'emergency-trigger': new URL(
+    './chibi/skills/emergency-trigger-glyph.webp',
+    import.meta.url,
+  ).href,
+  'undertow-eye': new URL(
+    './chibi/skills/undertow-eye-glyph.webp',
+    import.meta.url,
+  ).href,
+  'lingering-vortex': new URL(
+    './chibi/skills/lingering-vortex-glyph.webp',
+    import.meta.url,
+  ).href,
+  'energy-return': new URL(
+    './chibi/skills/energy-return-glyph.webp',
+    import.meta.url,
+  ).href,
+  'double-crest': new URL(
+    './chibi/skills/double-crest-glyph.webp',
+    import.meta.url,
+  ).href,
+};
 
 export const DEFERRED_BATTLE_ART_IDS = [
   'stormRayElite',
@@ -59,5 +119,8 @@ export function getCriticalBattleArtIds(
     'bubbleFin',
     'needleJelly',
     'reefCrab',
+    'skillTidalVolley',
+    'skillBubbleBarrier',
+    'skillExtremeTide',
   ];
 }

@@ -18,13 +18,28 @@ const limits = {
   'tidal-boss.webp': 450 * 1024,
 };
 
-const files = await readdir(root);
 const failures = [];
 const sizes = new Map();
+const requiredSkillAssets = [
+  'tidal-volley-badge.webp',
+  'bubble-barrier-badge.webp',
+  'extreme-tide-badge.webp',
+  'split-tide-arrow-glyph.webp',
+  'reef-piercer-glyph.webp',
+  'returning-volley-glyph.webp',
+  'rainstorm-school-glyph.webp',
+  'bursting-bubble-glyph.webp',
+  'reflective-spines-glyph.webp',
+  'overflow-membrane-glyph.webp',
+  'emergency-trigger-glyph.webp',
+  'undertow-eye-glyph.webp',
+  'lingering-vortex-glyph.webp',
+  'energy-return-glyph.webp',
+  'double-crest-glyph.webp',
+];
 
-for (const name of files) {
-  const info = await stat(path.join(root, name));
-  if (info.isFile()) sizes.set(name, info.size);
+for (const [name, size] of await collectFiles(root)) {
+  sizes.set(name, size);
 }
 
 for (const [name, limit] of Object.entries(limits)) {
@@ -62,13 +77,35 @@ const battleScreen = [
   'puffer-dragon.webp',
   'needle-jelly-enemy.webp',
   'crystal-crab.webp',
+  'skills/tidal-volley-badge.webp',
+  'skills/bubble-barrier-badge.webp',
+  'skills/extreme-tide-badge.webp',
 ];
 const firstScreenBytes = sumFiles(firstScreen, sizes, failures);
 const battleScreenBytes = sumFiles(battleScreen, sizes, failures);
+const totalSkillAssetBytes = sumFiles(
+  requiredSkillAssets.map((name) => `skills/${name}`),
+  sizes,
+  failures,
+);
 const allChibiBytes = [...sizes.values()].reduce(
   (total, size) => total + size,
   0,
 );
+
+const actualSkillAssets = [...sizes.keys()]
+  .filter((name) => name.startsWith('skills/'))
+  .map((name) => name.slice('skills/'.length))
+  .sort();
+const expectedSkillAssets = [...requiredSkillAssets].sort();
+if (
+  actualSkillAssets.length !== expectedSkillAssets.length
+  || actualSkillAssets.some((name, index) => name !== expectedSkillAssets[index])
+) {
+  failures.push(
+    `skills: expected exactly ${expectedSkillAssets.join(', ')}, found ${actualSkillAssets.join(', ')}`,
+  );
+}
 
 if (firstScreenBytes > 1.5 * 1024 * 1024) {
   failures.push(`first-screen: ${firstScreenBytes} bytes exceeds 1.5 MB`);
@@ -81,9 +118,14 @@ if (battleScreenBytes > 2.5 * 1024 * 1024) {
 if (allChibiBytes > 5.5 * 1024 * 1024) {
   failures.push(`all-chibi: ${allChibiBytes} bytes exceeds 5.5 MB`);
 }
+if (totalSkillAssetBytes > 650 * 1024) {
+  failures.push(
+    `skill-assets: ${totalSkillAssetBytes} bytes exceeds 650 KiB`,
+  );
+}
 
 const audioExtensions = new Set(['.mp3', '.wav', '.ogg']);
-for (const name of files) {
+for (const name of sizes.keys()) {
   if (audioExtensions.has(path.extname(name).toLowerCase())) {
     failures.push(`${name}: large audio loops are not approved assets`);
   }
@@ -91,6 +133,7 @@ for (const name of files) {
 
 console.log(`first-screen bytes: ${firstScreenBytes}`);
 console.log(`battle-screen bytes: ${battleScreenBytes}`);
+console.log(`total skill asset bytes: ${totalSkillAssetBytes}`);
 console.log(`all chibi bytes: ${allChibiBytes}`);
 
 if (failures.length > 0) {
@@ -111,4 +154,24 @@ function sumFiles(names, sizeMap, errors) {
     total += size;
   }
   return total;
+}
+
+async function collectFiles(directory, relativeDirectory = '') {
+  const entries = await readdir(directory, { withFileTypes: true });
+  const collected = [];
+
+  for (const entry of entries) {
+    const relativePath = path.posix.join(relativeDirectory, entry.name);
+    const fullPath = path.join(directory, entry.name);
+    if (entry.isDirectory()) {
+      collected.push(...await collectFiles(fullPath, relativePath));
+      continue;
+    }
+    if (entry.isFile()) {
+      const info = await stat(fullPath);
+      collected.push([relativePath, info.size]);
+    }
+  }
+
+  return collected;
 }
