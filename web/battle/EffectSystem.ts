@@ -463,7 +463,7 @@ export class EffectSystem {
         } else {
           this.spawnBurst(195, 470, this.rankCount(rank, 8, 12, 16), '#ffd793', 'extreme-radial-stroke', 720, 6, 'front-effects');
         }
-        if (!this.reducedMotion) {
+        if (!this.reducedMotion && !this.isLowQuality()) {
           this.spawnBurst(
             195,
             isExtreme ? 470 : 700,

@@ -129,11 +129,26 @@ describe('BattleRenderer', () => {
   it('draws rank and variant effect semantics as distinct bounded commands', () => {
     const effects: EffectFrameView = {
       particles: [{
-        id: 1, kind: 'coral-pierce', layer: 'front-effects', x: 195, y: 470,
+        id: 1, kind: 'rank-volley-trail', layer: 'front-effects', x: 195, y: 470,
+        size: 8, color: '#65edff', alpha: 1, rotation: 0, progress: 0,
+      }, {
+        id: 2, kind: 'coral-pierce', layer: 'front-effects', x: 195, y: 470,
         size: 8, color: '#ff8d73', alpha: 1, rotation: 0, progress: 0,
       }, {
-        id: 2, kind: 'extreme-vortex', layer: 'front-effects', x: 195, y: 430,
+        id: 3, kind: 'extreme-radial-stroke', layer: 'front-effects', x: 195, y: 430,
+        size: 10, color: '#ffd793', alpha: 1, rotation: 0, progress: 0,
+      }, {
+        id: 4, kind: 'reflection', layer: 'front-effects', x: 195, y: 430,
+        size: 10, color: '#f5d77b', alpha: 1, rotation: 0, progress: 0,
+      }, {
+        id: 5, kind: 'extreme-pull', layer: 'front-effects', x: 195, y: 430,
+        size: 10, color: '#6de8ff', alpha: 1, rotation: 0, progress: 0,
+      }, {
+        id: 6, kind: 'extreme-vortex', layer: 'front-effects', x: 195, y: 430,
         size: 10, color: '#9877ff', alpha: 1, rotation: 0, progress: 0,
+      }, {
+        id: 7, kind: 'second-crest', layer: 'front-effects', x: 195, y: 430,
+        size: 10, color: '#ffb77d', alpha: 1, rotation: 0, progress: 0,
       }],
       damageNumbers: [],
       rings: [{
@@ -148,9 +163,19 @@ describe('BattleRenderer', () => {
     };
     const commands = renderCommands({ effects });
     expect(commands.map((item) => item.kind)).toEqual(expect.arrayContaining([
-      'effect-coral-pierce', 'effect-extreme-vortex',
+      'effect-rank-volley-trail', 'effect-coral-pierce',
+      'effect-extreme-radial-stroke', 'effect-reflection', 'effect-extreme-pull',
+      'effect-extreme-vortex', 'effect-second-crest',
       'barrier-membrane', 'static-skill-silhouette',
     ]));
+    for (const kind of [
+      'effect-rank-volley-trail', 'effect-coral-pierce',
+      'effect-extreme-radial-stroke', 'effect-reflection', 'effect-extreme-pull',
+    ]) {
+      expect(findCommand<LineDrawCommand>(commands, (item) => item.kind === kind).points).toHaveLength(2);
+    }
+    expect(findCommand<LineDrawCommand>(commands, (item) => item.kind === 'effect-extreme-vortex').points).toHaveLength(3);
+    expect(findCommand<LineDrawCommand>(commands, (item) => item.kind === 'effect-second-crest').points).toHaveLength(5);
   });
   it.each(Object.keys(ENEMY_GEOMETRY) as EnemyKind[])(
     'keeps animated %s sprite, label, and health bar below the HUD gap',

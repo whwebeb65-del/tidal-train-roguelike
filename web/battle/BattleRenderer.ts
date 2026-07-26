@@ -855,6 +855,56 @@ export class BattleRenderer {
         });
         continue;
       }
+      if (particle.kind === 'rank-volley-trail' || particle.kind === 'coral-pierce') {
+        const length = particle.kind === 'coral-pierce' ? particle.size * 5 : particle.size * 4;
+        const angle = particle.rotation - Math.PI / 2;
+        this.painter.line({
+          kind: `effect-${particle.kind}`,
+          layer,
+          points: [{ x: particle.x - Math.cos(angle) * length * 0.5, y: particle.y - Math.sin(angle) * length * 0.5 }, { x: particle.x + Math.cos(angle) * length * 0.5, y: particle.y + Math.sin(angle) * length * 0.5 }],
+          stroke: particle.color,
+          lineWidth: particle.kind === 'coral-pierce' ? particle.size * 0.52 : particle.size * 0.38,
+          lineCap: 'round',
+          alpha: particle.alpha,
+          blendMode: 'screen',
+        });
+        continue;
+      }
+      if (particle.kind === 'extreme-radial-stroke' || particle.kind === 'reflection' || particle.kind === 'extreme-pull') {
+        const angle = particle.rotation;
+        const outer = particle.kind === 'extreme-pull' ? particle.size * 3 : particle.size * 2.8;
+        const inner = particle.kind === 'extreme-pull' ? particle.size * 0.55 : particle.size * 1.1;
+        this.painter.line({
+          kind: `effect-${particle.kind}`,
+          layer,
+          points: [{ x: particle.x + Math.cos(angle) * outer, y: particle.y + Math.sin(angle) * outer }, { x: particle.x + Math.cos(angle) * inner, y: particle.y + Math.sin(angle) * inner }],
+          stroke: particle.color,
+          lineWidth: particle.kind === 'reflection' ? particle.size * 0.48 : particle.size * 0.34,
+          lineCap: particle.kind === 'reflection' ? 'square' : 'round',
+          alpha: particle.alpha,
+          blendMode: 'screen',
+        });
+        continue;
+      }
+      if (particle.kind === 'extreme-vortex' || particle.kind === 'second-crest') {
+        const radius = particle.size * (particle.kind === 'extreme-vortex' ? 2.4 : 2.8);
+        const bend = particle.kind === 'extreme-vortex' ? radius * 0.55 : radius * 0.3;
+        const points = particle.kind === 'second-crest'
+          ? [{ x: particle.x - radius, y: particle.y + bend }, { x: particle.x - radius * 0.5, y: particle.y - bend }, { x: particle.x, y: particle.y + bend }, { x: particle.x + radius * 0.5, y: particle.y - bend }, { x: particle.x + radius, y: particle.y + bend }]
+          : [{ x: particle.x - radius, y: particle.y + bend }, { x: particle.x, y: particle.y - bend }, { x: particle.x + radius, y: particle.y + bend }];
+        this.painter.line({
+          kind: `effect-${particle.kind}`,
+          layer,
+          points,
+          stroke: particle.color,
+          lineWidth: particle.size * 0.32,
+          curve: true,
+          lineCap: 'round',
+          alpha: particle.alpha,
+          blendMode: 'screen',
+        });
+        continue;
+      }
       const stretched = (
         particle.kind === 'armour-shard'
         || particle.kind === 'defeat-shard'

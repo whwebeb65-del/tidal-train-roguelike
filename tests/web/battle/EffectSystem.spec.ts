@@ -400,6 +400,10 @@ describe('EffectSystem', () => {
     low.consume(events, frame);
     expect(low.view.particles.filter((item) => item.kind === 'rank-volley-trail')).toHaveLength(1);
     expect(low.view.rings.filter((item) => item.kind === 'barrier-membrane')).toHaveLength(1);
+    const lowBarrier = new EffectSystem({ particleLimit: 200, damageNumberLimit: 18, reducedMotion: false });
+    lowBarrier.setRenderBudget(getRenderBudget('low'));
+    lowBarrier.consume([{ type: 'skill-used', skillId: 'bubble-barrier' }], frame);
+    expect(lowBarrier.view.rings).toHaveLength(1);
 
     const reduced = new EffectSystem({ particleLimit: 200, damageNumberLimit: 18, reducedMotion: true });
     reduced.consume([{ type: 'extreme-vortex-started', durationMs: 4000 }], frame);
