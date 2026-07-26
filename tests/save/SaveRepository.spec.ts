@@ -7,6 +7,20 @@ describe('SaveRepository', () => {
     expect(repository.load()).toEqual(defaultSave());
   });
 
+  it('creates version four progression defaults', () => {
+    expect(defaultSave()).toMatchObject({
+      version: 4,
+      accountLevel: 1,
+      accountXp: 0,
+      stamina: 30,
+      skillMasteryXp: {
+        'tidal-volley': 0,
+        'bubble-barrier': 0,
+        'extreme-tide': 0,
+      },
+    });
+  });
+
   it('persists a deep copy of valid progress', () => {
     const repository = createMemorySaveRepository();
     const save = { ...defaultSave(), gears: 20, unlockedPassengerIds: ['mechanic'] };
@@ -58,7 +72,7 @@ describe('SaveRepository', () => {
     });
 
     expect(migrated).toMatchObject({
-      version: 3,
+      version: 4,
       gears: 90,
       stationLevel: 2,
       purchasedProductIds: [],
@@ -102,7 +116,7 @@ describe('SaveRepository', () => {
       ownedCosmeticIds: ['deep-sea-engine'],
     });
 
-    expect(migrated.version).toBe(3);
+    expect(migrated.version).toBe(4);
     expect(migrated.selectedCaptainId).toBeNull();
     expect(migrated.ownedSkinIds).toEqual(['skin-tide-base']);
     expect(migrated.equipmentInventory).toHaveLength(4);
@@ -125,5 +139,36 @@ describe('SaveRepository', () => {
       'skin-aurora-whale-song',
     ]);
     expect(repository.load().equipmentFragments['tide-cannon']).toBe(10);
+  });
+
+  it('migrates version three saves without losing existing progress', () => {
+    const current = defaultSave();
+    const migrated = normalizePlayerSave({
+      ...current,
+      version: 3,
+      accountLevel: undefined,
+      accountXp: undefined,
+      stamina: undefined,
+      staminaUpdatedAtMs: undefined,
+      skillMasteryXp: undefined,
+    });
+
+    expect(migrated.version).toBe(4);
+    expect(migrated.gears).toBe(current.gears);
+    expect(migrated.accountLevel).toBe(1);
+  });
+
+  it('deep copies skill mastery and rejects invalid persistent progression', () => {
+    const repository = createMemorySaveRepository();
+    const save = repository.load();
+    save.skillMasteryXp['tidal-volley'] = 20;
+    repository.save(save);
+    save.skillMasteryXp['tidal-volley'] = 999;
+
+    expect(repository.load().skillMasteryXp['tidal-volley']).toBe(20);
+    expect(() => repository.save({
+      ...repository.load(),
+      stamina: 31,
+    })).toThrow('Stamina must be between 0 and 30');
   });
 });

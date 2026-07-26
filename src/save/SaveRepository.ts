@@ -15,9 +15,13 @@ import {
 } from '../domain/equipment/EquipmentSystem';
 import { normalizeOwnedSkinIds } from '../domain/skin/SkinCollectionSystem';
 import { getSkinDefinition } from '../domain/skin/SkinCatalog';
+import {
+  createSkillMasteryXp,
+  type SkillMasteryXp,
+} from '../domain/progression/SkillMasterySystem';
 
 export interface PlayerSave {
-  readonly version: 3;
+  readonly version: 4;
   readonly gears: number;
   readonly routeMarks: number;
   readonly starTickets: number;
@@ -36,6 +40,11 @@ export interface PlayerSave {
   readonly equipmentInventory: EquipmentInstance[];
   readonly equippedEquipmentIds: Record<EquipmentSlot, string | null>;
   readonly equipmentFragments: Record<string, number>;
+  readonly accountLevel: number;
+  readonly accountXp: number;
+  readonly stamina: number;
+  readonly staminaUpdatedAtMs: number;
+  readonly skillMasteryXp: SkillMasteryXp;
 }
 
 export interface SaveRepository {
@@ -68,7 +77,7 @@ export function defaultSave(): PlayerSave {
   const captainProfile = createCaptainProfileState();
   const equipment = createStarterEquipmentState();
   return {
-    version: 3,
+    version: 4,
     gears: 0,
     routeMarks: 0,
     starTickets: 0,
@@ -87,12 +96,17 @@ export function defaultSave(): PlayerSave {
     equipmentInventory: equipment.inventory.map(cloneEquipmentInstance),
     equippedEquipmentIds: { ...equipment.equippedEquipmentIds },
     equipmentFragments: {},
+    accountLevel: 1,
+    accountXp: 0,
+    stamina: 30,
+    staminaUpdatedAtMs: 0,
+    skillMasteryXp: createSkillMasteryXp(),
   };
 }
 
 function cloneSave(save: PlayerSave): PlayerSave {
   return {
-    version: 3,
+    version: 4,
     gears: save.gears,
     routeMarks: save.routeMarks,
     starTickets: save.starTickets,
@@ -111,6 +125,11 @@ function cloneSave(save: PlayerSave): PlayerSave {
     equipmentInventory: save.equipmentInventory.map(cloneEquipmentInstance),
     equippedEquipmentIds: { ...save.equippedEquipmentIds },
     equipmentFragments: { ...save.equipmentFragments },
+    accountLevel: save.accountLevel,
+    accountXp: save.accountXp,
+    stamina: save.stamina,
+    staminaUpdatedAtMs: save.staminaUpdatedAtMs,
+    skillMasteryXp: { ...save.skillMasteryXp },
   };
 }
 
@@ -212,8 +231,24 @@ function validateFragments(
   }
 }
 
+function validateSkillMasteryXp(value: unknown): asserts value is SkillMasteryXp {
+  if (!isRecord(value)) {
+    throw new Error('Skill mastery XP must be an object');
+  }
+  const skillIds = Object.keys(createSkillMasteryXp());
+  const keys = Object.keys(value);
+  if (keys.length !== skillIds.length || !skillIds.every((skillId) => keys.includes(skillId))) {
+    throw new Error('Skill mastery XP must contain exactly the known skill IDs');
+  }
+  for (const skillId of skillIds) {
+    if (!Number.isFinite(value[skillId]) || (value[skillId] as number) < 0) {
+      throw new Error('Skill mastery XP must be finite and non-negative');
+    }
+  }
+}
+
 function validateSave(save: PlayerSave): void {
-  if (save.version !== 3) {
+  if (save.version !== 4) {
     throw new Error('Unsupported save version');
   }
   if (!Number.isFinite(save.gears) || save.gears < 0) {
@@ -228,6 +263,19 @@ function validateSave(save: PlayerSave): void {
   if (!Number.isInteger(save.stationLevel) || save.stationLevel < 1) {
     throw new Error('Station level must be a positive integer');
   }
+  if (!Number.isInteger(save.accountLevel) || save.accountLevel < 1) {
+    throw new Error('Account level must be a positive integer');
+  }
+  if (!Number.isFinite(save.accountXp) || save.accountXp < 0) {
+    throw new Error('Account XP must be finite and non-negative');
+  }
+  if (!Number.isInteger(save.stamina) || save.stamina < 0 || save.stamina > 30) {
+    throw new Error('Stamina must be between 0 and 30');
+  }
+  if (!Number.isFinite(save.staminaUpdatedAtMs) || save.staminaUpdatedAtMs < 0) {
+    throw new Error('Stamina update timestamp must be finite and non-negative');
+  }
+  validateSkillMasteryXp(save.skillMasteryXp);
   assertStringArray(save.unlockedPassengerIds, 'Passenger IDs must be strings');
   assertStringArray(save.unlockedModuleIds, 'Module IDs must be strings');
   assertStringArray(save.unlockedMapIds, 'Map IDs must be strings');
@@ -268,7 +316,7 @@ export function normalizePlayerSave(candidate: unknown): PlayerSave {
     throw new Error('Save must be an object');
   }
   const raw = candidate;
-  if (raw.version !== 1 && raw.version !== 2 && raw.version !== 3) {
+  if (raw.version !== 1 && raw.version !== 2 && raw.version !== 3 && raw.version !== 4) {
     throw new Error('Unsupported save version');
   }
 
@@ -284,22 +332,22 @@ export function normalizePlayerSave(candidate: unknown): PlayerSave {
         ownedCosmeticIds: raw.ownedCosmeticIds,
       };
   const starterEquipment = createStarterEquipmentState();
-  const isVersion3 = raw.version === 3;
-  const rawSkinIds = isVersion3 ? raw.ownedSkinIds : ['skin-tide-base'];
+  const hasVersion3Fields = raw.version === 3 || raw.version === 4;
+  const rawSkinIds = hasVersion3Fields ? raw.ownedSkinIds : ['skin-tide-base'];
   assertStringArray(rawSkinIds, 'Owned skin IDs must be strings');
   const ownedSkinIds = [...normalizeOwnedSkinIds(rawSkinIds)];
-  const equipmentInventory = isVersion3
+  const equipmentInventory = hasVersion3Fields
     ? raw.equipmentInventory
     : starterEquipment.inventory;
   validateEquipmentInventory(equipmentInventory);
-  const equippedEquipmentIds = isVersion3
+  const equippedEquipmentIds = hasVersion3Fields
     ? raw.equippedEquipmentIds
     : starterEquipment.equippedEquipmentIds;
   validateEquippedEquipment(equippedEquipmentIds, equipmentInventory);
-  const equipmentFragments = isVersion3 ? raw.equipmentFragments : {};
+  const equipmentFragments = hasVersion3Fields ? raw.equipmentFragments : {};
   validateFragments(equipmentFragments);
 
-  const selectedCaptainId = isVersion3
+  const selectedCaptainId = hasVersion3Fields
     ? (raw.selectedCaptainId ?? null)
     : null;
   if (selectedCaptainId !== null) {
@@ -310,7 +358,7 @@ export function normalizePlayerSave(candidate: unknown): PlayerSave {
   }
 
   const normalized = {
-    version: 3 as const,
+    version: 4 as const,
     gears: raw.gears,
     routeMarks: raw.routeMarks,
     starTickets: raw.starTickets,
@@ -323,12 +371,17 @@ export function normalizePlayerSave(candidate: unknown): PlayerSave {
     ...commerceFields,
     selectedCaptainId: selectedCaptainId as CaptainId | null,
     ownedSkinIds,
-    equippedSkinIds: isVersion3
+    equippedSkinIds: hasVersion3Fields
       ? normalizeEquippedSkinIds(raw.equippedSkinIds, ownedSkinIds)
       : { ...createCaptainProfileState().equippedSkinIds },
     equipmentInventory,
     equippedEquipmentIds,
     equipmentFragments,
+    accountLevel: raw.version === 4 ? raw.accountLevel : 1,
+    accountXp: raw.version === 4 ? raw.accountXp : 0,
+    stamina: raw.version === 4 ? raw.stamina : 30,
+    staminaUpdatedAtMs: raw.version === 4 ? raw.staminaUpdatedAtMs : 0,
+    skillMasteryXp: raw.version === 4 ? raw.skillMasteryXp : createSkillMasteryXp(),
   } as unknown as PlayerSave;
   validateSave(normalized);
   return cloneSave(normalized);
