@@ -12,3 +12,16 @@ Validation completed:
 - `npm test` — 91 files, 451 tests passed.
 - `npm run typecheck`
 - `git diff --check`
+
+### P1 Follow-up Fix
+
+- Corrected undertow pull to move enemies only along the horizontal axis toward the centre lane (`x = 195`), without advancing them toward the defence line.
+- Kept the active extreme-cast state alive until every queued second crest resolves, so a delayed crest can correctly award its per-cast energy refund.
+- Added regressions for pull direction/defence-line safety and the standalone `energy-return` + `double-crest` combination.
+
+Follow-up validation:
+
+- Focused progression/battle suite: 15 tests passed.
+- Full suite: 91 files, 453 tests passed.
+- `npm run typecheck`
+- `git diff --check`

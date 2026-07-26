@@ -77,6 +77,7 @@ type ActiveExtremeEffect = {
   readonly energyPerKill: number;
   readonly energyRefundCap: number;
   energyRefunded: number;
+  pendingCrestActions: number;
 };
 
 export interface BattleEntityPoolStats {
@@ -281,6 +282,7 @@ export class BattleEngine {
         energyPerKill: profile.energyPerKill,
         energyRefundCap: profile.energyRefundCap,
         energyRefunded: 0,
+        pendingCrestActions: profile.secondCrestDelayMs > 0 ? 1 : 0,
       };
       for (const enemy of this.enemies) {
         if (enemy.alive) {
@@ -1144,6 +1146,10 @@ export class BattleEngine {
       const action = this.delayedExtremeCrestActions[index];
       if (!action || action.dueAtMs > this.elapsedMs) continue;
       this.delayedExtremeCrestActions.splice(index, 1);
+      if (this.activeExtremeEffect) this.activeExtremeEffect.pendingCrestActions = Math.max(
+        0,
+        this.activeExtremeEffect.pendingCrestActions - 1,
+      );
       for (const enemy of this.enemies) {
         if (enemy.alive) this.applyDamage(enemy, action.damage, false, 'extreme-tide');
       }
@@ -1161,18 +1167,11 @@ export class BattleEngine {
     if (effect.pullRemainingMs > 0) {
       const activeMs = Math.min(stepMs, effect.pullRemainingMs);
       const maxDistance = 220 * activeMs / 1000;
+      const centreX = LANE_X[1];
       for (const enemy of this.enemies) {
         if (!enemy.alive) continue;
-        const deltaX = 195 - enemy.x;
-        const deltaY = DEFENCE_LINE_Y - enemy.y;
-        const distance = Math.hypot(deltaX, deltaY);
-        if (distance <= maxDistance || distance === 0) {
-          enemy.x = 195;
-          enemy.y = Math.min(DEFENCE_LINE_Y, enemy.y + deltaY);
-        } else {
-          enemy.x += deltaX / distance * maxDistance;
-          enemy.y = Math.min(DEFENCE_LINE_Y, enemy.y + deltaY / distance * maxDistance);
-        }
+        const deltaX = centreX - enemy.x;
+        enemy.x += Math.sign(deltaX) * Math.min(Math.abs(deltaX), maxDistance);
       }
       effect.pullRemainingMs -= activeMs;
     }
@@ -1190,7 +1189,11 @@ export class BattleEngine {
         }
       }
     }
-    if (effect.pullRemainingMs <= 0 && effect.vortexRemainingMs <= 0) {
+    if (
+      effect.pullRemainingMs <= 0
+      && effect.vortexRemainingMs <= 0
+      && effect.pendingCrestActions <= 0
+    ) {
       this.activeExtremeEffect = null;
     }
   }

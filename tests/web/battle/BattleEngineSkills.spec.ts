@@ -25,6 +25,83 @@ function runFor(engine: BattleEngine, durationMs: number): void {
 }
 
 describe('BattleEngine skills', () => {
+  it('pulls enemies horizontally toward the centre lane without advancing them toward defence', () => {
+    const engine = new BattleEngine(input);
+    const internals = engine as unknown as {
+      battleBuild: unknown;
+      nextSpawnIndex: number;
+      spawnEnemy: (kind: 'bubble-fin', lane: 0 | 1 | 2) => {
+        x: number;
+        y: number;
+        hp: number;
+        maxHp: number;
+        speedPerSecond: number;
+      };
+    };
+    internals.nextSpawnIndex = Number.MAX_SAFE_INTEGER;
+    internals.battleBuild = {
+      generalLevels: {},
+      skillRanks: { 'tidal-volley': 1, 'bubble-barrier': 1, 'extreme-tide': 2 },
+      skillVariants: {
+        'tidal-volley': [],
+        'bubble-barrier': [],
+        'extreme-tide': ['undertow-eye'],
+      },
+    };
+    const target = internals.spawnEnemy('bubble-fin', 0);
+    target.hp = target.maxHp = 10_000;
+    target.speedPerSecond = 0;
+    target.y = 700;
+    const xBefore = target.x;
+    const yBefore = target.y;
+
+    expect(engine.useSkill('extreme-tide')).toBe(true);
+    engine.update(FIXED_STEP_MS);
+
+    expect(target.x).toBeGreaterThan(xBefore);
+    expect(target.x).toBeLessThanOrEqual(195);
+    expect(target.y).toBe(yBefore);
+    expect(target.y).toBeLessThan(716);
+  });
+
+  it('keeps energy return active through a delayed second crest', () => {
+    const engine = new BattleEngine(input);
+    const internals = engine as unknown as {
+      battleBuild: unknown;
+      nextSpawnIndex: number;
+      fireCooldownMs: number;
+      spawnEnemy: (kind: 'bubble-fin', lane: 0 | 1 | 2) => {
+        hp: number;
+        maxHp: number;
+        y: number;
+        speedPerSecond: number;
+        alive: boolean;
+      };
+    };
+    internals.nextSpawnIndex = Number.MAX_SAFE_INTEGER;
+    internals.fireCooldownMs = 100_000;
+    internals.battleBuild = {
+      generalLevels: {},
+      skillRanks: { 'tidal-volley': 1, 'bubble-barrier': 1, 'extreme-tide': 2 },
+      skillVariants: {
+        'tidal-volley': [],
+        'bubble-barrier': [],
+        'extreme-tide': ['energy-return', 'double-crest'],
+      },
+    };
+    const target = internals.spawnEnemy('bubble-fin', 1);
+    target.hp = target.maxHp = 300;
+    target.y = 300;
+    target.speedPerSecond = 0;
+
+    expect(engine.useSkill('extreme-tide')).toBe(true);
+    runFor(engine, 1200);
+
+    expect(target.alive).toBe(false);
+    expect(engine.frame.energy).toBe(2);
+    expect(engine.drainEvents()).toContainEqual({ type: 'extreme-energy-refunded', amount: 2 });
+  });
+
   it('simulates extreme tide variants at exact deterministic timings', () => {
     const engine = new BattleEngine(input);
     runFor(engine, 500);
