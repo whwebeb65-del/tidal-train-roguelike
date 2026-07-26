@@ -347,4 +347,65 @@ describe('EffectSystem', () => {
     expect(effects.view.particles.length).toBeLessThanOrEqual(8);
     expect(effects.poolStats.particles.created).toBeLessThanOrEqual(8);
   });
+
+  it('maps skill rank to bounded volley trails, barrier membranes and extreme strokes', () => {
+    const count = (skillId: 'tidal-volley' | 'bubble-barrier' | 'extreme-tide', rank: 1 | 2 | 3 | 4 | 5) => {
+      const effects = new EffectSystem({
+        particleLimit: 200,
+        damageNumberLimit: 18,
+        reducedMotion: false,
+      });
+      effects.consume([{ type: 'skill-used', skillId }], createFrameFixture({
+        skillRanks: {
+          'tidal-volley': skillId === 'tidal-volley' ? rank : 1,
+          'bubble-barrier': skillId === 'bubble-barrier' ? rank : 1,
+          'extreme-tide': skillId === 'extreme-tide' ? rank : 1,
+        },
+      }));
+      return effects.view;
+    };
+
+    expect(count('tidal-volley', 1).particles.filter((item) => item.kind === 'rank-volley-trail')).toHaveLength(3);
+    expect(count('tidal-volley', 5).particles.filter((item) => item.kind === 'rank-volley-trail')).toHaveLength(7);
+    expect(count('bubble-barrier', 1).rings.filter((item) => item.kind === 'barrier-membrane')).toHaveLength(1);
+    expect(count('bubble-barrier', 5).rings.filter((item) => item.kind === 'barrier-membrane')).toHaveLength(3);
+    expect(count('extreme-tide', 1).particles.filter((item) => item.kind === 'extreme-radial-stroke')).toHaveLength(8);
+    expect(count('extreme-tide', 5).particles.filter((item) => item.kind === 'extreme-radial-stroke')).toHaveLength(16);
+  });
+
+  it('keeps variant cues identifiable while low quality and reduced motion use static bounded fallbacks', () => {
+    const frame = createFrameFixture({
+      skillRanks: { 'tidal-volley': 5, 'bubble-barrier': 5, 'extreme-tide': 5 },
+      skillVariants: {
+        'tidal-volley': ['reef-piercer'],
+        'bubble-barrier': ['reflective-spines'],
+        'extreme-tide': ['undertow-eye', 'lingering-vortex', 'double-crest'],
+      },
+    });
+    const events = [
+      { type: 'skill-used' as const, skillId: 'tidal-volley' as const },
+      { type: 'skill-used' as const, skillId: 'bubble-barrier' as const },
+      { type: 'extreme-pull-started' as const, durationMs: 2000 },
+      { type: 'extreme-vortex-started' as const, durationMs: 4000 },
+      { type: 'extreme-second-crest' as const, durationMs: 1200, amount: 45 },
+    ];
+    const high = new EffectSystem({ particleLimit: 200, damageNumberLimit: 18, reducedMotion: false });
+    high.consume(events, frame);
+    expect(high.view.particles.map((item) => item.kind)).toEqual(expect.arrayContaining([
+      'coral-pierce', 'reflection', 'extreme-pull', 'extreme-vortex', 'second-crest',
+    ]));
+
+    const low = new EffectSystem({ particleLimit: 200, damageNumberLimit: 18, reducedMotion: false });
+    low.setRenderBudget(getRenderBudget('low'));
+    low.consume(events, frame);
+    expect(low.view.particles.filter((item) => item.kind === 'rank-volley-trail')).toHaveLength(1);
+    expect(low.view.rings.filter((item) => item.kind === 'barrier-membrane')).toHaveLength(1);
+
+    const reduced = new EffectSystem({ particleLimit: 200, damageNumberLimit: 18, reducedMotion: true });
+    reduced.consume([{ type: 'extreme-vortex-started', durationMs: 4000 }], frame);
+    expect(reduced.view.particles).toHaveLength(0);
+    expect(reduced.view.particles.filter((item) => item.kind === 'extreme-vortex')).toHaveLength(0);
+    expect(reduced.view.rings.filter((item) => item.kind === 'static-skill-silhouette')).toHaveLength(1);
+    expect(reduced.view.camera).toMatchObject({ x: 0, y: 0, rotation: 0, amplitude: 0 });
+  });
 });

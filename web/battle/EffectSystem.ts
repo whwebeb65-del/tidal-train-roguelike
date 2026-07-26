@@ -20,7 +20,14 @@ export type EffectParticleKind =
   | 'loot'
   | 'skill'
   | 'warning'
-  | 'core-pulse';
+  | 'core-pulse'
+  | 'rank-volley-trail'
+  | 'extreme-radial-stroke'
+  | 'coral-pierce'
+  | 'reflection'
+  | 'extreme-pull'
+  | 'extreme-vortex'
+  | 'second-crest';
 
 export interface EffectParticleView {
   readonly id: number;
@@ -49,6 +56,7 @@ export interface DamageNumberView {
 
 export interface ImpactRingView {
   readonly id: number;
+  readonly kind?: 'impact-ring' | 'barrier-membrane' | 'static-skill-silhouette';
   readonly x: number;
   readonly y: number;
   readonly radius: number;
@@ -134,6 +142,7 @@ interface MutableDamageNumber {
 
 interface MutableImpactRing {
   id: number;
+  kind: NonNullable<ImpactRingView['kind']>;
   x: number;
   y: number;
   color: string;
@@ -267,6 +276,7 @@ export class EffectSystem {
         const progress = Math.min(1, ring.ageMs / ring.lifetimeMs);
         return {
           id: ring.id,
+          kind: ring.kind,
           x: ring.x,
           y: ring.y,
           radius: ring.startRadius
@@ -434,25 +444,68 @@ export class EffectSystem {
       }
       if (event.type === 'skill-used') {
         const isExtreme = event.skillId === 'extreme-tide';
-        this.spawnBurst(
-          195,
-          isExtreme ? 470 : 700,
-          isExtreme ? 16 : 8,
-          isExtreme ? '#b5efff' : '#b9fff4',
-          'skill',
-          isExtreme ? 900 : 620,
-          isExtreme ? 4 : 3,
-          'front-effects',
-        );
-        this.addRing(
-          195,
-          isExtreme ? 470 : 700,
-          18,
-          isExtreme ? 180 : 74,
-          '#e8ffff',
-          4,
-        );
-        if (isExtreme) this.shake(6, 180);
+        const rank = frame.skillRanks[event.skillId];
+        if (this.reducedMotion) {
+          this.addRing(195, isExtreme ? 470 : 700, 56, 56, isExtreme ? '#ffcf86' : '#b9fff4', 7, undefined, 'static-skill-silhouette');
+        } else if (event.skillId === 'tidal-volley') {
+          this.spawnBurst(195, 680, this.rankCount(rank, 3, 5, 7), '#65edff', 'rank-volley-trail', 480, 5, 'front-effects');
+          if (frame.skillVariants['tidal-volley'].includes('reef-piercer')) {
+            this.spawnBurst(195, 650, this.majorCount(3), '#ff8d73', 'coral-pierce', 520, 6, 'front-effects');
+          }
+        } else if (event.skillId === 'bubble-barrier') {
+          const rings = this.rankCount(rank, 1, 2, 3);
+          for (let index = 0; index < rings; index += 1) {
+            this.addRing(195, 700, 26 + index * 10, 68 + index * 14, '#74f5cf', 6, '#e7c66e', 'barrier-membrane');
+          }
+          if (frame.skillVariants['bubble-barrier'].includes('reflective-spines')) {
+            this.spawnBurst(195, 690, this.majorCount(4), '#f5d77b', 'reflection', 540, 6, 'front-effects');
+          }
+        } else {
+          this.spawnBurst(195, 470, this.rankCount(rank, 8, 12, 16), '#ffd793', 'extreme-radial-stroke', 720, 6, 'front-effects');
+        }
+        if (!this.reducedMotion) {
+          this.spawnBurst(
+            195,
+            isExtreme ? 470 : 700,
+            isExtreme ? 16 : 8,
+            isExtreme ? '#b5efff' : '#b9fff4',
+            'skill',
+            isExtreme ? 900 : 620,
+            isExtreme ? 4 : 3,
+            'front-effects',
+          );
+          this.addRing(
+            195,
+            isExtreme ? 470 : 700,
+            18,
+            isExtreme ? 180 : 74,
+            '#e8ffff',
+            4,
+          );
+          if (isExtreme) this.shake(6, 180);
+        }
+      }
+      if (event.type === 'extreme-pull-started') {
+        if (this.reducedMotion) {
+          this.addRing(195, 430, 58, 58, '#78e8ff', 7, undefined, 'static-skill-silhouette');
+        } else {
+          this.spawnBurst(195, 430, this.majorCount(5), '#6de8ff', 'extreme-pull', Math.min(900, event.durationMs), 7, 'front-effects');
+        }
+      }
+      if (event.type === 'extreme-vortex-started') {
+        if (this.reducedMotion) {
+          this.addRing(195, 430, 64, 64, '#9576ff', 7, undefined, 'static-skill-silhouette');
+        } else {
+          this.spawnBurst(195, 430, this.majorCount(8), '#9877ff', 'extreme-vortex', Math.min(1200, event.durationMs), 7, 'front-effects');
+        }
+      }
+      if (event.type === 'extreme-second-crest') {
+        if (this.reducedMotion) {
+          this.addRing(195, 430, 68, 68, '#ffb77d', 8, undefined, 'static-skill-silhouette');
+        } else {
+          this.spawnBurst(195, 430, this.majorCount(6), '#ffb77d', 'second-crest', Math.min(680, event.durationMs), 8, 'front-effects');
+        }
+        this.addDamageNumber(195, 430, event.amount, false);
       }
       if (event.type === 'elite-entered') {
         this.title = '精英潮兽来袭';
@@ -603,6 +656,19 @@ export class EffectSystem {
     this.addRing(x, y, 18, 110, '#ffb49f', 4);
   }
 
+  private rankCount(rank: number, low: number, medium: number, high: number): number {
+    if (this.isLowQuality()) return 1;
+    return rank >= 5 ? high : rank >= 3 ? medium : low;
+  }
+
+  private majorCount(count: number): number {
+    return this.isLowQuality() ? 1 : count;
+  }
+
+  private isLowQuality(): boolean {
+    return this.particleLimit <= 80;
+  }
+
   private spawnDefeatSquash(
     enemyId: number,
     x: number,
@@ -657,10 +723,12 @@ export class EffectSystem {
     color = '#fff2d2',
     priority = 1,
     secondaryColor?: string,
+    kind: MutableImpactRing['kind'] = 'impact-ring',
   ): void {
     if (this.impactLimit <= 0) return;
     const ring = this.ringPool.acquire();
     ring.id = this.nextId++;
+    ring.kind = kind;
     ring.x = x;
     ring.y = y;
     ring.color = color;
@@ -846,6 +914,7 @@ function resetDamageNumber(number: MutableDamageNumber): void {
 function createImpactRing(): MutableImpactRing {
   return {
     id: 0,
+    kind: 'impact-ring',
     x: 0,
     y: 0,
     color: '',
@@ -860,6 +929,7 @@ function createImpactRing(): MutableImpactRing {
 
 function resetImpactRing(ring: MutableImpactRing): void {
   ring.id = 0;
+  ring.kind = 'impact-ring';
   ring.x = 0;
   ring.y = 0;
   ring.color = '';

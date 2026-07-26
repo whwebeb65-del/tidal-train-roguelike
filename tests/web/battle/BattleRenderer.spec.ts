@@ -126,6 +126,32 @@ function trainSignatureFeature(commands: readonly BattleDrawCommand[]) {
 }
 
 describe('BattleRenderer', () => {
+  it('draws rank and variant effect semantics as distinct bounded commands', () => {
+    const effects: EffectFrameView = {
+      particles: [{
+        id: 1, kind: 'coral-pierce', layer: 'front-effects', x: 195, y: 470,
+        size: 8, color: '#ff8d73', alpha: 1, rotation: 0, progress: 0,
+      }, {
+        id: 2, kind: 'extreme-vortex', layer: 'front-effects', x: 195, y: 430,
+        size: 10, color: '#9877ff', alpha: 1, rotation: 0, progress: 0,
+      }],
+      damageNumbers: [],
+      rings: [{
+        id: 3, kind: 'barrier-membrane', x: 195, y: 700, radius: 48,
+        color: '#74f5cf', alpha: 1,
+      }, {
+        id: 4, kind: 'static-skill-silhouette', x: 195, y: 430, radius: 64,
+        color: '#9576ff', alpha: 1,
+      }],
+      camera: { x: 0, y: 0, rotation: 0, amplitude: 0 },
+      cinematic: { darken: 0, title: null, slowMotion: 0 },
+    };
+    const commands = renderCommands({ effects });
+    expect(commands.map((item) => item.kind)).toEqual(expect.arrayContaining([
+      'effect-coral-pierce', 'effect-extreme-vortex',
+      'barrier-membrane', 'static-skill-silhouette',
+    ]));
+  });
   it.each(Object.keys(ENEMY_GEOMETRY) as EnemyKind[])(
     'keeps animated %s sprite, label, and health bar below the HUD gap',
     (kind) => {

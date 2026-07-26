@@ -884,7 +884,7 @@ export class BattleRenderer {
   private drawImpactRings(input: BattleRenderInput): void {
     for (const ring of input.effects.rings) {
       this.painter.ellipse({
-        kind: 'impact-ring',
+        kind: ring.kind ?? 'impact-ring',
         layer: 'front-effects',
         x: ring.x,
         y: ring.y,
