@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import {
@@ -73,6 +73,9 @@ describe('battle art catalog', () => {
       const url = new URL(href);
       expect(url.protocol, `${id} must be a local source asset`).toBe('file:');
       expect(existsSync(fileURLToPath(url)), `${id} source asset`).toBe(true);
+      expect(basename(fileURLToPath(url)), `${id} glyph file`).toBe(
+        `${id}-glyph.webp`,
+      );
     }
   });
 

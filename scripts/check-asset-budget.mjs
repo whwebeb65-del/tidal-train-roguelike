@@ -1,14 +1,16 @@
-import { readdir, stat } from 'node:fs/promises';
+import { lstat, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const root = path.resolve(
-  path.dirname(fileURLToPath(import.meta.url)),
-  '..',
-  'web',
-  'assets',
-  'chibi',
-);
+const root = process.env.ASSET_BUDGET_ROOT
+  ? path.resolve(process.env.ASSET_BUDGET_ROOT)
+  : path.resolve(
+      path.dirname(fileURLToPath(import.meta.url)),
+      '..',
+      'web',
+      'assets',
+      'chibi',
+    );
 
 const limits = {
   'captain-female-base.webp': 450 * 1024,
@@ -38,7 +40,7 @@ const requiredSkillAssets = [
   'double-crest-glyph.webp',
 ];
 
-for (const [name, size] of await collectFiles(root)) {
+for (const [name, size] of await collectFiles(root, '', failures)) {
   sizes.set(name, size);
 }
 
@@ -156,21 +158,27 @@ function sumFiles(names, sizeMap, errors) {
   return total;
 }
 
-async function collectFiles(directory, relativeDirectory = '') {
+async function collectFiles(directory, relativeDirectory, errors) {
   const entries = await readdir(directory, { withFileTypes: true });
   const collected = [];
 
   for (const entry of entries) {
     const relativePath = path.posix.join(relativeDirectory, entry.name);
     const fullPath = path.join(directory, entry.name);
-    if (entry.isDirectory()) {
-      collected.push(...await collectFiles(fullPath, relativePath));
+    const info = await lstat(fullPath);
+    if (info.isSymbolicLink()) {
+      errors.push(`${relativePath}: symbolic links are not approved assets`);
       continue;
     }
-    if (entry.isFile()) {
-      const info = await stat(fullPath);
-      collected.push([relativePath, info.size]);
+    if (info.isDirectory()) {
+      collected.push(...await collectFiles(fullPath, relativePath, errors));
+      continue;
     }
+    if (info.isFile()) {
+      collected.push([relativePath, info.size]);
+      continue;
+    }
+    errors.push(`${relativePath}: non-regular assets are not approved`);
   }
 
   return collected;
