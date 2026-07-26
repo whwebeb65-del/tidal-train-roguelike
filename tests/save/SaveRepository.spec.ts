@@ -171,4 +171,23 @@ describe('SaveRepository', () => {
       stamina: 31,
     })).toThrow('Stamina must be between 0 and 30');
   });
+
+  it('migrates and bounds the persisted settlement ledger', () => {
+    const legacyV4 = { ...defaultSave() } as Record<string, unknown>;
+    delete legacyV4.settledBattleIds;
+    expect(normalizePlayerSave(legacyV4).settledBattleIds).toEqual([]);
+
+    const ids = Array.from({ length: 32 }, (_, index) => `run-${index}`);
+    const repository = createMemorySaveRepository({
+      ...defaultSave(),
+      settledBattleIds: ids,
+    });
+    const loaded = repository.load();
+    loaded.settledBattleIds.push('mutated');
+    expect(repository.load().settledBattleIds).toEqual(ids);
+    expect(() => repository.save({
+      ...defaultSave(),
+      settledBattleIds: ['same', 'same'],
+    })).toThrow('Settlement battle IDs must be unique');
+  });
 });

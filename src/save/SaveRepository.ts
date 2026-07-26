@@ -45,6 +45,7 @@ export interface PlayerSave {
   readonly stamina: number;
   readonly staminaUpdatedAtMs: number;
   readonly skillMasteryXp: SkillMasteryXp;
+  readonly settledBattleIds: string[];
 }
 
 export interface SaveRepository {
@@ -101,6 +102,7 @@ export function defaultSave(): PlayerSave {
     stamina: 30,
     staminaUpdatedAtMs: 0,
     skillMasteryXp: createSkillMasteryXp(),
+    settledBattleIds: [],
   };
 }
 
@@ -130,6 +132,7 @@ function cloneSave(save: PlayerSave): PlayerSave {
     stamina: save.stamina,
     staminaUpdatedAtMs: save.staminaUpdatedAtMs,
     skillMasteryXp: { ...save.skillMasteryXp },
+    settledBattleIds: [...save.settledBattleIds],
   };
 }
 
@@ -247,6 +250,20 @@ function validateSkillMasteryXp(value: unknown): asserts value is SkillMasteryXp
   }
 }
 
+function validateSettledBattleIds(value: unknown): asserts value is string[] {
+  if (!Array.isArray(value) || value.length > 32) {
+    throw new Error('Settlement battle IDs must contain at most 32 entries');
+  }
+  const ids = new Set<string>();
+  for (const id of value) {
+    if (typeof id !== 'string' || id.length === 0) {
+      throw new Error('Settlement battle IDs must be non-empty strings');
+    }
+    if (ids.has(id)) throw new Error('Settlement battle IDs must be unique');
+    ids.add(id);
+  }
+}
+
 function validateSave(save: PlayerSave): void {
   if (save.version !== 4) {
     throw new Error('Unsupported save version');
@@ -276,6 +293,7 @@ function validateSave(save: PlayerSave): void {
     throw new Error('Stamina update timestamp must be finite and non-negative');
   }
   validateSkillMasteryXp(save.skillMasteryXp);
+  validateSettledBattleIds(save.settledBattleIds);
   assertStringArray(save.unlockedPassengerIds, 'Passenger IDs must be strings');
   assertStringArray(save.unlockedModuleIds, 'Module IDs must be strings');
   assertStringArray(save.unlockedMapIds, 'Map IDs must be strings');
@@ -382,6 +400,9 @@ export function normalizePlayerSave(candidate: unknown): PlayerSave {
     stamina: raw.version === 4 ? raw.stamina : 30,
     staminaUpdatedAtMs: raw.version === 4 ? raw.staminaUpdatedAtMs : 0,
     skillMasteryXp: raw.version === 4 ? raw.skillMasteryXp : createSkillMasteryXp(),
+    settledBattleIds: raw.version === 4 && raw.settledBattleIds !== undefined
+      ? raw.settledBattleIds
+      : [],
   } as unknown as PlayerSave;
   validateSave(normalized);
   return cloneSave(normalized);

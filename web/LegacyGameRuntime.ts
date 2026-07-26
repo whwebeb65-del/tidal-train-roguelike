@@ -1209,6 +1209,9 @@ async function startRun(
 function settleBattleOutcome(
   outcome: BattleOutcome,
 ): BattleSettlementPresentation {
+  if (save.settledBattleIds.includes(outcome.battleId)) {
+    return activeBattleSettlement ?? settledBattlePresentation(outcome);
+  }
   const settlement = battleSettlementAdapter.settle(
     activeBattleSettlement,
     outcome,
@@ -1223,6 +1226,24 @@ function settleBattleOutcome(
     throw new Error('Battle settlement did not produce a presentation');
   }
   return activeBattleSettlement;
+}
+
+function settledBattlePresentation(outcome: BattleOutcome): BattleSettlementPresentation {
+  return {
+    title: outcome.victory ? '本局已结算' : '本局已结算',
+    description: '该战斗结果已写入存档，不会重复发放奖励。',
+    rewards: { gears: 0, routeMarks: 0, starTickets: 0 },
+    expeditionPoints: 0,
+    dailyTrialScore: null,
+    doubleSettlementAvailable: false,
+    doubled: false,
+    accountProgression: emptyAccountProgression(),
+    skillMastery: {},
+  };
+}
+
+function appendSettledBattleId(current: PlayerSave, battleId: string): string[] {
+  return [...current.settledBattleIds, battleId].slice(-32);
 }
 
 function settleDynamicDailyTrial(
@@ -1294,6 +1315,7 @@ function settleDynamicNormalRun(
       accountLevel: progression.accountProgression!.level,
       accountXp: progression.accountProgression!.xp,
       skillMasteryXp: progression.skillMasteryXp,
+      settledBattleIds: appendSettledBattleId(save, outcome.battleId),
     });
     track('run_settled', { victory: false });
     notice = '列车已撤回车站；本局互动奖励保留，通关奖励未发放。';
@@ -1334,6 +1356,7 @@ function settleDynamicNormalRun(
     accountLevel: progression.accountProgression!.level,
     accountXp: progression.accountProgression!.xp,
     skillMasteryXp: progression.skillMasteryXp,
+    settledBattleIds: appendSettledBattleId(save, outcome.battleId),
   });
   track('economy_reward_granted', {
     source: firstClear.granted ? 'first-clear' : 'repeat-victory',
