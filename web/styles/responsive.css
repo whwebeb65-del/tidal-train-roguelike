@@ -17,9 +17,6 @@
   .combat-vitals { grid-template-columns: 1fr; }
   .combat-scene .action-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 
-  /* Keep the canvas lane readable beneath the compact battle tide log. */
-  .battle-board { min-height: 100%; }
-
   .wardrobe-layout,
   .equipment-layout { grid-template-columns: 1fr; }
 
