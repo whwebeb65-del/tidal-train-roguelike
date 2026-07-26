@@ -188,6 +188,17 @@ import { createStationScene, type StationScene } from './scenes/StationScene';
 import { createStoreScene } from './scenes/StoreScene';
 import { StationAmbientDirector } from './station/StationAmbientDirector';
 
+export function settleNormalOutcomeForSave(current: PlayerSave, outcome: BattleOutcome, mapId: MapId = 'drift-suburb'): { readonly accepted: boolean; readonly save: PlayerSave; readonly presentation: BattleSettlementPresentation } {
+  if (current.settledBattleIds.includes(outcome.battleId)) return { accepted: false, save: current, presentation: { title: '本局已结算', description: '该战斗结果已写入存档，不会重复发放奖励。', rewards: { gears: 0, routeMarks: 0, starTickets: 0 }, expeditionPoints: 0, dailyTrialScore: null, doubleSettlementAvailable: false, doubled: false, accountProgression: { gainedXp: 0, staminaSpendXp: 0, level: current.accountLevel, xp: current.accountXp, levelsGained: 0 }, skillMastery: {} } };
+  const firstClear = claimFirstClear({ claimedMapIds: current.firstClearMapIds }, { mapId, gears: 400, routeMarks: 10, starTickets: 3, collectionId: `${mapId}-first-clear` });
+  const xp = calculateBattleAccountXp({ normalKills: outcome.killCounts?.normal ?? outcome.kills, eliteKills: outcome.killCounts?.elite ?? 0, bossKills: outcome.killCounts?.boss ?? 0, firstClear: firstClear.granted, staminaSpent: 0 });
+  const account = grantAccountXp({ level: current.accountLevel, xp: current.accountXp }, xp.total);
+  const mastery = settleSkillMastery(current.skillMasteryXp, { castCounts: outcome.skillCastCounts ?? { 'tidal-volley': 0, 'bubble-barrier': 0, 'extreme-tide': 0 }, firstClear: firstClear.granted });
+  const rewards = { gears: firstClear.granted ? 400 : 80, routeMarks: firstClear.granted ? 10 : 2, starTickets: firstClear.granted ? 3 : 0 };
+  const save: PlayerSave = { ...current, gears: current.gears + rewards.gears, routeMarks: current.routeMarks + rewards.routeMarks, starTickets: current.starTickets + rewards.starTickets, firstClearMapIds: [...firstClear.state.claimedMapIds], accountLevel: account.level, accountXp: account.xp, skillMasteryXp: mastery.nextXp, settledBattleIds: appendSettledBattleId(current.settledBattleIds, outcome.battleId) };
+  return { accepted: true, save, presentation: { title: firstClear.granted ? '航线首次打通！' : '潮汐航线通关', description: '', rewards, expeditionPoints: 0, dailyTrialScore: null, doubleSettlementAvailable: !firstClear.granted, doubled: false, accountProgression: { gainedXp: xp.total, staminaSpendXp: 0, level: account.level, xp: account.xp, levelsGained: account.level - current.accountLevel }, skillMastery: {} } };
+}
+
 export interface LegacyGameRuntime extends BattleE2EController {
   start(): Promise<void>;
   applySettings(
@@ -1290,6 +1301,8 @@ function settleDynamicDailyTrial(
 function settleDynamicNormalRun(
   outcome: BattleOutcome,
 ): BattleSettlementPresentation {
+  const persisted = settleNormalOutcomeForSave(save, outcome, currentMapId);
+  if (!persisted.accepted) return persisted.presentation;
   const expedition = contributeToExpedition(socialState, {
     runId: outcome.battleId,
     outcome: outcome.victory ? 'victory' : 'defeat',
