@@ -103,7 +103,6 @@ describe('BattleHUD', () => {
       ...createHudModelOptionsFixture(),
       battleSpeed: 1.5,
       availableBattleSpeeds,
-      nextSpeedUnlockLevel: 20,
     });
 
     expect(model.runLevelLabel).toBe('Lv.7');

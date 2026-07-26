@@ -93,7 +93,6 @@ export interface BattleHudModelOptions {
   readonly pendingActions?: ReadonlySet<string>;
   readonly battleSpeed?: BattleSpeed;
   readonly availableBattleSpeeds?: readonly BattleSpeed[];
-  readonly nextSpeedUnlockLevel?: number | null;
 }
 
 const UPGRADE_COPY: Readonly<Record<BattleUpgradeId, {
