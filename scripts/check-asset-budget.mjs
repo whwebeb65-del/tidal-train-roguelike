@@ -2,15 +2,13 @@ import { lstat, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const root = process.env.ASSET_BUDGET_ROOT
-  ? path.resolve(process.env.ASSET_BUDGET_ROOT)
-  : path.resolve(
-      path.dirname(fileURLToPath(import.meta.url)),
-      '..',
-      'web',
-      'assets',
-      'chibi',
-    );
+const ASSET_ROOT = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  '..',
+  'web',
+  'assets',
+  'chibi',
+);
 
 const limits = {
   'captain-female-base.webp': 450 * 1024,
@@ -20,8 +18,6 @@ const limits = {
   'tidal-boss.webp': 450 * 1024,
 };
 
-const failures = [];
-const sizes = new Map();
 const requiredSkillAssets = [
   'tidal-volley-badge.webp',
   'bubble-barrier-badge.webp',
@@ -40,110 +36,100 @@ const requiredSkillAssets = [
   'double-crest-glyph.webp',
 ];
 
-for (const [name, size] of await collectFiles(root, '', failures)) {
-  sizes.set(name, size);
-}
-
-for (const [name, limit] of Object.entries(limits)) {
-  const size = sizes.get(name);
-  if (size === undefined) {
-    failures.push(`${name}: missing`);
-    continue;
+export async function validateAssetBudget(root) {
+  const failures = [];
+  const sizes = new Map();
+  const rootInfo = await lstat(root);
+  if (rootInfo.isSymbolicLink()) {
+    return { failures: ['asset root: symbolic links are not approved assets'] };
   }
-  if (size > limit) {
-    failures.push(`${name}: ${size} bytes exceeds ${limit}`);
+  if (!rootInfo.isDirectory()) {
+    return { failures: ['asset root: must be a directory'] };
   }
-}
 
-const firstScreen = [
-  'station-sky-dusk.webp',
-  'station-horizon-dusk.webp',
-  'station-platform-dusk.webp',
-  'station-foreground-dusk.webp',
-  'bubble-train.webp',
-  'captain-female-base.webp',
-  'otter-mechanic.webp',
-  'jellyfish-medic.webp',
-  'flying-fish-post.webp',
-  'station-distant-train.webp',
-];
-const battleScreen = [
-  'battle-sky-dusk.webp',
-  'battle-horizon-dusk.webp',
-  'battle-track-dusk.webp',
-  'battle-foreground-dusk.webp',
-  'bubble-train.webp',
-  'captain-female-aurora.webp',
-  'otter-mechanic.webp',
-  'jellyfish-medic.webp',
-  'puffer-dragon.webp',
-  'needle-jelly-enemy.webp',
-  'crystal-crab.webp',
-  'skills/tidal-volley-badge.webp',
-  'skills/bubble-barrier-badge.webp',
-  'skills/extreme-tide-badge.webp',
-];
-const firstScreenBytes = sumFiles(firstScreen, sizes, failures);
-const battleScreenBytes = sumFiles(battleScreen, sizes, failures);
-const totalSkillAssetBytes = sumFiles(
-  requiredSkillAssets.map((name) => `skills/${name}`),
-  sizes,
-  failures,
-);
-const allChibiBytes = [...sizes.values()].reduce(
-  (total, size) => total + size,
-  0,
-);
-
-const actualSkillAssets = [...sizes.keys()]
-  .filter((name) => name.startsWith('skills/'))
-  .map((name) => name.slice('skills/'.length))
-  .sort();
-const expectedSkillAssets = [...requiredSkillAssets].sort();
-if (
-  actualSkillAssets.length !== expectedSkillAssets.length
-  || actualSkillAssets.some((name, index) => name !== expectedSkillAssets[index])
-) {
-  failures.push(
-    `skills: expected exactly ${expectedSkillAssets.join(', ')}, found ${actualSkillAssets.join(', ')}`,
-  );
-}
-
-if (firstScreenBytes > 1.5 * 1024 * 1024) {
-  failures.push(`first-screen: ${firstScreenBytes} bytes exceeds 1.5 MB`);
-}
-if (battleScreenBytes > 2.5 * 1024 * 1024) {
-  failures.push(
-    `battle-screen: ${battleScreenBytes} bytes exceeds 2.5 MB`,
-  );
-}
-if (allChibiBytes > 5.5 * 1024 * 1024) {
-  failures.push(`all-chibi: ${allChibiBytes} bytes exceeds 5.5 MB`);
-}
-if (totalSkillAssetBytes > 650 * 1024) {
-  failures.push(
-    `skill-assets: ${totalSkillAssetBytes} bytes exceeds 650 KiB`,
-  );
-}
-
-const audioExtensions = new Set(['.mp3', '.wav', '.ogg']);
-for (const name of sizes.keys()) {
-  if (audioExtensions.has(path.extname(name).toLowerCase())) {
-    failures.push(`${name}: large audio loops are not approved assets`);
+  for (const [name, size] of await collectFiles(root, '', failures)) {
+    sizes.set(name, size);
   }
+
+  for (const [name, limit] of Object.entries(limits)) {
+    const size = sizes.get(name);
+    if (size === undefined) {
+      failures.push(`${name}: missing`);
+      continue;
+    }
+    if (size > limit) failures.push(`${name}: ${size} bytes exceeds ${limit}`);
+  }
+
+  const firstScreen = [
+    'station-sky-dusk.webp', 'station-horizon-dusk.webp',
+    'station-platform-dusk.webp', 'station-foreground-dusk.webp',
+    'bubble-train.webp', 'captain-female-base.webp', 'otter-mechanic.webp',
+    'jellyfish-medic.webp', 'flying-fish-post.webp', 'station-distant-train.webp',
+  ];
+  const battleScreen = [
+    'battle-sky-dusk.webp', 'battle-horizon-dusk.webp',
+    'battle-track-dusk.webp', 'battle-foreground-dusk.webp', 'bubble-train.webp',
+    'captain-female-aurora.webp', 'otter-mechanic.webp', 'jellyfish-medic.webp',
+    'puffer-dragon.webp', 'needle-jelly-enemy.webp', 'crystal-crab.webp',
+    'skills/tidal-volley-badge.webp', 'skills/bubble-barrier-badge.webp',
+    'skills/extreme-tide-badge.webp',
+  ];
+  const firstScreenBytes = sumFiles(firstScreen, sizes, failures);
+  const battleScreenBytes = sumFiles(battleScreen, sizes, failures);
+  const totalSkillAssetBytes = sumFiles(
+    requiredSkillAssets.map((name) => `skills/${name}`), sizes, failures,
+  );
+  const allChibiBytes = [...sizes.values()].reduce((total, size) => total + size, 0);
+
+  const actualSkillAssets = [...sizes.keys()]
+    .filter((name) => name.startsWith('skills/'))
+    .map((name) => name.slice('skills/'.length))
+    .sort();
+  const expectedSkillAssets = [...requiredSkillAssets].sort();
+  if (
+    actualSkillAssets.length !== expectedSkillAssets.length
+    || actualSkillAssets.some((name, index) => name !== expectedSkillAssets[index])
+  ) {
+    failures.push(
+      `skills: expected exactly ${expectedSkillAssets.join(', ')}, found ${actualSkillAssets.join(', ')}`,
+    );
+  }
+
+  if (firstScreenBytes > 1.5 * 1024 * 1024) {
+    failures.push(`first-screen: ${firstScreenBytes} bytes exceeds 1.5 MB`);
+  }
+  if (battleScreenBytes > 2.5 * 1024 * 1024) {
+    failures.push(`battle-screen: ${battleScreenBytes} bytes exceeds 2.5 MB`);
+  }
+  if (allChibiBytes > 5.5 * 1024 * 1024) {
+    failures.push(`all-chibi: ${allChibiBytes} bytes exceeds 5.5 MB`);
+  }
+  if (totalSkillAssetBytes > 650 * 1024) {
+    failures.push(`skill-assets: ${totalSkillAssetBytes} bytes exceeds 650 KiB`);
+  }
+
+  const audioExtensions = new Set(['.mp3', '.wav', '.ogg']);
+  for (const name of sizes.keys()) {
+    if (audioExtensions.has(path.extname(name).toLowerCase())) {
+      failures.push(`${name}: large audio loops are not approved assets`);
+    }
+  }
+
+  return { failures, firstScreenBytes, battleScreenBytes, totalSkillAssetBytes, allChibiBytes };
 }
 
-console.log(`first-screen bytes: ${firstScreenBytes}`);
-console.log(`battle-screen bytes: ${battleScreenBytes}`);
-console.log(`total skill asset bytes: ${totalSkillAssetBytes}`);
-console.log(`all chibi bytes: ${allChibiBytes}`);
-
-if (failures.length > 0) {
-  console.error(failures.join('\n'));
-  process.exit(1);
+if (path.resolve(process.argv[1] ?? '') === fileURLToPath(import.meta.url)) {
+  const result = await validateAssetBudget(ASSET_ROOT);
+  console.log(`first-screen bytes: ${result.firstScreenBytes}`);
+  console.log(`battle-screen bytes: ${result.battleScreenBytes}`);
+  console.log(`total skill asset bytes: ${result.totalSkillAssetBytes}`);
+  console.log(`all chibi bytes: ${result.allChibiBytes}`);
+  if (result.failures.length > 0) {
+    console.error(result.failures.join('\n'));
+    process.exit(1);
+  }
+  console.log('asset budget ok');
 }
-
-console.log('asset budget ok');
 
 function sumFiles(names, sizeMap, errors) {
   let total = 0;
@@ -161,7 +147,6 @@ function sumFiles(names, sizeMap, errors) {
 async function collectFiles(directory, relativeDirectory, errors) {
   const entries = await readdir(directory, { withFileTypes: true });
   const collected = [];
-
   for (const entry of entries) {
     const relativePath = path.posix.join(relativeDirectory, entry.name);
     const fullPath = path.join(directory, entry.name);
@@ -180,6 +165,5 @@ async function collectFiles(directory, relativeDirectory, errors) {
     }
     errors.push(`${relativePath}: non-regular assets are not approved`);
   }
-
   return collected;
 }

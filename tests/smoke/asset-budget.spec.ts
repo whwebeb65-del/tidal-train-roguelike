@@ -4,6 +4,18 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
+type AssetBudgetValidation = {
+  readonly failures: readonly string[];
+};
+
+const assetBudgetModuleUrl = new URL(
+  '../../scripts/check-asset-budget.mjs',
+  import.meta.url,
+).href;
+const { validateAssetBudget } = await import(assetBudgetModuleUrl) as {
+  validateAssetBudget(root: string): Promise<AssetBudgetValidation>;
+};
+
 describe('asset budget', () => {
   it('keeps launch art inside the approved byte budget', () => {
     const output = execFileSync(
@@ -21,6 +33,26 @@ describe('asset budget', () => {
       output.match(/total skill asset bytes: (\d+)/)?.[1],
     );
     expect(totalSkillAssetBytes).toBeLessThanOrEqual(650 * 1024);
+  });
+
+  it('always checks the repository asset root when an override is supplied', async () => {
+    const fixtureRoot = await mkdtemp(join(tmpdir(), 'tidal-train-assets-'));
+
+    try {
+      const output = execFileSync(
+        process.execPath,
+        ['scripts/check-asset-budget.mjs'],
+        {
+          encoding: 'utf8',
+          env: { ...process.env, ASSET_BUDGET_ROOT: fixtureRoot },
+        },
+      );
+
+      expect(output).toContain('first-screen bytes: 581204');
+      expect(output).toContain('asset budget ok');
+    } finally {
+      await rm(fixtureRoot, { force: true, recursive: true });
+    }
   });
 
   it('rejects symbolic links in the skill asset directory', async () => {
@@ -79,14 +111,9 @@ describe('asset budget', () => {
         'junction',
       );
 
-      expect(() =>
-        execFileSync(process.execPath, ['scripts/check-asset-budget.mjs'], {
-          encoding: 'utf8',
-          env: { ...process.env, ASSET_BUDGET_ROOT: fixtureRoot },
-          stdio: ['ignore', 'pipe', 'pipe'],
-        }),
-      ).toThrow(
-        'unapproved-glyph.webp: symbolic links are not approved assets',
+      const result = await validateAssetBudget(fixtureRoot);
+      expect(result.failures).toContain(
+        'skills/unapproved-glyph.webp: symbolic links are not approved assets',
       );
     } finally {
       await rm(fixtureRoot, { force: true, recursive: true });
