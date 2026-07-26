@@ -25,3 +25,10 @@ Prompts used the approved premium hand-painted chibi direction: imperfect deep-n
 ## Visual self-review
 
 Viewed the generated full-resolution sources and a final 256px/64px contact sheet on a deep navy background. The three primary skills remain distinct at small size: forward arrow-fish volley, round puffer-and-bubble defense, and radial tidal-eye ultimate. Each glyph has an individual silhouette and retained navy outlines/high-contrast highlight separation at 64px. No text, UI panels, square backgrounds, or visible chroma-key fringes were observed.
+
+## Review remediation
+
+- `2fb0e75` regenerated all fifteen assets through built-in imagegen in a flat matte gouache-and-ink treatment; prompts explicitly prohibited glossy 3D, glass, metal, gradients, and rendered bubble lighting.
+- `f88fa24` repeated chroma removal with edge contraction and removed remaining key-colour fringe pixels from alpha output.
+- Smoke coverage now invokes the available Python/Pillow decoder and asserts decoded alpha extrema `(0, 255)`, rather than only inspecting WebP container flags.
+- Final validation passed: focused asset test 17/17; `npm run typecheck`; full `npm test` (91 files / 477 tests); `npm run check:assets`; dimensions/alpha/key-colour scan; and `git diff --check`.
