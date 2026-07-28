@@ -8,6 +8,7 @@ import type {
 } from './BattleDiagnostics';
 import type { TrainMotionFrameView } from './TrainMotionTypes';
 import type { EffectParticleKind } from './EffectSystem';
+import type { BattleSpeed } from '../../src/domain/progression/AccountProgressionSystem';
 
 export interface BattleE2EEffectGeometry {
   readonly particles: readonly {
@@ -43,6 +44,16 @@ export interface BattleE2ESnapshot {
   readonly effects: BattleE2EEffectGeometry | null;
   readonly diagnostics: BattleDiagnosticsSnapshot;
   readonly settlementCount: number;
+  readonly progression: {
+    readonly runLevel: number;
+    readonly ranks: Readonly<Record<string, number>>;
+    readonly variants: Readonly<Record<string, readonly string[]>>;
+    readonly speed: BattleSpeed;
+    readonly accountLevel: number;
+    readonly xp: number;
+    readonly stamina: number;
+    readonly hardCap: boolean;
+  };
 }
 
 export interface BattleE2EController {
@@ -52,6 +63,7 @@ export interface BattleE2EController {
   e2eStartDailyTrial(): Promise<void>;
   e2eAdvanceBattle(durationMs: number): void;
   e2eChooseFirstUpgrade(): boolean;
+  e2eSetBattleSpeed(speed: BattleSpeed): boolean;
   e2eUseSkill(skillId: BattleSkillId): boolean;
   e2eRequestPause(): void;
   e2eRequestResume(): Promise<void>;
@@ -65,6 +77,7 @@ export interface TidalTrainE2EHooks {
   startDailyTrial(): Promise<void>;
   advanceBattle(durationMs: number): void;
   chooseFirstUpgrade(): boolean;
+  setBattleSpeed(speed: BattleSpeed): boolean;
   useSkill(skillId: BattleSkillId): boolean;
   requestPause(): void;
   requestResume(): Promise<void>;
@@ -100,6 +113,7 @@ export function installBattleE2EHooks(
       controller.e2eAdvanceBattle(durationMs)
     ),
     chooseFirstUpgrade: () => controller.e2eChooseFirstUpgrade(),
+    setBattleSpeed: (speed) => controller.e2eSetBattleSpeed(speed),
     useSkill: (skillId) => controller.e2eUseSkill(skillId),
     requestPause: () => controller.e2eRequestPause(),
     requestResume: () => controller.e2eRequestResume(),

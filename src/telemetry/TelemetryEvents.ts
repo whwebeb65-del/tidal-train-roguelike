@@ -54,7 +54,15 @@ export type PrototypeEventName =
   | 'battle_upgrade_selected'
   | 'battle_elite_entered'
   | 'battle_boss_intro'
-  | 'battle_performance_changed';
+  | 'battle_performance_changed'
+  | 'run_level_reached'
+  | 'upgrade_selected'
+  | 'skill_rank_changed'
+  | 'skill_variant_acquired'
+  | 'skill_mastery_settled'
+  | 'account_xp_settled'
+  | 'battle_speed_changed'
+  | 'battle_hard_cap_reached';
 
 export interface PrototypeEvent {
   readonly name: PrototypeEventName;

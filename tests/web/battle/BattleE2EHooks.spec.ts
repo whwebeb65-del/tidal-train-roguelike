@@ -28,6 +28,16 @@ function createController(): BattleE2EController {
         lastUncaughtError: null,
       },
       settlementCount: 0,
+      progression: {
+        runLevel: 1,
+        ranks: { 'tidal-volley': 1 },
+        variants: { 'tidal-volley': [] },
+        speed: 1,
+        accountLevel: 1,
+        xp: 0,
+        stamina: 5,
+        hardCap: false,
+      },
     })),
     e2eNavigate: vi.fn(async () => undefined),
     e2eStartNormalBattle: vi.fn(async () => undefined),
@@ -38,6 +48,7 @@ function createController(): BattleE2EController {
     e2eRequestPause: vi.fn(),
     e2eRequestResume: vi.fn(async () => undefined),
     e2eReturnToStation: vi.fn(async () => undefined),
+    e2eSetBattleSpeed: vi.fn(() => true),
   };
 }
 
@@ -68,7 +79,19 @@ describe('BattleE2EHooks', () => {
 
     expect(controller.e2eAdvanceBattle).toHaveBeenCalledWith(2000);
     expect(controller.e2eNavigate).toHaveBeenCalledWith('captain');
+    expect(target.__TIDAL_TRAIN_E2E__?.setBattleSpeed(1.5)).toBe(true);
+    expect(controller.e2eSetBattleSpeed).toHaveBeenCalledWith(1.5);
     expect(target.__TIDAL_TRAIN_E2E__?.snapshot().trainMotion).toBeNull();
+    expect(target.__TIDAL_TRAIN_E2E__?.snapshot().progression).toEqual({
+      runLevel: 1,
+      ranks: { 'tidal-volley': 1 },
+      variants: { 'tidal-volley': [] },
+      speed: 1,
+      accountLevel: 1,
+      xp: 0,
+      stamina: 5,
+      hardCap: false,
+    });
     removeBattleE2EHooks(target);
     expect(target.__TIDAL_TRAIN_E2E__).toBeUndefined();
   });

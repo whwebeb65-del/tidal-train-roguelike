@@ -169,6 +169,7 @@ import { BattleHUD } from './battle/BattleHUD';
 import { BattleRenderer } from './battle/BattleRenderer';
 import type {
   BattleFrameView,
+  BattleEvent,
   BattleOutcome,
   BattleSkillId,
 } from './battle/BattleTypes';
@@ -334,6 +335,9 @@ let preparedBattleAccountLevel: number | null = null;
 let preparedBattleSpeed: { initial: BattleSpeed; available: readonly BattleSpeed[] } | null = null;
 let activeRunAccountStart = save.accountLevel;
 let activeRunStaminaSpent = 0;
+let activeBattleSpeed: BattleSpeed = 1;
+let trackedSkillRanks: Readonly<Record<string, number>> = {};
+let trackedSkillVariants: Readonly<Record<string, readonly string[]>> = {};
 let activeStationScene: StationScene | null = null;
 let activeStationRunToken: symbol | null = null;
 let battleStartPending = false;
@@ -469,7 +473,10 @@ function createBattleScene(
       ?? availableBattleSpeeds(preparedBattleAccountLevel ?? save.accountLevel),
     onBattleSpeedChanged: (speed) => {
       settingsBridge.updateSettings({ preferredBattleSpeed: speed });
+      activeBattleSpeed = speed;
+      track('battle_speed_changed', { speed });
     },
+    onBattleEvents: trackBattleEvents,
     qualityPreference,
     diagnostics,
     manualStepMode: e2eEnabled,
@@ -750,6 +757,44 @@ function applyCampaignReward(reward: CampaignReward): void {
 
 function track(name: PrototypeEventName, payload: Record<string, string | number | boolean> = {}): void {
   telemetry.track({ name, runId: runId || 'station', timestampMs: Date.now(), payload });
+}
+
+function trackBattleEvents(events: readonly BattleEvent[]): void {
+  for (const event of events) {
+    if (event.type === 'run-level-reached') {
+      track('run_level_reached', { runLevel: event.runLevel });
+    }
+    if (event.type === 'upgrade-selected') {
+      track('upgrade_selected', {
+        upgradeId: event.upgradeId,
+        source: event.source,
+        level: event.level,
+        runLevel: event.runLevel,
+      });
+      for (const [skillId, rank] of Object.entries(event.skillRanks)) {
+        if (trackedSkillRanks[skillId] !== rank) {
+          track('skill_rank_changed', { skillId, rank });
+        }
+      }
+      for (const [skillId, variantIds] of Object.entries(event.skillVariants)) {
+        for (const variantId of variantIds) {
+          if (!trackedSkillVariants[skillId]?.includes(variantId)) {
+            track('skill_variant_acquired', { skillId, variantId });
+          }
+        }
+      }
+      trackedSkillRanks = { ...event.skillRanks };
+      trackedSkillVariants = { ...event.skillVariants };
+    }
+    if (
+      event.type === 'battle-lost'
+      && activeBattleEngine?.outcome?.hardCapReached === true
+    ) {
+      track('battle_hard_cap_reached', {
+        elapsedMs: activeBattleEngine.outcome.elapsedMs,
+      });
+    }
+  }
 }
 
 function trackAdOfferOnce(placement: RewardedPlacement): void {
@@ -1206,6 +1251,8 @@ async function startRun(
     };
     activeBattleSettlement = null;
     activeBattleProgression = getProgressionSnapshot();
+    trackedSkillRanks = {};
+    trackedSkillVariants = {};
     const candidateEngine = new BattleEngine(createBattleRunInput({
       battleId: runId,
       seed,
@@ -1219,6 +1266,7 @@ async function startRun(
     activeBattleEngine = candidateEngine;
     preparedBattleAccountLevel = candidateSave.accountLevel;
     preparedBattleSpeed = getBattleSpeed(candidateSave.accountLevel);
+    activeBattleSpeed = preparedBattleSpeed.initial;
     preparedBattleScene = dependencies.prepareBattleScene?.(
       candidateEngine,
       currentBattleAssets,
@@ -1363,6 +1411,26 @@ function settleDynamicNormalRun(
   // The transaction above is the sole owner of normal-run rewards and progression.
   // Commit its complete save exactly once before any non-save side effects.
   commit(persisted.save);
+  for (const [skillId, mastery] of Object.entries(persisted.presentation.skillMastery ?? {})) {
+    track('skill_mastery_settled', {
+      skillId,
+      xp: mastery.gainedXp,
+      level: mastery.level,
+    });
+  }
+  const accountProgression = persisted.presentation.accountProgression ?? {
+    gainedXp: 0,
+    staminaSpendXp: 0,
+    level: save.accountLevel,
+    xp: save.accountXp,
+    levelsGained: 0,
+  };
+  track('account_xp_settled', {
+    level: accountProgression.level,
+    xp: accountProgression.xp,
+    gainedXp: accountProgression.gainedXp,
+    stamina: save.stamina,
+  });
   const expedition = contributeToExpedition(socialState, {
     runId: outcome.battleId,
     outcome: outcome.victory ? 'victory' : 'defeat',
@@ -2196,6 +2264,16 @@ function e2eSnapshot(): BattleE2ESnapshot {
       : null,
     diagnostics: snapshot,
     settlementCount: snapshot.settledBattleCount,
+    progression: {
+      runLevel: activeBattleEngine?.frame.runLevel ?? 1,
+      ranks: { ...(activeBattleEngine?.frame.skillRanks ?? {}) },
+      variants: { ...(activeBattleEngine?.frame.skillVariants ?? {}) },
+      speed: activeBattleScene?.battleSpeedForE2E() ?? activeBattleSpeed,
+      accountLevel: save.accountLevel,
+      xp: save.accountXp,
+      stamina: save.stamina,
+      hardCap: activeBattleEngine?.outcome?.hardCapReached === true,
+    },
   };
 }
 
@@ -2259,6 +2337,9 @@ return {
   e2eChooseFirstUpgrade(): boolean {
     return activeBattleScene?.chooseFirstUpgradeForE2E() ?? false;
   },
+  e2eSetBattleSpeed(speed: BattleSpeed): boolean {
+    return activeBattleScene?.setBattleSpeed(speed) ?? false;
+  },
   e2eUseSkill(skillId: BattleSkillId): boolean {
     return activeBattleScene?.useSkillForE2E(skillId) ?? false;
   },
@@ -2299,6 +2380,8 @@ function cloneBattleFrame(frame: BattleFrameView): BattleFrameView {
     ...frame,
     offeredUpgradeIds: [...frame.offeredUpgradeIds],
     upgradeLevels: { ...frame.upgradeLevels },
+    skillRanks: { ...frame.skillRanks },
+    skillVariants: { ...frame.skillVariants },
     cooldowns: { ...frame.cooldowns },
     enemies: frame.enemies.map((enemy) => ({ ...enemy })),
     projectiles: frame.projectiles.map((projectile) => ({ ...projectile })),

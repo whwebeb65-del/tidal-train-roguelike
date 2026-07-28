@@ -36,6 +36,28 @@ describe('TelemetryClient', () => {
     ]);
   });
 
+  it('records the approved progression and speed event names with primitive payloads', () => {
+    const telemetry = createMemoryTelemetry();
+    const events = [
+      ['run_level_reached', { runLevel: 2 }],
+      ['upgrade_selected', { source: 'manual' }],
+      ['skill_rank_changed', { skillId: 'tidal-volley', rank: 2 }],
+      ['skill_variant_acquired', { skillId: 'tidal-volley', variantId: 'wide' }],
+      ['skill_mastery_settled', { skillId: 'tidal-volley', xp: 4 }],
+      ['account_xp_settled', { level: 2, xp: 8, stamina: 3 }],
+      ['battle_speed_changed', { speed: 1.5 }],
+      ['battle_hard_cap_reached', { elapsedMs: 480000 }],
+    ] as const;
+
+    for (const [name, payload] of events) {
+      telemetry.track({ name, runId: 'r1', timestampMs: 30, payload });
+    }
+
+    expect(telemetry.flush().map((event) => event.name)).toEqual(
+      events.map(([name]) => name),
+    );
+  });
+
   it('records launch campaign events without raw gift-code input', () => {
     const telemetry = createMemoryTelemetry();
     telemetry.track({ name: 'beta_application_result', runId: 'station', timestampMs: 7, payload: { result: 'qualified' } });

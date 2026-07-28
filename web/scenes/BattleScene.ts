@@ -149,6 +149,7 @@ export interface BattleSceneDependencies {
   readonly initialBattleSpeed: BattleSpeed;
   readonly availableBattleSpeeds: readonly BattleSpeed[];
   readonly onBattleSpeedChanged: (speed: BattleSpeed) => void;
+  readonly onBattleEvents?: (events: readonly BattleEvent[]) => void;
   readonly monotonicNowMs?: () => number;
 }
 
@@ -432,6 +433,10 @@ export class BattleScene implements GameScene {
     return accepted;
   }
 
+  public battleSpeedForE2E(): BattleSpeed {
+    return this.battleSpeed;
+  }
+
   public useSkillForE2E(skillId: BattleSkillId): boolean {
     if (!this.dependencies.manualStepMode) return false;
     const accepted = this.dependencies.engine.useSkill(skillId);
@@ -554,6 +559,7 @@ export class BattleScene implements GameScene {
         this.dependencies.engine.frame,
       );
       this.sound.consume(events, this.dependencies.engine.frame);
+      this.dependencies.onBattleEvents?.(Object.freeze([...events]));
       this.handleEvents(events);
     }
     this.dependencies.effects.update(stepMs);
