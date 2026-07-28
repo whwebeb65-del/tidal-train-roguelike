@@ -209,8 +209,13 @@ async function assertBattleHudGeometry(client, label) {
       skillCopy: skills.map((skill) => {
         const name = skill.querySelector('.battle-skill__copy b');
         const status = skill.querySelector('.battle-skill__copy small');
+        const a11yStatus = skill.querySelector('[data-skill-status]');
         const nameRect = name?.getBoundingClientRect();
         const statusRect = status?.getBoundingClientRect();
+        const a11yRect = a11yStatus?.getBoundingClientRect();
+        const a11yStyle = a11yStatus instanceof HTMLElement
+          ? getComputedStyle(a11yStatus)
+          : null;
         return {
           nameVisible: name instanceof HTMLElement && nameRect !== undefined
             && nameRect.top >= 0 && nameRect.bottom <= innerHeight
@@ -220,6 +225,15 @@ async function assertBattleHudGeometry(client, label) {
             && statusRect.top >= 0 && statusRect.bottom <= innerHeight
             && statusRect.left >= 0 && statusRect.right <= innerWidth
             && status.scrollWidth <= status.clientWidth + 1,
+          a11yStatus: {
+            text: a11yStatus?.textContent?.trim() ?? '',
+            ariaHidden: a11yStatus?.getAttribute('aria-hidden'),
+            visuallyHidden: a11yStyle?.position === 'absolute'
+              && (a11yRect?.width ?? Infinity) <= 1
+              && (a11yRect?.height ?? Infinity) <= 1
+              && a11yStyle.overflow === 'hidden'
+              && a11yStyle.clipPath !== 'none',
+          },
         };
       }),
       refresh: (() => {
@@ -239,6 +253,9 @@ async function assertBattleHudGeometry(client, label) {
   assert.ok(geometry.skillMin >= 56, `${label} skill target is below 56px`);
   assert.ok(geometry.skillCopy.every((copy) => copy.nameVisible), `${label} skill names are clipped or ellipsized`);
   assert.ok(geometry.skillCopy.every((copy) => copy.statusVisible), `${label} skill cooldown copy is clipped or ellipsized`);
+  assert.ok(geometry.skillCopy.every((copy) => copy.a11yStatus.text.length > 0), `${label} skill status has no accessible name`);
+  assert.ok(geometry.skillCopy.every((copy) => copy.a11yStatus.ariaHidden === null), `${label} skill status must remain available to assistive technology`);
+  assert.ok(geometry.skillCopy.every((copy) => copy.a11yStatus.visuallyHidden), `${label} skill status leaks into the badge visual layout`);
   assert.ok(
     geometry.refresh.width / geometry.logicalScale >= 44
       && geometry.refresh.height / geometry.logicalScale >= 44,

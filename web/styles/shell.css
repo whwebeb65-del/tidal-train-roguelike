@@ -173,3 +173,17 @@ footer {
   outline: 3px solid var(--seafoam-300);
   outline-offset: 3px;
 }
+
+/* Keep assistive text in the accessibility tree without reserving visual space. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  clip-path: inset(50%);
+  border: 0;
+  white-space: nowrap;
+}
