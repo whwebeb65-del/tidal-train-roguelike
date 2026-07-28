@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -42,6 +42,12 @@ const viewports = [
   { width: 430, height: 932, full: false },
 ];
 const stationRelativeXTolerancePx = 4;
+const qaDirectory = path.join(repositoryRoot, '.superpowers', 'sdd', 'battle-progression-qa');
+
+async function captureQaScreenshot(client, name) {
+  const shot = await client.send('Page.captureScreenshot', { format: 'png' });
+  await writeFile(path.join(qaDirectory, `${name}.png`), shot.data, 'base64');
+}
 
 function captureChildOutput(child, label) {
   let output = '';
@@ -1496,6 +1502,7 @@ async function runBriefBattle(client, label) {
   await startNormalBattle(client);
   await assertTravelMotion(client);
   await assertBattleHudGeometry(client, label);
+  await captureQaScreenshot(client, `battle-ready-${label}`);
   const fire = await probeAutomaticFire(client);
   const skills = await exercisePauseAndSkills(client);
   await assertNoHorizontalOverflow(client, `${label} battle`);
@@ -1600,6 +1607,7 @@ async function finishFullBattle(client, { claimSalvage }) {
   let reviveUsed = false;
   let terminalStatus = null;
   let terminalBattle = null;
+  const captured = new Set();
 
   for (let iteration = 0; iteration < 2_500; iteration += 1) {
     let state = await snapshot(client);
@@ -1615,6 +1623,18 @@ async function finishFullBattle(client, { claimSalvage }) {
     eliteEncountered ||= battle.eliteEncountered;
     bossIntroSeen ||= battle.status === 'boss-intro'
       || battle.enemies.some((enemy) => enemy.kind === 'deep-echo-boss');
+    const capture = async (name) => {
+      if (!captured.has(name)) {
+        captured.add(name);
+        await captureQaScreenshot(client, `390x844-${name}`);
+      }
+    };
+    if (battle.runLevel === 3) await capture('rank3');
+    if (battle.runLevel === 5) await capture('rank5');
+    if (Object.values(battle.skillVariants).flat().length >= 2) await capture('two-variants');
+    if (battle.cooldowns['tidal-volley'] > 0) await capture('cooldown');
+    if (battle.cooldowns['tidal-volley'] <= 0) await capture('ready');
+    if (bossIntroSeen) await capture('boss');
 
     if (
       battle.status === 'defeat'
@@ -1639,16 +1659,19 @@ async function finishFullBattle(client, { claimSalvage }) {
       continue;
     }
     if (battle.status === 'victory' || battle.status === 'defeat') {
+      await capture(battle.status);
       terminalStatus = battle.status;
       terminalBattle = battle;
       break;
     }
     if (battle.status === 'upgrade') {
+      await capture('upgrade');
       await chooseStrategicUpgrade(client, battle.offeredUpgradeIds);
       upgrades += 1;
       continue;
     }
     if (battle.status === 'paused') {
+      await capture('pause');
       await callHook(client, 'await hook.requestResume(); return true;');
       continue;
     }
@@ -1816,6 +1839,7 @@ async function runViewport(client, viewport, smokeId, browserErrors) {
   await exerciseScenes(client, label);
   await assertMobileReadingSafety(client, label);
   await inspectHandDrawnStation(client, label);
+  await captureQaScreenshot(client, `station-${label}`);
   if (viewport.full) {
     await assertLowQualityResilience(client, label);
     await assertReducedMotionResilience(client, label);
@@ -1855,6 +1879,7 @@ async function assertOrdinaryUrlHasNoHook(client, smokeId) {
 }
 
 async function main() {
+  await mkdir(qaDirectory, { recursive: true });
   if (!existsSync(path.join(repositoryRoot, 'dist', 'index.html'))) {
     throw new Error('dist/index.html is missing; run npm run build first');
   }
