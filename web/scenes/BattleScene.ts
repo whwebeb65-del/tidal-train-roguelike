@@ -149,7 +149,7 @@ export interface BattleSceneDependencies {
   readonly initialBattleSpeed: BattleSpeed;
   readonly availableBattleSpeeds: readonly BattleSpeed[];
   readonly onBattleSpeedChanged: (speed: BattleSpeed) => void;
-  readonly onBattleEvents?: (events: readonly BattleEvent[]) => void;
+  readonly onBattleEvents: (events: readonly BattleEvent[]) => void;
   readonly monotonicNowMs?: () => number;
 }
 
@@ -201,6 +201,8 @@ export class BattleScene implements GameScene {
   private upgradeChoiceTimerId: ReturnType<typeof setTimeout> | null = null;
   private upgradeChoiceDeadlineMs: number | null = null;
   private upgradeChoiceRemainingMs: number | null = null;
+  private upgradeResumePromise: Promise<void> | null = null;
+  private resolveUpgradeResume: (() => void) | null = null;
   private lastFrameTimeMs = 0;
   private lastQualityFrameTimeMs: number | null = null;
   private lifecycleVersion = 0;
@@ -453,6 +455,10 @@ export class BattleScene implements GameScene {
 
   public async requestResumeForE2E(): Promise<void> {
     if (!this.dependencies.manualStepMode) return;
+    if (this.upgradeResumePromise) {
+      await this.upgradeResumePromise;
+      return;
+    }
     await this.sound.resume();
     if (!this.host) return;
     this.dependencies.engine.resume();
@@ -559,7 +565,7 @@ export class BattleScene implements GameScene {
         this.dependencies.engine.frame,
       );
       this.sound.consume(events, this.dependencies.engine.frame);
-      this.dependencies.onBattleEvents?.(Object.freeze([...events]));
+      this.dependencies.onBattleEvents(Object.freeze([...events]));
       this.handleEvents(events);
     }
     this.dependencies.effects.update(stepMs);
@@ -795,6 +801,9 @@ export class BattleScene implements GameScene {
     this.pendingActions.add('upgrade-resume');
     this.dependencies.engine.pause('upgrade');
     this.sound.pause();
+    this.upgradeResumePromise = new Promise((resolve) => {
+      this.resolveUpgradeResume = resolve;
+    });
     this.upgradeTimerId = this.timerScheduler.set(() => {
       this.upgradeTimerId = null;
       if (!this.host) return;
@@ -806,6 +815,9 @@ export class BattleScene implements GameScene {
       }
       this.dependencies.engine.resume();
       void this.sound.resume();
+      this.resolveUpgradeResume?.();
+      this.resolveUpgradeResume = null;
+      this.upgradeResumePromise = null;
     }, 400);
     return true;
   }

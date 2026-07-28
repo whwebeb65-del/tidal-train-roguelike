@@ -28,6 +28,7 @@ const TEST_BATTLE_SPEED_DEPENDENCIES = {
   initialBattleSpeed: 1 as const,
   availableBattleSpeeds: [1] as const,
   onBattleSpeedChanged: vi.fn(),
+  onBattleEvents: vi.fn(),
 };
 
 class ManualFrameScheduler implements FrameScheduler {
@@ -471,6 +472,7 @@ describe('BattleScene', () => {
         initialBattleSpeed: 1,
         availableBattleSpeeds: [1, 1.5, 2, 3],
         onBattleSpeedChanged,
+        onBattleEvents: vi.fn(),
         scheduler,
         eventTarget: new EventTarget(),
         getDevicePixelRatio: () => 1,
