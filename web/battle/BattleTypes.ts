@@ -99,12 +99,20 @@ export interface EnemyState {
   alive: boolean;
 }
 
+export interface BattleAimPoint {
+  readonly x: number;
+  readonly y: number;
+}
+
 export interface ProjectileState {
   readonly id: number;
   readonly source: 'main' | 'volley' | 'chain';
   x: number;
   y: number;
   readonly targetId: number;
+  readonly trajectory: 'homing' | 'manual';
+  readonly velocityX: number;
+  readonly velocityY: number;
   readonly speedPerSecond: number;
   readonly damage: number;
   readonly splashRadius: number;
@@ -172,6 +180,7 @@ export interface BattleFrameView {
   readonly adReviveUsed: boolean;
   readonly skillRefreshUsed: boolean;
   readonly upgradeRerollUsed: boolean;
+  readonly mainCannonAim: Readonly<BattleAimPoint> | null;
   readonly enemies: readonly EnemyState[];
   readonly projectiles: readonly ProjectileState[];
   readonly loot: readonly LootState[];

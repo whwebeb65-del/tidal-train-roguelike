@@ -4,6 +4,8 @@ import {
   ENEMY_CONFIG,
   EXPERIENCE_THRESHOLDS,
   LANE_X,
+  LOGICAL_HEIGHT,
+  LOGICAL_WIDTH,
   MAIN_CANNON_INTERVAL_MS,
   MAIN_PROJECTILE_SPEED,
   SKILL_COOLDOWN_MULTIPLIER,
@@ -24,6 +26,7 @@ import type {
   BattleStatus,
   BattleUpgradeId,
   BattleBuildState,
+  BattleAimPoint,
   EnemyKind,
   EnemyState,
   LootState,
@@ -42,7 +45,7 @@ import {
   getWaveAtTime,
   type SpawnInstruction,
 } from './WaveScheduler';
-import { enemySpawnY } from './EnemyGeometry';
+import { ENEMY_GEOMETRY, HUD_SAFE_BOTTOM_Y, enemySpawnY } from './EnemyGeometry';
 import {
   EntityPool,
   type EntityPoolStats,
@@ -101,6 +104,9 @@ export class BattleEngine {
       x: 0,
       y: 0,
       targetId: 0,
+      trajectory: 'homing',
+      velocityX: 0,
+      velocityY: 0,
       speedPerSecond: 0,
       damage: 0,
       splashRadius: 0,
@@ -142,6 +148,7 @@ export class BattleEngine {
   private nextSpawnIndex = 0;
   private nextEntityId = 1;
   private fireCooldownMs = 0;
+  private mainCannonAim: BattleAimPoint | null = null;
   private trainHp: number;
   private shield = 0;
   private shieldRemainingMs = 0;
@@ -238,6 +245,9 @@ export class BattleEngine {
       adReviveUsed: this.adReviveUsed,
       skillRefreshUsed: this.skillRefreshUsed,
       upgradeRerollUsed: this.upgradeRerollUsed,
+      mainCannonAim: this.mainCannonAim === null
+        ? null
+        : Object.freeze({ ...this.mainCannonAim }),
       enemies: this.enemies,
       projectiles: this.projectiles,
       loot: this.loot,
@@ -250,6 +260,19 @@ export class BattleEngine {
 
   public drainEvents(): readonly BattleEvent[] {
     return this.events.splice(0);
+  }
+
+  public setMainCannonAim(aim: BattleAimPoint | null): boolean {
+    if (aim === null) {
+      this.mainCannonAim = null;
+      return true;
+    }
+    if (!Number.isFinite(aim.x) || !Number.isFinite(aim.y)) return false;
+    this.mainCannonAim = {
+      x: Math.max(0, Math.min(LOGICAL_WIDTH, aim.x)),
+      y: Math.max(HUD_SAFE_BOTTOM_Y, Math.min(DEFENCE_LINE_Y, aim.y)),
+    };
+    return true;
   }
 
   public pause(reason: PauseReason): void {
@@ -740,7 +763,7 @@ export class BattleEngine {
       MAIN_CANNON_INTERVAL_MS * this.modifiers.reloadMultiplier,
     );
     while (this.fireCooldownMs <= 0) {
-      if (!this.hasLivingTarget()) {
+      if (this.mainCannonAim === null && !this.hasLivingTarget()) {
         this.fireCooldownMs = 0;
         return;
       }
@@ -750,13 +773,14 @@ export class BattleEngine {
   }
 
   private fireMainCannon(): void {
+    const aim = this.mainCannonAim;
     for (
       let index = 0;
       index < this.modifiers.mainProjectileCount;
       index += 1
     ) {
-      const target = this.findTarget();
-      if (!target) return;
+      const target = aim === null ? this.findTarget() : undefined;
+      if (aim === null && !target) return;
       const critical = this.random.next() < this.modifiers.criticalChance;
       const damage = Math.floor(
         this.input.mainCannonDamage
@@ -765,12 +789,13 @@ export class BattleEngine {
       );
       this.createProjectile({
         source: 'main',
-        targetId: target.id,
+        targetId: target?.id,
         damage,
         critical,
         splashRadius: this.modifiers.splashRadius,
         chainRemaining: this.modifiers.chainCount,
         xOffset: (index - (this.modifiers.mainProjectileCount - 1) / 2) * 8,
+        direction: aim === null ? undefined : this.mainCannonDirection(aim, index),
       });
     }
   }
@@ -834,7 +859,7 @@ export class BattleEngine {
 
   private createProjectile(input: {
     readonly source: MutableProjectileState['source'];
-    readonly targetId: number;
+    readonly targetId?: number;
     readonly damage: number;
     readonly critical: boolean;
     readonly splashRadius: number;
@@ -844,14 +869,18 @@ export class BattleEngine {
     readonly xOffset?: number;
     readonly startX?: number;
     readonly startY?: number;
+    readonly direction?: Readonly<{ x: number; y: number }>;
   }): MutableProjectileState {
     const projectile = this.projectilePool.acquire();
     projectile.id = this.nextEntityId++;
     projectile.source = input.source;
     projectile.x = (input.startX ?? 195) + (input.xOffset ?? 0);
     projectile.y = input.startY ?? 690;
-    projectile.targetId = input.targetId;
+    projectile.targetId = input.targetId ?? 0;
+    projectile.trajectory = input.direction ? 'manual' : 'homing';
     projectile.speedPerSecond = MAIN_PROJECTILE_SPEED;
+    projectile.velocityX = (input.direction?.x ?? 0) * projectile.speedPerSecond;
+    projectile.velocityY = (input.direction?.y ?? 0) * projectile.speedPerSecond;
     projectile.damage = Math.max(0, input.damage);
     projectile.splashRadius = Math.max(0, input.splashRadius);
     projectile.chainRemaining = Math.max(0, input.chainRemaining);
@@ -872,6 +901,10 @@ export class BattleEngine {
     const maxDistance = MAIN_PROJECTILE_SPEED * stepMs / 1000;
     for (const projectile of this.projectiles) {
       if (!projectile.active) continue;
+      if (projectile.trajectory === 'manual') {
+        this.moveManualProjectile(projectile, maxDistance);
+        continue;
+      }
       let target = this.enemies.find(
         (enemy) => enemy.id === projectile.targetId && enemy.alive,
       );
@@ -906,6 +939,75 @@ export class BattleEngine {
       projectile.x += deltaX / distance * maxDistance;
       projectile.y += deltaY / distance * maxDistance;
     }
+  }
+
+  private mainCannonDirection(
+    aim: BattleAimPoint,
+    projectileIndex: number,
+  ): Readonly<{ x: number; y: number }> {
+    const startX = 195 + (projectileIndex - (this.modifiers.mainProjectileCount - 1) / 2) * 8;
+    const startY = 690;
+    const baseAngle = Math.atan2(aim.y - startY, aim.x - startX);
+    const fanOffset = (projectileIndex - (this.modifiers.mainProjectileCount - 1) / 2) * 0.075;
+    const angle = Number.isFinite(baseAngle) ? baseAngle + fanOffset : -Math.PI / 2;
+    return { x: Math.cos(angle), y: Math.sin(angle) };
+  }
+
+  private moveManualProjectile(
+    projectile: MutableProjectileState,
+    maxDistance: number,
+  ): void {
+    const startX = projectile.x;
+    const startY = projectile.y;
+    const endX = startX + projectile.velocityX * maxDistance / projectile.speedPerSecond;
+    const endY = startY + projectile.velocityY * maxDistance / projectile.speedPerSecond;
+    const collision = this.findManualProjectileCollision(startX, startY, endX, endY);
+    if (collision) {
+      projectile.x = startX + (endX - startX) * collision.progress;
+      projectile.y = startY + (endY - startY) * collision.progress;
+      this.hitEnemy(projectile, collision.enemy);
+      projectile.active = false;
+      return;
+    }
+    projectile.x = endX;
+    projectile.y = endY;
+    if (
+      projectile.x < -40
+      || projectile.x > LOGICAL_WIDTH + 40
+      || projectile.y < -40
+      || projectile.y > LOGICAL_HEIGHT + 40
+    ) {
+      projectile.active = false;
+    }
+  }
+
+  private findManualProjectileCollision(
+    startX: number,
+    startY: number,
+    endX: number,
+    endY: number,
+  ): { readonly enemy: EnemyState; readonly progress: number } | undefined {
+    return this.enemies
+      .filter((enemy) => enemy.alive)
+      .map((enemy) => ({
+        enemy,
+        progress: segmentCircleEntryProgress(
+          startX,
+          startY,
+          endX,
+          endY,
+          enemy.x,
+          enemy.y,
+          Math.max(
+            ENEMY_GEOMETRY[enemy.kind].width,
+            ENEMY_GEOMETRY[enemy.kind].height,
+          ) * 0.4,
+        ),
+      }))
+      .filter((candidate): candidate is { readonly enemy: EnemyState; readonly progress: number } => (
+        candidate.progress !== null
+      ))
+      .sort((left, right) => left.progress - right.progress || left.enemy.id - right.enemy.id)[0];
   }
 
   private hitEnemy(
@@ -1337,6 +1439,9 @@ function resetProjectile(projectile: MutableProjectileState): void {
   projectile.x = 0;
   projectile.y = 0;
   projectile.targetId = 0;
+  projectile.trajectory = 'homing';
+  projectile.velocityX = 0;
+  projectile.velocityY = 0;
   projectile.speedPerSecond = 0;
   projectile.damage = 0;
   projectile.splashRadius = 0;
@@ -1345,6 +1450,30 @@ function resetProjectile(projectile: MutableProjectileState): void {
   projectile.splitMultiplier = 0;
   projectile.critical = false;
   projectile.active = false;
+}
+
+function segmentCircleEntryProgress(
+  startX: number,
+  startY: number,
+  endX: number,
+  endY: number,
+  centreX: number,
+  centreY: number,
+  radius: number,
+): number | null {
+  const deltaX = endX - startX;
+  const deltaY = endY - startY;
+  const originX = startX - centreX;
+  const originY = startY - centreY;
+  const lengthSquared = deltaX * deltaX + deltaY * deltaY;
+  if (lengthSquared <= 0) return null;
+  const c = originX * originX + originY * originY - radius * radius;
+  if (c <= 0) return 0;
+  const b = 2 * (originX * deltaX + originY * deltaY);
+  const discriminant = b * b - 4 * lengthSquared * c;
+  if (discriminant < 0) return null;
+  const entry = (-b - Math.sqrt(discriminant)) / (2 * lengthSquared);
+  return entry >= 0 && entry <= 1 ? entry : null;
 }
 
 function resetLoot(loot: MutableLootState): void {

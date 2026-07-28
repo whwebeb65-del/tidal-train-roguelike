@@ -86,6 +86,7 @@ export function createFrameFixture(
     adReviveUsed: false,
     skillRefreshUsed: false,
     upgradeRerollUsed: false,
+    mainCannonAim: null,
     enemies: [
       {
         id: 1,
@@ -125,6 +126,9 @@ export function createFrameFixture(
         x: 190,
         y: 530,
         targetId: 2,
+        trajectory: 'homing',
+        velocityX: 0,
+        velocityY: 0,
         speedPerSecond: 620,
         damage: 25,
         splashRadius: 0,
