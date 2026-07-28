@@ -30,6 +30,7 @@ export interface AppShellHandles {
   setActiveScene(sceneId: SceneId): void;
   setNotice(message: string): void;
   setNavigationHidden(hidden: boolean): void;
+  setBattleChrome(active: boolean): void;
   openSettings(model: SettingsPanelModel): void;
   closeSettings(): void;
   isSettingsOpen(): boolean;
@@ -50,12 +51,10 @@ function accountTicket(snapshot: AccountTicketSnapshot): string {
 
 function currency(
   id: keyof CurrencySnapshot,
-  symbol: string,
   label: string,
   value: number,
 ): string {
   return `<span class="currency app-currency" data-currency="${id}">
-    <span class="app-currency__symbol" aria-hidden="true">${symbol}</span>
     <span class="app-currency__copy"><b>${value}</b><span>${label}</span></span>
   </span>`;
 }
@@ -83,9 +82,9 @@ export function renderAppShell(snapshot: CurrencySnapshot): string {
       </div>
       ${snapshot.account ? accountTicket(snapshot.account) : ''}
       <div class="currencies" aria-label="持有资源">
-        ${currency('gears', '⚙', '齿轮', snapshot.gears)}
-        ${currency('routeMarks', '◇', '航线徽记', snapshot.routeMarks)}
-        ${currency('starTickets', '☆', '星票', snapshot.starTickets)}
+        ${currency('gears', '齿轮', snapshot.gears)}
+        ${currency('routeMarks', '航线徽记', snapshot.routeMarks)}
+        ${currency('starTickets', '星票', snapshot.starTickets)}
         <button class="app-shell__reset" type="button" data-action="reset-save" aria-label="清空本地存档">重置</button>
         <button class="app-shell__settings" type="button"
           data-action="open-settings" aria-label="打开游戏设置">设置</button>
@@ -174,6 +173,10 @@ export function mountAppShell(
 
     setNavigationHidden(hidden): void {
       navigation.hidden = hidden;
+    },
+
+    setBattleChrome(active): void {
+      root.firstElementChild?.classList.toggle('app-shell--battle', active);
     },
 
     openSettings(model): void {

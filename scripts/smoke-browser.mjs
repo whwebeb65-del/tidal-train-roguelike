@@ -173,6 +173,31 @@ async function assertNoHorizontalOverflow(client, label) {
   );
 }
 
+async function assertBattleHudGeometry(client, label) {
+  const geometry = await evaluate(client, `(() => {
+    const hud = document.querySelector('.battle-hud__tide-log');
+    const canvas = document.querySelector('[data-battle-canvas]');
+    const skills = [...document.querySelectorAll('[data-battle-skill]')];
+    if (!(hud instanceof HTMLElement) || !(canvas instanceof HTMLCanvasElement)) {
+      throw new Error('battle HUD or canvas is missing');
+    }
+    const hudBottom = hud.getBoundingClientRect().bottom;
+    const canvasRect = canvas.getBoundingClientRect();
+    const logicalScale = window.visualViewport?.scale ?? 1;
+    return {
+      hudBottom: Number.parseFloat(getComputedStyle(hud).height),
+      enemyLaneTop: (canvasRect.top + canvasRect.height * 120 / 844) / logicalScale,
+      skillMin: Math.min(...skills.map((skill) => skill.getBoundingClientRect().height)) / logicalScale,
+      scrollWidth: document.documentElement.scrollWidth,
+      innerWidth,
+    };
+  })()`);
+  assert.ok(geometry.hudBottom <= 108, `${label} HUD bottom exceeds 108px: ${geometry.hudBottom}`);
+  assert.ok(geometry.enemyLaneTop - geometry.hudBottom >= 12, `${label} enemy lane gap is below 12px`);
+  assert.ok(geometry.skillMin >= 56, `${label} skill target is below 56px`);
+  assert.ok(geometry.scrollWidth <= geometry.innerWidth + 1, `${label} battle overflows horizontally`);
+}
+
 async function inspectSafeReadingTarget(client, selector, index) {
   return evaluate(
     client,
@@ -1470,6 +1495,7 @@ async function runBriefBattle(client, label) {
   const baseline = await snapshot(client);
   await startNormalBattle(client);
   await assertTravelMotion(client);
+  await assertBattleHudGeometry(client, label);
   const fire = await probeAutomaticFire(client);
   const skills = await exercisePauseAndSkills(client);
   await assertNoHorizontalOverflow(client, `${label} battle`);
@@ -1559,6 +1585,7 @@ async function finishFullBattle(client, { claimSalvage }) {
   const settlementBaseline = before.settlementCount;
   await startNormalBattle(client);
   await assertTravelMotion(client);
+  await assertBattleHudGeometry(client, 'full battle');
   const fire = await probeAutomaticFire(client);
   const initialSkills = await exercisePauseAndSkills(client);
 

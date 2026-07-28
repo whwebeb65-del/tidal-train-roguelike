@@ -8,6 +8,19 @@
   backdrop-filter: blur(18px);
 }
 
+.app-shell--battle .app-topbar {
+  display: none;
+}
+
+.app-shell--battle .scene-viewport {
+  width: 100%;
+  padding: 0;
+}
+
+.app-shell--battle .scene-host {
+  min-height: 100dvh;
+}
+
 .brand__copy {
   min-width: 0;
 }

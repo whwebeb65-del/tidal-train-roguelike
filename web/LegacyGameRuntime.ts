@@ -1110,6 +1110,7 @@ async function syncView(): Promise<void> {
       : 'battle';
   const navigationHidden = !save.selectedCaptainId || targetScene === 'battle';
   shell.setNavigationHidden(navigationHidden);
+  shell.setBattleChrome(targetScene === 'battle');
   shell.setActiveScene(targetScene);
 
   if (router.currentSceneId === targetScene) {

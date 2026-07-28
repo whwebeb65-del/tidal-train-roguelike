@@ -53,6 +53,17 @@ describe('AppShell', () => {
     expect(html).toContain('下一倍速：Lv.20 · 2×');
   });
 
+  it('uses text-only resource labels instead of Unicode placeholder icons', () => {
+    const html = renderAppShell({ gears: 7, routeMarks: 2, starTickets: 1 });
+    expect(html).toContain('data-currency="gears"');
+    expect(html).not.toMatch(/[⚙◇☆]/u);
+  });
+
+  it('defines a compact battle chrome mode that hides station topbar details', () => {
+    expect(appShellCss).toContain('.app-shell--battle .app-topbar');
+    expect(appShellCss).toContain('display: none');
+  });
+
   it('reserves a mobile notice lane away from readable content and fixed navigation', () => {
     expect(appShellCss).toContain('.scene-viewport:has(.app-notice.is-visible)');
     expect(appShellCss).toMatch(
