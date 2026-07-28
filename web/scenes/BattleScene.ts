@@ -27,6 +27,7 @@ import {
 import type {
   BattleEvent,
   BattleFrameView,
+  BattleAimPoint,
   BattleOutcome,
   BattleSkillId,
   BattleUpgradeId,
@@ -76,6 +77,7 @@ export interface BattleEnginePort {
   update(stepMs: number): void;
   drainEvents(): readonly BattleEvent[];
   useSkill(skillId: BattleSkillId): boolean;
+  setMainCannonAim(aim: BattleAimPoint | null): boolean;
   chooseUpgrade(
     upgradeId: BattleUpgradeId,
     source: UpgradeSelectionSource,
@@ -249,6 +251,29 @@ export class BattleScene implements GameScene {
     this.viewport = null;
   };
 
+  private activeAimPointerId: number | null = null;
+
+  private readonly onCanvasPointerDown = (event: PointerEvent): void => {
+    this.activeAimPointerId = event.pointerId;
+    this.canvas?.setPointerCapture?.(event.pointerId);
+    this.updateMainCannonAimFromPointer(event);
+    event.preventDefault();
+  };
+
+  private readonly onCanvasPointerMove = (event: PointerEvent): void => {
+    if (this.activeAimPointerId !== event.pointerId) return;
+    this.updateMainCannonAimFromPointer(event);
+    event.preventDefault();
+  };
+
+  private readonly onCanvasPointerEnd = (event: PointerEvent): void => {
+    if (this.activeAimPointerId !== event.pointerId) return;
+    if (this.canvas?.hasPointerCapture?.(event.pointerId)) {
+      this.canvas.releasePointerCapture(event.pointerId);
+    }
+    this.activeAimPointerId = null;
+  };
+
   public constructor(
     private readonly dependencies: BattleSceneDependencies,
   ) {
@@ -309,7 +334,7 @@ export class BattleScene implements GameScene {
     this.motion.reset(this.dependencies.engine.frame);
     host.innerHTML = `<section class="game-scene game-scene--battle">
       <div class="battle-canvas-host">
-        <canvas data-battle-canvas aria-label="潮汐列车战斗"></canvas>
+        <canvas data-battle-canvas aria-label="潮汐列车战斗；点击或拖动以瞄准主炮"></canvas>
       </div>
       <div class="battle-hud-host" data-battle-hud></div>
     </section>`;
@@ -324,6 +349,10 @@ export class BattleScene implements GameScene {
     );
     this.canvas = canvas;
     this.canvasHost = canvasHost;
+    canvas.addEventListener('pointerdown', this.onCanvasPointerDown);
+    canvas.addEventListener('pointermove', this.onCanvasPointerMove);
+    canvas.addEventListener('pointerup', this.onCanvasPointerEnd);
+    canvas.addEventListener('pointercancel', this.onCanvasPointerEnd);
     const hudHost = requireElement<HTMLElement>(host, '[data-battle-hud]');
     const context = canvas.getContext('2d', {
       alpha: false,
@@ -539,6 +568,7 @@ export class BattleScene implements GameScene {
     this.stopAnimationLoop();
     this.clearUpgradeResumeTimer();
     this.clearUpgradeChoiceTimer();
+    this.removeCanvasPointerListeners();
     this.eventTarget?.removeEventListener('resize', this.onResize);
     if (this.diagnosticsListenerActive) {
       this.dependencies.diagnostics?.listenerRemoved();
@@ -654,6 +684,36 @@ export class BattleScene implements GameScene {
       },
     ));
     this.updateDiagnostics(false);
+  }
+
+  private updateMainCannonAimFromPointer(event: PointerEvent): void {
+    const canvasHost = this.canvasHost;
+    if (!canvasHost) return;
+    this.refreshViewport();
+    const viewport = this.viewport;
+    if (!viewport) return;
+    const bounds = canvasHost.getBoundingClientRect();
+    const aim = viewport.toLogical(
+      event.clientX - bounds.left,
+      event.clientY - bounds.top,
+    );
+    if (this.dependencies.engine.setMainCannonAim(aim)) this.renderBattle();
+  }
+
+  private removeCanvasPointerListeners(): void {
+    const canvas = this.canvas;
+    if (!canvas) return;
+    if (
+      this.activeAimPointerId !== null
+      && canvas.hasPointerCapture?.(this.activeAimPointerId)
+    ) {
+      canvas.releasePointerCapture(this.activeAimPointerId);
+    }
+    this.activeAimPointerId = null;
+    canvas.removeEventListener('pointerdown', this.onCanvasPointerDown);
+    canvas.removeEventListener('pointermove', this.onCanvasPointerMove);
+    canvas.removeEventListener('pointerup', this.onCanvasPointerEnd);
+    canvas.removeEventListener('pointercancel', this.onCanvasPointerEnd);
   }
 
   private startAnimationLoop(): void {

@@ -72,6 +72,7 @@ export class BattleRenderer {
       this.drawProjectiles(input);
       this.drawTrain(input, trainMotion);
       this.drawCrew(input, trainMotion);
+      this.drawAimReticle(input);
       this.drawFrontEffects(input, trainMotion);
       this.drawEffectParticles(input, 'front-effects');
       this.drawImpactRings(input);
@@ -454,8 +455,11 @@ export class BattleRenderer {
         target = enemy;
       }
     }
-    const angle = target
-      ? Math.atan2(target.y - 692, target.x - 195)
+    const aim = input.frame.mainCannonAim;
+    const angle = aim
+      ? Math.atan2(aim.y - 692, aim.x - 195)
+      : target
+        ? Math.atan2(target.y - 692, target.x - 195)
       : -Math.PI / 2;
     const directionX = Math.cos(angle);
     const directionY = Math.sin(angle);
@@ -525,6 +529,57 @@ export class BattleRenderer {
       });
     }
     this.drawTrainPower(input, motion);
+  }
+
+  private drawAimReticle(input: BattleRenderInput): void {
+    const aim = input.frame.mainCannonAim;
+    if (!aim) return;
+    const pulse = input.reducedMotion
+      ? 1
+      : 0.9 + Math.sin(input.timeMs / 180) * 0.1;
+    const outerRadius = 12 * pulse;
+    const innerRadius = 7 * pulse;
+    this.painter.ellipse({
+      kind: 'aim-reticle-outer',
+      layer: 'front-effects',
+      x: aim.x,
+      y: aim.y,
+      radiusX: outerRadius,
+      radiusY: outerRadius * 0.88,
+      stroke: '#ef785f',
+      lineWidth: 2.6,
+      alpha: 0.94,
+    });
+    this.painter.ellipse({
+      kind: 'aim-reticle-inner',
+      layer: 'front-effects',
+      x: aim.x,
+      y: aim.y,
+      radiusX: innerRadius,
+      radiusY: innerRadius * 0.86,
+      stroke: '#fff2d2',
+      lineWidth: 1.6,
+      alpha: 0.92,
+    });
+    const tickOffset = outerRadius + 3;
+    const tickLength = 5 * pulse;
+    const ticks = [
+      [{ x: aim.x - tickOffset - tickLength, y: aim.y - 1 }, { x: aim.x - tickOffset, y: aim.y + 1 }],
+      [{ x: aim.x + tickOffset, y: aim.y - 1 }, { x: aim.x + tickOffset + tickLength, y: aim.y + 1 }],
+      [{ x: aim.x - 1, y: aim.y - tickOffset - tickLength }, { x: aim.x + 1, y: aim.y - tickOffset }],
+      [{ x: aim.x - 1, y: aim.y + tickOffset }, { x: aim.x + 1, y: aim.y + tickOffset + tickLength }],
+    ] as const;
+    for (const points of ticks) {
+      this.painter.line({
+        kind: 'aim-reticle-tick',
+        layer: 'front-effects',
+        points,
+        stroke: '#fff2d2',
+        lineWidth: 2,
+        lineCap: 'round',
+        alpha: 0.9,
+      });
+    }
   }
 
   private drawTrainPower(

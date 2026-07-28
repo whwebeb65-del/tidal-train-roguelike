@@ -814,6 +814,53 @@ describe('BattleRenderer', () => {
     }
   });
 
+  it('turns the cannon toward the manual aim and draws a coral-and-cream reticle above the battlefield', () => {
+    const commands = renderCommands({
+      frame: { mainCannonAim: { x: 304, y: 214 } },
+      timeMs: 42_200,
+    });
+    const cannon = findCommand<LineDrawCommand>(
+      commands,
+      (item) => item.kind === 'main-cannon',
+    );
+    const outer = findCommand<EllipseDrawCommand>(
+      commands,
+      (item) => item.kind === 'aim-reticle-outer',
+    );
+    const inner = findCommand<EllipseDrawCommand>(
+      commands,
+      (item) => item.kind === 'aim-reticle-inner',
+    );
+    const ticks = commands.filter((item): item is LineDrawCommand => (
+      item.kind === 'aim-reticle-tick'
+    ));
+
+    expect(cannon.points[1]!.x).toBeGreaterThan(cannon.points[0]!.x);
+    expect(cannon.points[1]!.y).toBeLessThan(cannon.points[0]!.y);
+    expect(outer).toMatchObject({ x: 304, y: 214, stroke: '#ef785f', layer: 'front-effects' });
+    expect(inner).toMatchObject({ x: 304, y: 214, stroke: '#fff2d2', layer: 'front-effects' });
+    expect(ticks).toHaveLength(4);
+    expect(ticks.every((tick) => tick.stroke === '#fff2d2')).toBe(true);
+  });
+
+  it('keeps the aim reticle geometry static when reduced motion is enabled', () => {
+    const early = renderCommands({
+      frame: { mainCannonAim: { x: 195, y: 214 } },
+      reducedMotion: true,
+      timeMs: 0,
+    });
+    const late = renderCommands({
+      frame: { mainCannonAim: { x: 195, y: 214 } },
+      reducedMotion: true,
+      timeMs: 900,
+    });
+    const compact = (commands: readonly BattleDrawCommand[]) => commands
+      .filter((item) => item.kind.startsWith('aim-reticle-'))
+      .map((item) => JSON.stringify(item));
+
+    expect(compact(late)).toEqual(compact(early));
+  });
+
   it('renders calibrated cannon and body recoil from a real fire event', () => {
     const frame = createFrameFixture();
     const baselineController = new TrainMotionController(false, 'high');

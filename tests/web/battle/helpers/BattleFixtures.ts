@@ -186,6 +186,7 @@ export function createPresentationFixture(input: {
   readonly failedArtIds?: readonly BattleArtId[];
   readonly frame?: Partial<BattleFrameView>;
   readonly reducedMotion?: boolean;
+  readonly timeMs?: number;
   readonly effects?: EffectFrameView;
   readonly trainMotion?: Partial<TrainMotionFrameView>;
 } = {}): BattleRenderInput {
@@ -212,7 +213,7 @@ export function createPresentationFixture(input: {
       maxDevicePixelRatio: 2,
     }),
     captainArtId: 'captainFemaleBase',
-    timeMs: 42_000,
+    timeMs: input.timeMs ?? 42_000,
     reducedMotion: input.reducedMotion ?? false,
     effects: input.effects ?? EMPTY_EFFECT_FRAME_VIEW,
     renderBudget: getRenderBudget('high'),

@@ -64,6 +64,7 @@ class ManualFrameScheduler implements FrameScheduler {
 interface TestEngine extends BattleEnginePort {
   updateCalls: number;
   events: BattleEvent[];
+  setMainCannonAim(aim: { readonly x: number; readonly y: number } | null): boolean;
   setOutcome(next: BattleEnginePort['outcome']): void;
   setFrame(next: BattleFrameView): void;
 }
@@ -89,6 +90,7 @@ function createEngine(
       return this.events.splice(0);
     },
     useSkill: () => true,
+    setMainCannonAim: () => true,
     chooseUpgrade: () => true,
     rerollUpgradeOffer: () => true,
     refreshActiveSkillCooldowns: () => true,
@@ -250,21 +252,39 @@ function createCallbacks(): BattleSceneCallbacks {
   };
 }
 
-function createHost(): {
+function createHost(bounds: Partial<DOMRect> = {}): {
   readonly host: HTMLElement;
   readonly canvas: HTMLCanvasElement;
+  readonly dispatchCanvasPointer: (type: string, event: {
+    readonly pointerId: number;
+    readonly clientX: number;
+    readonly clientY: number;
+  }) => void;
 } {
   const context = {} as CanvasRenderingContext2D;
+  const canvasListeners = new Map<string, EventListenerOrEventListenerObject[]>();
   const canvas = {
     width: 0,
     height: 0,
     style: {},
     getContext: () => context,
+    addEventListener(type: string, listener: EventListenerOrEventListenerObject) {
+      canvasListeners.set(type, [...(canvasListeners.get(type) ?? []), listener]);
+    },
+    removeEventListener(type: string, listener: EventListenerOrEventListenerObject) {
+      canvasListeners.set(type, (canvasListeners.get(type) ?? []).filter((item) => item !== listener));
+    },
+    setPointerCapture: vi.fn(),
+    releasePointerCapture: vi.fn(),
+    hasPointerCapture: vi.fn(() => true),
   } as unknown as HTMLCanvasElement;
   const canvasHost = {
     getBoundingClientRect: () => ({
       width: 390,
       height: 844,
+      left: 0,
+      top: 0,
+      ...bounds,
     }),
   } as unknown as HTMLElement;
   const hudHost = {
@@ -288,10 +308,68 @@ function createHost(): {
       hostHtml = '';
     },
   } as unknown as HTMLElement;
-  return { host, canvas };
+  return {
+    host,
+    canvas,
+    dispatchCanvasPointer(type, event) {
+      for (const listener of canvasListeners.get(type) ?? []) {
+        if (typeof listener === 'function') {
+          listener({
+            ...event,
+            preventDefault: vi.fn(),
+          } as unknown as Event);
+        } else {
+          listener.handleEvent({
+            ...event,
+            preventDefault: vi.fn(),
+          } as unknown as Event);
+        }
+      }
+    },
+  };
 }
 
 describe('BattleScene', () => {
+  it('maps an active canvas pointer drag through the letterboxed viewport and keeps its final aim', () => {
+    const engine = createEngine();
+    engine.setMainCannonAim = vi.fn(() => true);
+    const { host, canvas, dispatchCanvasPointer } = createHost({
+      left: 30,
+      top: 40,
+      width: 390,
+      height: 1000,
+    });
+    const scene = new BattleScene({
+      ...TEST_BATTLE_SPEED_DEPENDENCIES,
+      engine,
+      effects: { view: EMPTY_EFFECT_FRAME_VIEW, consume: vi.fn(), update: vi.fn(), reset: vi.fn() },
+      assets: { failedIds: [], get: () => null },
+      callbacks: createCallbacks(),
+      createRenderer: () => ({ render: vi.fn() }),
+      createHud: () => ({ mount: vi.fn(), update: vi.fn(), dispose: vi.fn() }),
+      captainArtId: 'captainFemaleBase',
+      reducedMotion: false,
+      manualStepMode: true,
+      scheduler: new ManualFrameScheduler(),
+      eventTarget: new EventTarget(),
+      getDevicePixelRatio: () => 1,
+    });
+    scene.mount(host);
+
+    dispatchCanvasPointer('pointerdown', { pointerId: 7, clientX: 225, clientY: 540 });
+    dispatchCanvasPointer('pointermove', { pointerId: 8, clientX: 320, clientY: 740 });
+    dispatchCanvasPointer('pointermove', { pointerId: 7, clientX: 225, clientY: 640 });
+    dispatchCanvasPointer('pointerup', { pointerId: 7, clientX: 225, clientY: 640 });
+
+    expect(canvas.setPointerCapture).toHaveBeenCalledWith(7);
+    expect(engine.setMainCannonAim).toHaveBeenNthCalledWith(1, { x: 195, y: 422 });
+    expect(engine.setMainCannonAim).toHaveBeenNthCalledWith(2, { x: 195, y: 522 });
+    expect(engine.setMainCannonAim).toHaveBeenCalledTimes(2);
+    scene.unmount();
+    dispatchCanvasPointer('pointermove', { pointerId: 7, clientX: 225, clientY: 740 });
+    expect(engine.setMainCannonAim).toHaveBeenCalledTimes(2);
+  });
+
   it.each([
     ['manual', (scene: BattleScene): boolean => scene.chooseFirstUpgradeForE2E()],
     ['timeout', (_scene: BattleScene): boolean => {
