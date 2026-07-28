@@ -1,6 +1,6 @@
 # Progression P4 Task 6 test-gap report
 
-- Baseline reviewed: `94d98f7`; review-fix provenance head: `591b7e2`; prior test-gap commit: `99aa973`.
+- Baseline reviewed: `94d98f7`; review-fix provenance head: `591b7e2`; prior test-gap commit: `99aa973`; final review-edge commit: `17c2fa6`.
 - Added focused regression coverage for real-engine immutable battle-event callbacks, unchanged speed rejection, E2E upgrade-resume timing/deduplication/cancellation/visibility recovery, telemetry rank-change selection with non-empty variant baselines, and deep snapshot variant isolation.
 - Fixed a confirmed aliasing defect: `battle.skillVariants` nested arrays are now copied per E2E snapshot.
 - Fixed visibility recovery so a battle scene resumes after a hidden page and pending E2E resume waiters are released only after the formal upgrade-resume state has ended.
