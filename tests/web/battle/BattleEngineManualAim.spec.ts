@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { FIXED_STEP_MS, MAIN_CANNON_INTERVAL_MS } from '../../../web/battle/BattleConfig';
 import { BattleEngine } from '../../../web/battle/BattleEngine';
+import { SimulationRateController } from '../../../web/battle/SimulationRateController';
+import type { BattleSpeed } from '../../../src/domain/progression/AccountProgressionSystem';
 
 const input = {
   battleId: 'manual-aim',
@@ -122,6 +124,23 @@ describe('BattleEngine manual main-cannon aim', () => {
     expect(farther.alive).toBe(true);
   });
 
+  it('chooses the earliest intersection when one long step crosses two enemies', () => {
+    const engine = new BattleEngine(input);
+    const state = internals(engine);
+    state.nextSpawnIndex = Number.MAX_SAFE_INTEGER;
+    state.fireCooldownMs = 0;
+    const nearer = addStationaryEnemy(engine, 1, 195, 620, 1);
+    const farther = addStationaryEnemy(engine, 1, 195, 560, 1);
+    engine.setMainCannonAim({ x: 195, y: 108 });
+
+    engine.update(FIXED_STEP_MS);
+    state.fireCooldownMs = 100_000;
+    engine.update(400);
+
+    expect(nearer.alive).toBe(false);
+    expect(farther.alive).toBe(true);
+  });
+
   it('recycles a manual shot that leaves the logical battle area without a hit', () => {
     const engine = new BattleEngine(input);
     const state = internals(engine);
@@ -134,6 +153,42 @@ describe('BattleEngine manual main-cannon aim', () => {
     runFor(engine, 2000);
 
     expect(engine.frame.projectiles).toHaveLength(0);
+  });
+
+  it('recycles a manual shot in the same step that crosses a logical boundary', () => {
+    const engine = new BattleEngine(input);
+    const state = internals(engine);
+    state.nextSpawnIndex = Number.MAX_SAFE_INTEGER;
+    state.fireCooldownMs = 0;
+    engine.setMainCannonAim({ x: 195, y: 108 });
+
+    engine.update(FIXED_STEP_MS);
+    state.fireCooldownMs = 100_000;
+    engine.update(1500);
+
+    expect(engine.frame.projectiles).toHaveLength(0);
+  });
+
+  it('resets pooled manual projectile trajectory state before reusing it for homing', () => {
+    const engine = new BattleEngine(input);
+    const state = internals(engine);
+    state.nextSpawnIndex = Number.MAX_SAFE_INTEGER;
+    state.fireCooldownMs = 0;
+    engine.setMainCannonAim({ x: 195, y: 108 });
+    engine.update(FIXED_STEP_MS);
+    state.fireCooldownMs = 100_000;
+    engine.update(1500);
+    expect(engine.frame.projectiles).toHaveLength(0);
+
+    engine.setMainCannonAim(null);
+    addStationaryEnemy(engine, 1, 195, 500);
+    state.fireCooldownMs = 0;
+    engine.update(FIXED_STEP_MS);
+
+    const homing = engine.frame.projectiles[0]!;
+    expect(homing.trajectory).toBe('homing');
+    expect(homing.velocityX).toBe(0);
+    expect(homing.velocityY).toBe(0);
   });
 
   it('keeps automatic target tracking when no manual aim has been set', () => {
@@ -179,5 +234,51 @@ describe('BattleEngine manual main-cannon aim', () => {
     expect(manualEngine.frame.projectiles.some((projectile) => (
       projectile.source === 'volley' && projectile.trajectory === 'homing'
     ))).toBe(true);
+  });
+
+  it('keeps explicit manual-aim trajectories equivalent across all simulation rates', () => {
+    const simulate = (speed: BattleSpeed) => {
+      const engine = new BattleEngine({ ...input, battleId: `manual-rate-${speed}` });
+      const state = internals(engine);
+      state.nextSpawnIndex = Number.MAX_SAFE_INTEGER;
+      state.fireCooldownMs = 0;
+      addStationaryEnemy(engine, 1, 195, 530, 10_000);
+      addStationaryEnemy(engine, 2, 292, 430, 10_000);
+      addStationaryEnemy(engine, 0, 98, 350, 10_000);
+      const rate = new SimulationRateController(FIXED_STEP_MS, speed);
+      const hits: unknown[] = [];
+
+      const realSteps = Math.round(3000 / speed / FIXED_STEP_MS);
+      for (let stepIndex = 0; stepIndex < realSteps; stepIndex += 1) {
+        rate.consume(FIXED_STEP_MS, (stepMs) => {
+          const elapsed = engine.frame.elapsedMs;
+          if (elapsed < 600) engine.setMainCannonAim({ x: 195, y: 108 });
+          else if (elapsed < 1300) engine.setMainCannonAim({ x: 292, y: 160 });
+          else engine.setMainCannonAim({ x: 98, y: 170 });
+          engine.update(stepMs);
+          hits.push(...engine.drainEvents().filter((event) => event.type === 'projectile-hit'));
+        });
+      }
+
+      return {
+        elapsedMs: engine.frame.elapsedMs,
+        enemies: engine.frame.enemies.map((enemy) => ({
+          id: enemy.id, hp: enemy.hp, alive: enemy.alive, x: enemy.x, y: enemy.y,
+        })),
+        projectiles: engine.frame.projectiles.map((projectile) => ({
+          trajectory: projectile.trajectory,
+          x: projectile.x,
+          y: projectile.y,
+          velocityX: projectile.velocityX,
+          velocityY: projectile.velocityY,
+        })),
+        hits,
+      };
+    };
+
+    const baseline = simulate(1);
+    for (const speed of [1.5, 2, 3] as const) {
+      expect(simulate(speed)).toEqual(baseline);
+    }
   });
 });

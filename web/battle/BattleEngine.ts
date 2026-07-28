@@ -972,10 +972,10 @@ export class BattleEngine {
     projectile.x = endX;
     projectile.y = endY;
     if (
-      projectile.x < -40
-      || projectile.x > LOGICAL_WIDTH + 40
-      || projectile.y < -40
-      || projectile.y > LOGICAL_HEIGHT + 40
+      projectile.x < 0
+      || projectile.x > LOGICAL_WIDTH
+      || projectile.y < 0
+      || projectile.y > LOGICAL_HEIGHT
     ) {
       projectile.active = false;
     }
