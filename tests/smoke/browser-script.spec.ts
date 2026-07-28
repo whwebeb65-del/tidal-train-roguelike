@@ -39,6 +39,10 @@ async function close(server: ReturnType<typeof createServer>): Promise<void> {
 describe('browser smoke script', () => {
   it('uses strict preview, four mobile viewports and e2e hooks', () => {
     const source = readFileSync('scripts/smoke-browser.mjs', 'utf8');
+    const releaseCapture = readFileSync(
+      '.superpowers/sdd/task-7-visual-qa/capture-task-7.mjs',
+      'utf8',
+    );
 
     expect(source).toContain('--strictPort');
     expect(source).toContain('360');
@@ -86,6 +90,13 @@ describe('browser smoke script', () => {
     expect(source).toContain('chooseStrategicUpgrade');
     expect(source).toContain("[data-upgrade-id=");
     expect(source).toContain('resetSaveBetweenViewports');
+    expect(releaseCapture).toContain('tidal-train-prototype-save-v1');
+    expect(releaseCapture).toContain('captureDesktopEvidence');
+    expect(releaseCapture).toContain('captureVariantEvidence');
+    expect(releaseCapture).toContain('captureDefeatEvidence');
+    expect(releaseCapture).toContain('battle-ready-1440x900.png');
+    expect(releaseCapture).toContain('two-variants-1440x900.png');
+    expect(releaseCapture).toContain('defeat-settlement-1440x900.png');
   });
 
   it('rejects an already occupied preview port before startup', async () => {
