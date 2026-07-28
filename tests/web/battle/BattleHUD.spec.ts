@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
 
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import {
   BattleHUD,
@@ -11,6 +13,11 @@ import {
   createFrameFixture,
   createHudModelOptionsFixture,
 } from './helpers/BattleFixtures';
+
+const battleHudCss = readFileSync(
+  resolve(process.cwd(), 'web/styles/battle-hud.css'),
+  'utf8',
+);
 
 describe('BattleHUD', () => {
   function createCallbacks(
@@ -89,6 +96,18 @@ describe('BattleHUD', () => {
 
     hud.dispose();
     host.remove();
+  });
+
+  it('uses compact paper settlement progression rows that wrap safely at 360px', () => {
+    expect(battleHudCss).toMatch(
+      /\.battle-settlement-progression\s*\{[^}]*display:\s*grid;[^}]*gap:\s*4px;[^}]*margin-top:\s*8px;/s,
+    );
+    expect(battleHudCss).toMatch(
+      /\.battle-settlement-progression\s+p\s*\{[^}]*margin:\s*0;[^}]*line-height:\s*1\.3;[^}]*overflow-wrap:\s*anywhere;/s,
+    );
+    expect(battleHudCss).toMatch(
+      /@media \(max-width: 370px\)[\s\S]*\.battle-dialog--settlement\s*\{[^}]*padding:\s*14px;/s,
+    );
   });
 
   it('keeps elite and Boss health out of the DOM HUD model', () => {

@@ -15,3 +15,9 @@
 - RED observed for new AppShell, station, and settlement presentation tests before implementation.
 - Passed focused presentation/settlement tests (31 assertions), full suite (93 files, 523 tests), `npm run typecheck`, `npm run build`, `npm run check:assets`, and `git diff --check`.
 - `npm run smoke:browser` passes the repaired 360px hierarchy gate, then stops at the existing 390px full-battle hook assertion (`chooseFirstUpgrade()` returned false). No battle/upgrade production code was modified by this task.
+
+## P2 settlement-row follow-up
+
+- Added explicit paper-and-navy styling for the settlement progression rows: reset paragraph margins, compact grid spacing, 1.3 line height, safe long-token wrapping, and coral/navy account/mastery differentiation without glass treatment.
+- At 360px the settlement dialog and progression rows reduce padding and text size while retaining all text rather than clipping it.
+- Added CSS evidence coverage in `BattleHUD.spec.ts`; focused HUD tests (14), full suite (93 files, 524 tests), typecheck, build, asset budget, and diff check pass.
