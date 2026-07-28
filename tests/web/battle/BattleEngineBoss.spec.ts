@@ -94,6 +94,13 @@ describe('BattleEngine elite and boss', () => {
     expect(events.filter((event) => event.type === 'boss-intro-ended')).toHaveLength(1);
   });
 
+  it('retains authoritative elite encounter evidence after the elite leaves the frame', () => {
+    const engine = createEngine();
+    runFor(engine, 310_000);
+
+    expect(engine.frame.eliteEncountered).toBe(true);
+  });
+
   it('ends an unresolved encounter at the eight-minute hard cap', () => {
     const eliteFailure = new BattleEngine({
       ...createEngine().inputForTest(),

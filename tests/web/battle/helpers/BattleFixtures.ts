@@ -145,6 +145,7 @@ export function createFrameFixture(
       },
     ],
     ...patch,
+    eliteEncountered: patch.eliteEncountered ?? false,
   };
 }
 

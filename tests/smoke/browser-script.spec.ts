@@ -81,6 +81,11 @@ describe('browser smoke script', () => {
     expect(source).toContain('background-foreground semantic omission');
     expect(source).toContain('1000ms displacement-sample window');
     expect(source).toContain('1200ms full choreography');
+    expect(source).toContain('eliteEncountered');
+    expect(source).toContain('battle hard cap should not be reached');
+    expect(source).toContain('chooseStrategicUpgrade');
+    expect(source).toContain("[data-upgrade-id=");
+    expect(source).toContain('resetSaveBetweenViewports');
   });
 
   it('rejects an already occupied preview port before startup', async () => {

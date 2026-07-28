@@ -159,6 +159,8 @@ export interface BattleFrameView {
   readonly energy: number;
   readonly combo: number;
   readonly kills: number;
+  /** Authoritative encounter latch for E2E/release checks; survives despawn. */
+  readonly eliteEncountered: boolean;
   readonly experience: number;
   readonly nextExperienceThreshold: number | null;
   readonly runLevel: number;

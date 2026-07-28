@@ -226,6 +226,7 @@ export class BattleEngine {
       energy: this.energy,
       combo: this.combo,
       kills: this.kills,
+      eliteEncountered: this.eliteSpawned,
       experience: this.experience,
       nextExperienceThreshold: this.nextUpgradeThreshold(),
       runLevel: this.runLevel,

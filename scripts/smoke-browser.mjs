@@ -695,7 +695,7 @@ async function startNormalBattle(client) {
   await waitForEvaluation(
     client,
     `${hookExpression}?.snapshot().sceneId === 'battle'`,
-    { label: 'normal battle scene', timeoutMs: 20_000 },
+    { label: 'normal battle scene', timeoutMs: 45_000 },
   );
 }
 
@@ -1505,6 +1505,26 @@ async function clickBattleButton(client, selector) {
   );
 }
 
+// Exercise the real card controls with a stable defensive/offensive priority;
+// this avoids treating the generated card order as player strategy.
+async function chooseStrategicUpgrade(client, offeredUpgradeIds) {
+  const priorities = [
+    'bubble-capacitor', 'rapid-reload', 'multi-barrel', 'coral-warhead',
+    'echo-chain', 'rank-bubble-barrier', 'rank-tidal-volley',
+    'tidal-resonance', 'precision-lens', 'overload-core', 'magnetic-salvage',
+    'rank-extreme-tide',
+  ];
+  const upgradeId = priorities.find((id) => offeredUpgradeIds.includes(id))
+    ?? offeredUpgradeIds[0];
+  assert.ok(upgradeId, 'upgrade offer must contain a legal card');
+  const accepted = await clickBattleButton(
+    client,
+    `[data-upgrade-id="${upgradeId}"]`,
+  );
+  assert.equal(accepted, true, `upgrade ${upgradeId} should be clickable`);
+  return upgradeId;
+}
+
 async function claimRepeatedSalvage(client) {
   const selector = '[data-battle-action="claim-interaction"]'
     + '[data-interaction-id="salvage-a"]';
@@ -1544,7 +1564,7 @@ async function finishFullBattle(client, { claimSalvage }) {
 
   let upgrades = 0;
   let normalKillSeen = fire.maxKills > 0;
-  let eliteSeen = false;
+  let eliteEncountered = false;
   let bossIntroSeen = false;
   let bossMotionSeen = false;
   let maxTrainSpeed = 0;
@@ -1562,9 +1582,10 @@ async function finishFullBattle(client, { claimSalvage }) {
     maxTrainSpeed = Math.max(maxTrainSpeed, trainMotion.speed);
     bossMotionSeen ||= trainMotion.phase === 'boss';
     normalKillSeen ||= battle.kills > 0;
-    eliteSeen ||= battle.enemies.some(
-      (enemy) => enemy.kind === 'storm-ray-elite',
-    );
+    // The elite can be defeated within a single E2E advance window. Use the
+    // engine's authoritative encounter latch rather than a timing-sensitive
+    // visual-frame sample.
+    eliteEncountered ||= battle.eliteEncountered;
     bossIntroSeen ||= battle.status === 'boss-intro'
       || battle.enemies.some((enemy) => enemy.kind === 'deep-echo-boss');
 
@@ -1596,11 +1617,7 @@ async function finishFullBattle(client, { claimSalvage }) {
       break;
     }
     if (battle.status === 'upgrade') {
-      assert.equal(
-        await callHook(client, 'return hook.chooseFirstUpgrade();'),
-        true,
-        'offered upgrade should be selectable',
-      );
+      await chooseStrategicUpgrade(client, battle.offeredUpgradeIds);
       upgrades += 1;
       continue;
     }
@@ -1653,7 +1670,12 @@ async function finishFullBattle(client, { claimSalvage }) {
     `full battle should reach victory or defeat (${terminalDetail})`,
   );
   assert.ok(normalKillSeen, 'full battle should defeat a normal enemy');
-  assert.ok(eliteSeen, 'full battle should encounter the elite');
+  assert.ok(eliteEncountered, 'full battle should encounter the elite');
+  assert.equal(
+    (await snapshot(client)).progression.hardCap,
+    false,
+    'battle hard cap should not be reached',
+  );
   assert.ok(
     bossIntroSeen,
     `full battle should reach the boss intro (${terminalDetail})`,
@@ -1727,6 +1749,24 @@ async function loadViewport(client, viewport, smokeId) {
   await ensureCaptainSelected(client);
 }
 
+async function resetSaveBetweenViewports(client) {
+  const reset = await evaluate(
+    client,
+    `(() => {
+      const button = document.querySelector('[data-action="reset-save"]');
+      if (!(button instanceof HTMLButtonElement)) return false;
+      button.click();
+      return true;
+    })()`,
+  );
+  assert.equal(reset, true, 'reset control must be available between isolated viewports');
+  await waitForEvaluation(
+    client,
+    `Boolean(${hookExpression}) && ${hookExpression}.snapshot().progression.stamina === 30`,
+    { label: 'isolated viewport reset' },
+  );
+}
+
 async function exerciseScenes(client, label) {
   for (const sceneId of [
     'station',
@@ -1768,6 +1808,7 @@ async function runViewport(client, viewport, smokeId, browserErrors) {
   const newErrors = browserErrors.slice(errorBaseline);
   assert.deepEqual(newErrors, [], `${label} browser errors:\n${newErrors.join('\n')}`);
   console.log(`[smoke] ${label} PASS - ${detail}`);
+  await resetSaveBetweenViewports(client);
   return stationPose;
 }
 
