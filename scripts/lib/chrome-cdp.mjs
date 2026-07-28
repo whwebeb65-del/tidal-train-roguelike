@@ -128,10 +128,15 @@ export async function waitForOwnedPreview(
     const output = String(getOutput()).replace(/\u001b\[[0-9;]*m/g, '');
     if (readyPattern.test(output)) {
       let rejectExited;
+      const requestController = new AbortController();
       const exited = new Promise((_, reject) => {
-        rejectExited = (code, signal) => reject(new Error(
-          `Owned preview exited before readiness (code ${code ?? signal ?? 'unknown'})`,
-        ));
+        rejectExited = (code, signal) => {
+          const error = new Error(
+            `Owned preview exited before readiness (code ${code ?? signal ?? 'unknown'})`,
+          );
+          requestController.abort(error);
+          reject(error);
+        };
         child.once('exit', rejectExited);
       });
       try {
@@ -140,6 +145,7 @@ export async function waitForOwnedPreview(
           waitForHttp(url, {
             child,
             timeoutMs: Math.max(1, deadline - Date.now()),
+            signal: requestController.signal,
           }),
           exited,
         ]);
@@ -156,11 +162,12 @@ export async function waitForOwnedPreview(
 
 export async function waitForHttp(
   url,
-  { timeoutMs = 15_000, child = null } = {},
+  { timeoutMs = 15_000, child = null, signal = undefined } = {},
 ) {
   const deadline = Date.now() + timeoutMs;
   let lastError = null;
   while (Date.now() < deadline) {
+    if (signal?.aborted) throw signal.reason;
     if (child && child.exitCode !== null) {
       throw new Error(
         `Process exited before ${url} became ready (code ${child.exitCode})`,
@@ -168,11 +175,12 @@ export async function waitForHttp(
     }
     try {
       const response = await fetch(url, {
-        signal: AbortSignal.timeout(1_000),
+        signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(1_000)]) : AbortSignal.timeout(1_000),
       });
       if (response.ok) return response;
       lastError = new Error(`HTTP ${response.status}`);
     } catch (error) {
+      if (signal?.aborted) throw signal.reason;
       lastError = error;
     }
     await delay(100);

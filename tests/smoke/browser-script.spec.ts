@@ -156,6 +156,53 @@ describe('browser smoke script', () => {
     },
   );
 
+  it.each(Array.from({ length: 6 }, (_, index) => index + 1))(
+    'aborts an in-flight stale HTTP request when the owned preview exits (run %i)',
+    async () => {
+      expect(previewLifecycle.waitForOwnedPreview).toBeTypeOf('function');
+      let requestStarted = false;
+      let requestAborted = false;
+      let staleResponseSent = false;
+      let child: ReturnType<typeof spawn> | undefined;
+      const staleServer = createServer((_request, response) => {
+        requestStarted = true;
+        child?.kill('SIGKILL');
+        response.on('close', () => {
+          requestAborted = !response.writableEnded;
+        });
+        setTimeout(() => {
+          staleResponseSent = true;
+          response.end('stale');
+        }, 100);
+      });
+      const port = await listen(staleServer);
+      const output: string[] = [];
+      child = spawn(
+        process.execPath,
+        ['-e', [
+          `console.log('Local: http://127.0.0.1:${port}/');`,
+          'setInterval(() => {}, 1000);',
+        ].join('')],
+        { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true },
+      );
+      child.stdout?.on('data', (chunk) => output.push(String(chunk)));
+
+      try {
+        await expect(previewLifecycle.waitForOwnedPreview(
+          `http://127.0.0.1:${port}`,
+          { child, getOutput: () => output.join(''), timeoutMs: 2_000 },
+        )).rejects.toThrow('Owned preview exited before readiness');
+        await new Promise((resolve) => setTimeout(resolve, 150));
+        expect(requestStarted).toBe(true);
+        expect(requestAborted).toBe(true);
+        expect(staleResponseSent).toBe(true);
+      } finally {
+        if (child.exitCode === null) child.kill('SIGKILL');
+        await close(staleServer);
+      }
+    },
+  );
+
   it('requires the ready signal to name the exact expected host and port', async () => {
     const server = createServer((_request, response) => response.end('ready'));
     const port = await listen(server);
