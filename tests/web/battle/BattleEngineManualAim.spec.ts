@@ -21,6 +21,7 @@ const input = {
 };
 
 type EngineInternals = {
+  status: 'running' | 'boss-intro' | 'upgrade' | 'paused' | 'victory' | 'defeat';
   nextSpawnIndex: number;
   fireCooldownMs: number;
   modifiers: { mainProjectileCount: number };
@@ -61,6 +62,19 @@ function addStationaryEnemy(
 }
 
 describe('BattleEngine manual main-cannon aim', () => {
+  it('rejects aiming changes outside an actively running battle', () => {
+    const engine = new BattleEngine(input);
+    const state = internals(engine);
+    expect(engine.setMainCannonAim({ x: 195, y: 180 })).toBe(true);
+
+    for (const status of ['boss-intro', 'upgrade', 'paused', 'victory', 'defeat'] as const) {
+      state.status = status;
+      expect(engine.setMainCannonAim({ x: 300, y: 180 })).toBe(false);
+      expect(engine.setMainCannonAim(null)).toBe(false);
+      expect(engine.frame.mainCannonAim).toEqual({ x: 195, y: 180 });
+    }
+  });
+
   it('clamps and safely exposes the saved aim point', () => {
     const engine = new BattleEngine(input);
 

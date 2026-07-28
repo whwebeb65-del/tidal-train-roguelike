@@ -254,6 +254,13 @@ export class BattleScene implements GameScene {
   private activeAimPointerId: number | null = null;
 
   private readonly onCanvasPointerDown = (event: PointerEvent): void => {
+    if (
+      this.activeAimPointerId !== null
+      || this.dependencies.engine.frame.status !== 'running'
+    ) {
+      event.preventDefault();
+      return;
+    }
     this.activeAimPointerId = event.pointerId;
     this.canvas?.setPointerCapture?.(event.pointerId);
     this.updateMainCannonAimFromPointer(event);

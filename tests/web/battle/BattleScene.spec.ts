@@ -255,6 +255,7 @@ function createCallbacks(): BattleSceneCallbacks {
 function createHost(bounds: Partial<DOMRect> = {}): {
   readonly host: HTMLElement;
   readonly canvas: HTMLCanvasElement;
+  readonly hudHost: HTMLElement;
   readonly dispatchCanvasPointer: (type: string, event: {
     readonly pointerId: number;
     readonly clientX: number;
@@ -262,22 +263,15 @@ function createHost(bounds: Partial<DOMRect> = {}): {
   }) => void;
 } {
   const context = {} as CanvasRenderingContext2D;
-  const canvasListeners = new Map<string, EventListenerOrEventListenerObject[]>();
-  const canvas = {
+  const canvas = Object.assign(new EventTarget(), {
     width: 0,
     height: 0,
     style: {},
     getContext: () => context,
-    addEventListener(type: string, listener: EventListenerOrEventListenerObject) {
-      canvasListeners.set(type, [...(canvasListeners.get(type) ?? []), listener]);
-    },
-    removeEventListener(type: string, listener: EventListenerOrEventListenerObject) {
-      canvasListeners.set(type, (canvasListeners.get(type) ?? []).filter((item) => item !== listener));
-    },
     setPointerCapture: vi.fn(),
     releasePointerCapture: vi.fn(),
     hasPointerCapture: vi.fn(() => true),
-  } as unknown as HTMLCanvasElement;
+  }) as unknown as HTMLCanvasElement;
   const canvasHost = {
     getBoundingClientRect: () => ({
       width: 390,
@@ -287,9 +281,9 @@ function createHost(bounds: Partial<DOMRect> = {}): {
       ...bounds,
     }),
   } as unknown as HTMLElement;
-  const hudHost = {
+  const hudHost = Object.assign(new EventTarget(), {
     innerHTML: '',
-  } as unknown as HTMLElement;
+  }) as unknown as HTMLElement;
   let hostHtml = '';
   const host = {
     get innerHTML() {
@@ -311,22 +305,37 @@ function createHost(bounds: Partial<DOMRect> = {}): {
   return {
     host,
     canvas,
+    hudHost,
     dispatchCanvasPointer(type, event) {
-      for (const listener of canvasListeners.get(type) ?? []) {
-        if (typeof listener === 'function') {
-          listener({
-            ...event,
-            preventDefault: vi.fn(),
-          } as unknown as Event);
-        } else {
-          listener.handleEvent({
-            ...event,
-            preventDefault: vi.fn(),
-          } as unknown as Event);
-        }
-      }
+      const pointerEvent = new Event(type, { cancelable: true });
+      Object.defineProperties(pointerEvent, {
+        pointerId: { value: event.pointerId },
+        clientX: { value: event.clientX },
+        clientY: { value: event.clientY },
+      });
+      canvas.dispatchEvent(pointerEvent);
     },
   };
+}
+
+function createPointerScene(host: HTMLElement, engine: TestEngine): BattleScene {
+  const scene = new BattleScene({
+    ...TEST_BATTLE_SPEED_DEPENDENCIES,
+    engine,
+    effects: { view: EMPTY_EFFECT_FRAME_VIEW, consume: vi.fn(), update: vi.fn(), reset: vi.fn() },
+    assets: { failedIds: [], get: () => null },
+    callbacks: createCallbacks(),
+    createRenderer: () => ({ render: vi.fn() }),
+    createHud: () => ({ mount: vi.fn(), update: vi.fn(), dispose: vi.fn() }),
+    captainArtId: 'captainFemaleBase',
+    reducedMotion: false,
+    manualStepMode: true,
+    scheduler: new ManualFrameScheduler(),
+    eventTarget: new EventTarget(),
+    getDevicePixelRatio: () => 1,
+  });
+  scene.mount(host);
+  return scene;
 }
 
 describe('BattleScene', () => {
@@ -365,9 +374,55 @@ describe('BattleScene', () => {
     expect(engine.setMainCannonAim).toHaveBeenNthCalledWith(1, { x: 195, y: 422 });
     expect(engine.setMainCannonAim).toHaveBeenNthCalledWith(2, { x: 195, y: 522 });
     expect(engine.setMainCannonAim).toHaveBeenCalledTimes(2);
+    expect(canvas.releasePointerCapture).toHaveBeenCalledWith(7);
     scene.unmount();
     dispatchCanvasPointer('pointermove', { pointerId: 7, clientX: 225, clientY: 740 });
     expect(engine.setMainCannonAim).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not let a second pointer steal the active manual aim', () => {
+    const engine = createEngine();
+    engine.setMainCannonAim = vi.fn(() => true);
+    const { host, canvas, dispatchCanvasPointer } = createHost();
+    const scene = createPointerScene(host, engine);
+    dispatchCanvasPointer('pointerdown', { pointerId: 1, clientX: 150, clientY: 320 });
+    dispatchCanvasPointer('pointerdown', { pointerId: 2, clientX: 250, clientY: 400 });
+    dispatchCanvasPointer('pointerup', { pointerId: 1, clientX: 150, clientY: 320 });
+
+    expect(canvas.setPointerCapture).toHaveBeenCalledTimes(1);
+    expect(canvas.setPointerCapture).toHaveBeenCalledWith(1);
+    expect(engine.setMainCannonAim).toHaveBeenCalledTimes(1);
+    expect(canvas.releasePointerCapture).toHaveBeenCalledWith(1);
+    scene.unmount();
+  });
+
+  it.each(['boss-intro', 'upgrade', 'paused', 'victory', 'defeat'] as const)(
+    'does not capture or aim when the battle status is %s',
+    (status) => {
+      const engine = createEngine(createFrameFixture({ status }));
+      engine.setMainCannonAim = vi.fn(() => false);
+      const { host, canvas, dispatchCanvasPointer } = createHost();
+      const scene = createPointerScene(host, engine);
+      dispatchCanvasPointer('pointerdown', { pointerId: 1, clientX: 150, clientY: 320 });
+      expect(canvas.setPointerCapture).not.toHaveBeenCalled();
+      expect(engine.setMainCannonAim).not.toHaveBeenCalled();
+      scene.unmount();
+    },
+  );
+
+  it('ends the active pointer on cancellation and leaves HUD sibling events outside aiming', () => {
+    const engine = createEngine();
+    engine.setMainCannonAim = vi.fn(() => true);
+    const { host, canvas, hudHost, dispatchCanvasPointer } = createHost();
+    const scene = createPointerScene(host, engine);
+    hudHost.dispatchEvent(new Event('pointerdown'));
+    dispatchCanvasPointer('pointerdown', { pointerId: 3, clientX: 150, clientY: 320 });
+    dispatchCanvasPointer('pointercancel', { pointerId: 3, clientX: 150, clientY: 320 });
+    dispatchCanvasPointer('pointermove', { pointerId: 3, clientX: 180, clientY: 260 });
+
+    expect(engine.setMainCannonAim).toHaveBeenCalledTimes(1);
+    expect(canvas.releasePointerCapture).toHaveBeenCalledWith(3);
+    scene.unmount();
   });
 
   it.each([

@@ -263,6 +263,7 @@ export class BattleEngine {
   }
 
   public setMainCannonAim(aim: BattleAimPoint | null): boolean {
+    if (this.status !== 'running') return false;
     if (aim === null) {
       this.mainCannonAim = null;
       return true;

@@ -411,11 +411,21 @@ export class BattleRenderer {
       if (
         visibleTrails < input.renderBudget.visibleProjectileTrails
       ) {
+        const velocityLength = Math.hypot(
+          projectile.velocityX,
+          projectile.velocityY,
+        );
+        const tail = projectile.trajectory === 'manual' && velocityLength > 0
+          ? {
+            x: projectile.x - projectile.velocityX / velocityLength * 14,
+            y: projectile.y - projectile.velocityY / velocityLength * 14,
+          }
+          : { x: projectile.x, y: projectile.y + 14 };
         this.painter.line({
           kind: 'projectile-trail',
           layer: 'projectiles',
           points: [
-            { x: projectile.x, y: projectile.y + 14 },
+            tail,
             { x: projectile.x, y: projectile.y },
           ],
           stroke: color,

@@ -659,6 +659,36 @@ describe('BattleRenderer', () => {
     ).toHaveLength(1);
   });
 
+  it('draws a manual projectile trail behind its velocity vector', () => {
+    const commands = renderCommands({
+      frame: {
+        projectiles: [{
+          id: 42,
+          source: 'main',
+          x: 220,
+          y: 460,
+          targetId: -1,
+          trajectory: 'manual',
+          velocityX: 240,
+          velocityY: -320,
+          speedPerSecond: 400,
+          damage: 10,
+          splashRadius: 0,
+          chainRemaining: 0,
+          critical: false,
+          active: true,
+        }],
+      },
+    });
+    const trail = findCommand<LineDrawCommand>(
+      commands,
+      (item) => item.kind === 'projectile-trail',
+    );
+    expect(trail.points[1]).toEqual({ x: 220, y: 460 });
+    expect(trail.points[0]!.x).toBeLessThan(220);
+    expect(trail.points[0]!.y).toBeGreaterThan(460);
+  });
+
   it('draws moving route markers and a bounded train wake', () => {
     const painter = createRecordingPainter();
     new BattleRenderer(painter).render(createPresentationFixture());
