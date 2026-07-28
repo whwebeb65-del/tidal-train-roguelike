@@ -184,16 +184,52 @@ async function assertBattleHudGeometry(client, label) {
     const hud = document.querySelector('.battle-hud__tide-log');
     const canvas = document.querySelector('[data-battle-canvas]');
     const skills = [...document.querySelectorAll('[data-battle-skill]')];
+    const refresh = document.querySelector('[data-battle-action="skill-refresh"]');
     if (!(hud instanceof HTMLElement) || !(canvas instanceof HTMLCanvasElement)) {
       throw new Error('battle HUD or canvas is missing');
     }
+    if (!(refresh instanceof HTMLButtonElement)) {
+      throw new Error('battle skill refresh control is missing');
+    }
+    // The reward ticket is normally conditional. Reveal it here so every
+    // production viewport proves its reserved, non-overlapping layout.
+    refresh.hidden = false;
+    const overlaps = (first, second) => first.left < second.right
+      && first.right > second.left
+      && first.top < second.bottom
+      && first.bottom > second.top;
     const hudBottom = hud.getBoundingClientRect().bottom;
     const canvasRect = canvas.getBoundingClientRect();
     const logicalScale = window.visualViewport?.scale ?? 1;
     return {
       hudBottom: Number.parseFloat(getComputedStyle(hud).height),
+      logicalScale,
       enemyLaneTop: (canvasRect.top + canvasRect.height * 120 / 844) / logicalScale,
       skillMin: Math.min(...skills.map((skill) => skill.getBoundingClientRect().height)) / logicalScale,
+      skillCopy: skills.map((skill) => {
+        const name = skill.querySelector('.battle-skill__copy b');
+        const status = skill.querySelector('.battle-skill__copy small');
+        const nameRect = name?.getBoundingClientRect();
+        const statusRect = status?.getBoundingClientRect();
+        return {
+          nameVisible: name instanceof HTMLElement && nameRect !== undefined
+            && nameRect.top >= 0 && nameRect.bottom <= innerHeight
+            && nameRect.left >= 0 && nameRect.right <= innerWidth
+            && name.scrollWidth <= name.clientWidth + 1,
+          statusVisible: status instanceof HTMLElement && statusRect !== undefined
+            && statusRect.top >= 0 && statusRect.bottom <= innerHeight
+            && statusRect.left >= 0 && statusRect.right <= innerWidth
+            && status.scrollWidth <= status.clientWidth + 1,
+        };
+      }),
+      refresh: (() => {
+        const rect = refresh.getBoundingClientRect();
+        return {
+          width: rect.width,
+          height: rect.height,
+          overlapsSkill: skills.some((skill) => overlaps(rect, skill.getBoundingClientRect())),
+        };
+      })(),
       scrollWidth: document.documentElement.scrollWidth,
       innerWidth,
     };
@@ -201,6 +237,14 @@ async function assertBattleHudGeometry(client, label) {
   assert.ok(geometry.hudBottom <= 108, `${label} HUD bottom exceeds 108px: ${geometry.hudBottom}`);
   assert.ok(geometry.enemyLaneTop - geometry.hudBottom >= 12, `${label} enemy lane gap is below 12px`);
   assert.ok(geometry.skillMin >= 56, `${label} skill target is below 56px`);
+  assert.ok(geometry.skillCopy.every((copy) => copy.nameVisible), `${label} skill names are clipped or ellipsized`);
+  assert.ok(geometry.skillCopy.every((copy) => copy.statusVisible), `${label} skill cooldown copy is clipped or ellipsized`);
+  assert.ok(
+    geometry.refresh.width / geometry.logicalScale >= 44
+      && geometry.refresh.height / geometry.logicalScale >= 44,
+    `${label} refresh target is below 44px: ${JSON.stringify(geometry.refresh)} @${geometry.logicalScale}`,
+  );
+  assert.equal(geometry.refresh.overlapsSkill, false, `${label} refresh ticket overlaps a skill target`);
   assert.ok(geometry.scrollWidth <= geometry.innerWidth + 1, `${label} battle overflows horizontally`);
 }
 
