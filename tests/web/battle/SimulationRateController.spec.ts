@@ -31,13 +31,50 @@ describe('SimulationRateController', () => {
     expect(new Set(steps)).toEqual(new Set([FIXED_STEP_MS]));
   });
 
-  it('caps catch-up work and drops excess backlog deterministically', () => {
+  it('keeps capped catch-up backlog and drains it across later frames', () => {
     const controller = new SimulationRateController(10, 3, 5);
     const steps: number[] = [];
 
     controller.consume(100, (step) => steps.push(step));
-    controller.consume(10 / 3, (step) => steps.push(step));
+    expect(steps).toHaveLength(5);
+    for (let frame = 0; frame < 5; frame += 1) {
+      const before = steps.length;
+      controller.consume(0, (step) => steps.push(step));
+      expect(steps.length - before).toBeLessThanOrEqual(5);
+    }
 
-    expect(steps).toEqual([10, 10, 10, 10, 10, 10]);
+    expect(steps).toEqual(Array.from({ length: 30 }, () => 10));
+  });
+
+  it.each([1, 1.5, 2, 3] as const)(
+    'preserves all world time after a one-second hitch at %sx speed',
+    (speed) => {
+      const controller = new SimulationRateController(10, speed, 5);
+      let simulated = 0;
+
+      controller.consume(1000, (step) => {
+        simulated += step;
+      });
+      for (let frame = 0; frame < 600; frame += 1) {
+        controller.consume(0, (step) => {
+          simulated += step;
+        });
+      }
+
+      expect(simulated).toBeCloseTo(1000 * speed, 8);
+    },
+  );
+
+  it('does not accumulate a backlog while no real time elapses', () => {
+    const controller = new SimulationRateController(10, 3, 5);
+    let simulated = 0;
+
+    for (let frame = 0; frame < 10; frame += 1) {
+      controller.consume(0, (step) => {
+        simulated += step;
+      });
+    }
+
+    expect(simulated).toBe(0);
   });
 });

@@ -30,8 +30,5 @@ export class SimulationRateController {
       }
       steps += 1;
     }
-    if (steps === this.maxCatchUpSteps) {
-      this.remainderMs %= this.fixedStepMs;
-    }
   }
 }

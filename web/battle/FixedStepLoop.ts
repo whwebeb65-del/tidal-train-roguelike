@@ -1,5 +1,9 @@
 export interface FixedStepLoopOptions {
   readonly stepMs: number;
+  /**
+   * Maximum wall-clock time admitted to the simulation backlog per render
+   * frame. Excess time remains queued so a hitch is caught up gradually.
+   */
   readonly maxFrameDeltaMs: number;
   readonly maxStepsPerFrame: number;
   readonly update: (stepMs: number) => void;
@@ -10,6 +14,7 @@ export class FixedStepLoop {
   private running = true;
   private previousTimeMs: number | null = null;
   private accumulatorMs = 0;
+  private queuedWallTimeMs = 0;
 
   public constructor(private readonly options: FixedStepLoopOptions) {
     assertPositive(options.stepMs, 'Fixed step');
@@ -27,12 +32,14 @@ export class FixedStepLoop {
     this.running = true;
     this.previousTimeMs = null;
     this.accumulatorMs = 0;
+    this.queuedWallTimeMs = 0;
   }
 
   public stop(): void {
     this.running = false;
     this.previousTimeMs = null;
     this.accumulatorMs = 0;
+    this.queuedWallTimeMs = 0;
   }
 
   public frame(nowMs: number): void {
@@ -46,12 +53,15 @@ export class FixedStepLoop {
       return;
     }
 
-    const frameDeltaMs = Math.min(
-      this.options.maxFrameDeltaMs,
-      Math.max(0, nowMs - this.previousTimeMs),
-    );
+    const frameDeltaMs = Math.max(0, nowMs - this.previousTimeMs);
     this.previousTimeMs = nowMs;
-    this.accumulatorMs += frameDeltaMs;
+    this.queuedWallTimeMs += frameDeltaMs;
+    const admittedDeltaMs = Math.min(
+      this.options.maxFrameDeltaMs,
+      this.queuedWallTimeMs,
+    );
+    this.queuedWallTimeMs -= admittedDeltaMs;
+    this.accumulatorMs += admittedDeltaMs;
 
     let steps = 0;
     while (
@@ -61,12 +71,6 @@ export class FixedStepLoop {
       this.options.update(this.options.stepMs);
       this.accumulatorMs -= this.options.stepMs;
       steps += 1;
-    }
-    if (
-      steps === this.options.maxStepsPerFrame
-      && this.accumulatorMs >= this.options.stepMs
-    ) {
-      this.accumulatorMs %= this.options.stepMs;
     }
     this.options.render(
       Math.min(0.999999, this.accumulatorMs / this.options.stepMs),
