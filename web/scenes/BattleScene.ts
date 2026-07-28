@@ -396,6 +396,20 @@ export class BattleScene implements GameScene {
     this.renderBattle();
   }
 
+  public async resumeForVisibility(): Promise<void> {
+    if (!this.host || !this.visibilityPaused) return;
+    await this.sound.resume();
+    if (!this.host) return;
+    this.visibilityPaused = false;
+    this.resumeUpgradeChoiceTimer();
+    if (this.dependencies.engine.frame.status === 'paused' && !this.pendingActions.has('upgrade-resume')) {
+      this.dependencies.engine.resume();
+    }
+    if (!this.pendingActions.has('upgrade-resume')) this.completeUpgradeResume();
+    this.startAnimationLoop();
+    this.renderBattle();
+  }
+
   public advanceForE2E(durationMs: number): void {
     if (!this.dependencies.manualStepMode) {
       throw new Error('Direct battle advancement is only available in E2E');

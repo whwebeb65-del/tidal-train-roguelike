@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi } from 'vitest';
 import { appSceneForAction } from '../../web/app/GameApp';
-import { createLegacyGameRuntime } from '../../web/LegacyGameRuntime';
+import { createLegacyGameRuntime, progressionTelemetryForUpgrade } from '../../web/LegacyGameRuntime';
 import { APP_STORAGE_KEYS } from '../../web/app/AppStateRepository';
 import { defaultSave } from '../../src/save/SaveRepository';
 
@@ -17,6 +17,53 @@ describe('GameApp navigation', () => {
     expect(appSceneForAction('combat-action')).toBeNull();
     expect(appSceneForAction('damage')).toBeNull();
     expect(appSceneForAction('unknown')).toBeNull();
+  });
+});
+
+describe('LegacyGameRuntime E2E snapshots', () => {
+  it('deep-copies progression variant arrays so mutations cannot affect the engine or later snapshots', async () => {
+    window.history.replaceState({}, '', '/?e2e=1&e2eSeed=17');
+    const app = document.createElement('div');
+    const storage = window.localStorage;
+    storage.clear();
+    const audio = new Proxy({}, { get: () => () => undefined }) as never;
+    const runtime = createLegacyGameRuntime(app, storage, true, audio, {
+      getSettings: () => ({ version: 2, musicEnabled: false, sfxEnabled: false, reducedMotion: true, qualityPreference: 'auto', preferredBattleSpeed: 1 }),
+      updateSettings: () => ({ version: 2, musicEnabled: false, sfxEnabled: false, reducedMotion: true, qualityPreference: 'auto', preferredBattleSpeed: 1 }),
+    }, {
+      prepareStationRun: async () => ({ status: 'ready', assets: { failedIds: [], get: () => null } }),
+    });
+    await runtime.start();
+    await runtime.e2eStartNormalBattle();
+    const first = runtime.e2eSnapshot();
+    (first.progression.variants['tidal-volley'] as string[]).push('corrupt');
+    (first.battle?.skillVariants['tidal-volley'] as string[]).push('corrupt-battle');
+    const second = runtime.e2eSnapshot();
+    expect(second.progression.variants['tidal-volley']).not.toContain('corrupt');
+    expect(second.battle?.skillVariants['tidal-volley']).not.toContain('corrupt');
+    expect(second.battle?.skillVariants['tidal-volley']).not.toContain('corrupt-battle');
+    runtime.destroy();
+  });
+});
+
+describe('progression telemetry selection', () => {
+  it('emits rank changes only for the skill whose rank actually changed', () => {
+    const baseline = {
+      ranks: { 'tidal-volley': 1, 'bubble-barrier': 1, 'extreme-tide': 1 },
+      variants: { 'tidal-volley': [], 'bubble-barrier': [], 'extreme-tide': [] },
+    } as const;
+    const generic = progressionTelemetryForUpgrade({
+      skillRanks: baseline.ranks,
+      skillVariants: baseline.variants,
+    }, baseline);
+    expect(generic.events.filter((event) => event.name === 'skill_rank_changed')).toEqual([]);
+    const ranked = progressionTelemetryForUpgrade({
+      skillRanks: { ...baseline.ranks, 'tidal-volley': 2 },
+      skillVariants: baseline.variants,
+    }, baseline);
+    expect(ranked.events.filter((event) => event.name === 'skill_rank_changed')).toEqual([
+      { name: 'skill_rank_changed', payload: { skillId: 'tidal-volley', rank: 2 } },
+    ]);
   });
 });
 

@@ -426,6 +426,82 @@ describe('BattleScene', () => {
     scene.unmount();
   });
 
+  it('gives event observers an immutable copy that cannot affect later engine frames', () => {
+    const engine = createEngine(createFrameFixture({ status: 'running' }));
+    engine.events.push({
+      type: 'upgrade-selected', upgradeId: 'multi-barrel', source: 'manual',
+      level: 2, runLevel: 2, nextExperienceThreshold: 20,
+      skillRanks: { 'tidal-volley': 2, 'bubble-barrier': 1, 'extreme-tide': 1 },
+      skillVariants: { 'tidal-volley': ['split-tide-arrow'], 'bubble-barrier': [], 'extreme-tide': [] },
+    });
+    const observed = vi.fn((events: readonly BattleEvent[]) => {
+      const event = events[0] as Extract<BattleEvent, { type: 'upgrade-selected' }>;
+      expect(() => { (event.skillRanks as Record<string, number>)['tidal-volley'] = 99; }).toThrow();
+      expect(() => { (event.skillVariants['tidal-volley'] as string[]).push('bad'); }).toThrow();
+    });
+    const { host } = createHost();
+    const scene = new BattleScene({
+      ...TEST_BATTLE_SPEED_DEPENDENCIES, onBattleEvents: observed, engine,
+      effects: { view: EMPTY_EFFECT_FRAME_VIEW, consume: vi.fn(), update: vi.fn(), reset: vi.fn() },
+      assets: { failedIds: [], get: () => null }, callbacks: createCallbacks(),
+      createRenderer: () => ({ render: vi.fn() }), createHud: () => ({ mount: vi.fn(), update: vi.fn(), dispose: vi.fn() }),
+      captainArtId: 'captainFemaleBase', reducedMotion: false, manualStepMode: true,
+      scheduler: new ManualFrameScheduler(), eventTarget: new EventTarget(), getDevicePixelRatio: () => 1,
+    });
+    scene.mount(host);
+    scene.advanceForE2E(FIXED_STEP_MS);
+    expect(engine.frame.skillRanks['tidal-volley']).toBe(1);
+    expect(engine.frame.skillVariants['tidal-volley']).toEqual([]);
+    scene.unmount();
+  });
+
+  it('does not persist or emit telemetry for an unchanged battle speed', () => {
+    const onBattleSpeedChanged = vi.fn();
+    const { host } = createHost();
+    const scene = new BattleScene({
+      ...TEST_BATTLE_SPEED_DEPENDENCIES, onBattleSpeedChanged, engine: createEngine(),
+      effects: { view: EMPTY_EFFECT_FRAME_VIEW, consume: vi.fn(), update: vi.fn(), reset: vi.fn() },
+      assets: { failedIds: [], get: () => null }, callbacks: createCallbacks(),
+      createRenderer: () => ({ render: vi.fn() }), createHud: () => ({ mount: vi.fn(), update: vi.fn(), dispose: vi.fn() }),
+      captainArtId: 'captainFemaleBase', reducedMotion: false, manualStepMode: true,
+      scheduler: new ManualFrameScheduler(), eventTarget: new EventTarget(), getDevicePixelRatio: () => 1,
+    });
+    scene.mount(host);
+    expect(scene.setBattleSpeed(1)).toBe(false);
+    expect(onBattleSpeedChanged).not.toHaveBeenCalled();
+    scene.unmount();
+  });
+
+  it('resolves E2E resume requests at the formal 400ms upgrade boundary and on cancellation', async () => {
+    vi.useFakeTimers();
+    try {
+      const engine = createEngine(createFrameFixture({ status: 'upgrade', offeredUpgradeIds: ['multi-barrel'] }));
+      const { host } = createHost();
+      const scene = new BattleScene({
+        ...TEST_BATTLE_SPEED_DEPENDENCIES, engine,
+        effects: { view: EMPTY_EFFECT_FRAME_VIEW, consume: vi.fn(), update: vi.fn(), reset: vi.fn() },
+        assets: { failedIds: [], get: () => null }, callbacks: createCallbacks(),
+        createRenderer: () => ({ render: vi.fn() }), createHud: () => ({ mount: vi.fn(), update: vi.fn(), dispose: vi.fn() }),
+        captainArtId: 'captainFemaleBase', reducedMotion: false, manualStepMode: true,
+        scheduler: new ManualFrameScheduler(), eventTarget: new EventTarget(), getDevicePixelRatio: () => 1,
+      });
+      scene.mount(host);
+      expect(scene.chooseFirstUpgradeForE2E()).toBe(true);
+      let resolved = false;
+      const first = scene.requestResumeForE2E().then(() => { resolved = true; });
+      const duplicate = scene.requestResumeForE2E();
+      await Promise.resolve();
+      expect(resolved).toBe(false);
+      vi.advanceTimersByTime(399);
+      await Promise.resolve();
+      expect(resolved).toBe(false);
+      vi.advanceTimersByTime(1);
+      await Promise.all([first, duplicate]);
+      expect(engine.frame.status).toBe('running');
+      scene.unmount();
+    } finally { vi.useRealTimers(); }
+  });
+
   it('uses a six-second real-time deadline for upgrade auto-choice at 3x speed', () => {
     vi.useFakeTimers();
     try {

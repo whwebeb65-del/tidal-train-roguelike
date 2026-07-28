@@ -581,7 +581,10 @@ function handlePageHidden(): void {
 
 function handlePageVisible(): void {
   pageHidden = false;
-  if (router.currentSceneId === 'battle') return;
+  if (router.currentSceneId === 'battle') {
+    void activeBattleScene?.resumeForVisibility();
+    return;
+  }
   void audio.resume()
     .catch(() => undefined)
     .then(() => {
@@ -771,20 +774,13 @@ function trackBattleEvents(events: readonly BattleEvent[]): void {
         level: event.level,
         runLevel: event.runLevel,
       });
-      for (const [skillId, rank] of Object.entries(event.skillRanks)) {
-        if (trackedSkillRanks[skillId] !== rank) {
-          track('skill_rank_changed', { skillId, rank });
-        }
-      }
-      for (const [skillId, variantIds] of Object.entries(event.skillVariants)) {
-        for (const variantId of variantIds) {
-          if (!trackedSkillVariants[skillId]?.includes(variantId)) {
-            track('skill_variant_acquired', { skillId, variantId });
-          }
-        }
-      }
-      trackedSkillRanks = { ...event.skillRanks };
-      trackedSkillVariants = { ...event.skillVariants };
+      const progression = progressionTelemetryForUpgrade(event, {
+        ranks: trackedSkillRanks,
+        variants: trackedSkillVariants,
+      });
+      for (const tracked of progression.events) track(tracked.name, tracked.payload);
+      trackedSkillRanks = progression.next.ranks;
+      trackedSkillVariants = progression.next.variants;
     }
     if (
       event.type === 'battle-lost'
@@ -2385,13 +2381,31 @@ return {
 };
 }
 
+export function progressionTelemetryForUpgrade(
+  upgrade: Pick<Extract<BattleEvent, { type: 'upgrade-selected' }>, 'skillRanks' | 'skillVariants'>,
+  previous: { readonly ranks: Readonly<Record<string, number>>; readonly variants: Readonly<Record<string, readonly string[]>> },
+) {
+  const events: Array<{ name: 'skill_rank_changed' | 'skill_variant_acquired'; payload: Record<string, string | number> }> = [];
+  for (const [skillId, rank] of Object.entries(upgrade.skillRanks)) {
+    if (previous.ranks[skillId] !== rank) events.push({ name: 'skill_rank_changed', payload: { skillId, rank } });
+  }
+  for (const [skillId, variantIds] of Object.entries(upgrade.skillVariants)) {
+    for (const variantId of variantIds) if (!previous.variants[skillId]?.includes(variantId)) events.push({ name: 'skill_variant_acquired', payload: { skillId, variantId } });
+  }
+  return { events, next: { ranks: { ...upgrade.skillRanks }, variants: Object.fromEntries(Object.entries(upgrade.skillVariants).map(([skillId, variants]) => [skillId, [...variants]])) } };
+}
+
 function cloneBattleFrame(frame: BattleFrameView): BattleFrameView {
   return {
     ...frame,
     offeredUpgradeIds: [...frame.offeredUpgradeIds],
     upgradeLevels: { ...frame.upgradeLevels },
     skillRanks: { ...frame.skillRanks },
-    skillVariants: { ...frame.skillVariants },
+    skillVariants: Object.fromEntries(
+      Object.entries(frame.skillVariants).map(
+        ([skillId, variants]) => [skillId, [...variants]],
+      ),
+    ) as unknown as BattleFrameView['skillVariants'],
     cooldowns: { ...frame.cooldowns },
     enemies: frame.enemies.map((enemy) => ({ ...enemy })),
     projectiles: frame.projectiles.map((projectile) => ({ ...projectile })),
