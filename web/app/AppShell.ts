@@ -9,6 +9,16 @@ export interface CurrencySnapshot {
   readonly gears: number;
   readonly routeMarks: number;
   readonly starTickets: number;
+  readonly account?: AccountTicketSnapshot;
+}
+
+export interface AccountTicketSnapshot {
+  readonly level: number;
+  readonly xp: number;
+  readonly nextLevelXp: number;
+  readonly stamina: number;
+  readonly maxStamina: number;
+  readonly nextSpeedUnlock: { readonly level: number; readonly speed: number } | null;
 }
 
 export interface AppShellHandles {
@@ -16,12 +26,26 @@ export interface AppShellHandles {
   readonly noticeHost: HTMLElement;
   readonly navigation: HTMLElement;
   setCurrencies(snapshot: CurrencySnapshot): void;
+  setAccountTicket(snapshot: AccountTicketSnapshot): void;
   setActiveScene(sceneId: SceneId): void;
   setNotice(message: string): void;
   setNavigationHidden(hidden: boolean): void;
   openSettings(model: SettingsPanelModel): void;
   closeSettings(): void;
   isSettingsOpen(): boolean;
+}
+
+function accountTicket(snapshot: AccountTicketSnapshot): string {
+  const nextSpeed = snapshot.nextSpeedUnlock === null
+    ? '最高倍速已解锁'
+    : `下一倍速：Lv.${snapshot.nextSpeedUnlock.level} · ${snapshot.nextSpeedUnlock.speed}×`;
+  const label = `账号 Lv.${snapshot.level}，${snapshot.xp} / ${snapshot.nextLevelXp} XP，体力 ${snapshot.stamina} / ${snapshot.maxStamina}，${nextSpeed}`;
+  return `<div class="app-account-ticket" data-account-ticket aria-label="${label}">
+    <span data-account-level>账号 Lv.${snapshot.level}</span>
+    <span class="app-account-ticket__xp" data-account-xp data-compact-xp="Lv.${snapshot.level} · ${Math.floor(snapshot.xp / snapshot.nextLevelXp * 100)}%">${snapshot.xp} / ${snapshot.nextLevelXp} XP</span>
+    <span data-account-stamina>体力 ${snapshot.stamina} / ${snapshot.maxStamina}</span>
+    <span data-account-speed>${nextSpeed}</span>
+  </div>`;
 }
 
 function currency(
@@ -57,6 +81,7 @@ export function renderAppShell(snapshot: CurrencySnapshot): string {
           <small>潮汐列车</small>
         </div>
       </div>
+      ${snapshot.account ? accountTicket(snapshot.account) : ''}
       <div class="currencies" aria-label="持有资源">
         ${currency('gears', '⚙', '齿轮', snapshot.gears)}
         ${currency('routeMarks', '◇', '航线徽记', snapshot.routeMarks)}
@@ -105,6 +130,20 @@ export function mountAppShell(
         );
         target.textContent = String(value);
       }
+    },
+
+    setAccountTicket(next): void {
+      const ticket = requireElement<HTMLElement>(root, '[data-account-ticket]');
+      const nextSpeed = next.nextSpeedUnlock === null
+        ? '最高倍速已解锁'
+        : `下一倍速：Lv.${next.nextSpeedUnlock.level} · ${next.nextSpeedUnlock.speed}×`;
+      ticket.setAttribute('aria-label', `账号 Lv.${next.level}，${next.xp} / ${next.nextLevelXp} XP，体力 ${next.stamina} / ${next.maxStamina}，${nextSpeed}`);
+      requireElement<HTMLElement>(ticket, '[data-account-level]').textContent = `账号 Lv.${next.level}`;
+      const xp = requireElement<HTMLElement>(ticket, '[data-account-xp]');
+      xp.textContent = `${next.xp} / ${next.nextLevelXp} XP`;
+      xp.dataset.compactXp = `Lv.${next.level} · ${Math.floor(next.xp / next.nextLevelXp * 100)}%`;
+      requireElement<HTMLElement>(ticket, '[data-account-stamina]').textContent = `体力 ${next.stamina} / ${next.maxStamina}`;
+      requireElement<HTMLElement>(ticket, '[data-account-speed]').textContent = nextSpeed;
     },
 
     setActiveScene(sceneId): void {

@@ -16,6 +16,12 @@ export interface StationHeroModel {
   readonly maxHp: number;
   readonly damagePercent: number;
   readonly reducedMotion: boolean;
+  readonly accountLevel?: number;
+  readonly accountXp?: number;
+  readonly nextAccountLevelXp?: number;
+  readonly stamina?: number;
+  readonly maxStamina?: number;
+  readonly nextSpeedUnlock?: { readonly level: number; readonly speed: number } | null;
 }
 
 export function renderStationHero(model: StationHeroModel): string {
@@ -23,6 +29,15 @@ export function renderStationHero(model: StationHeroModel): string {
   const skin = getSkinDefinition(model.skinId);
   if (!skin) throw new Error(`Unknown skin: ${model.skinId}`);
   const captainArt = CHIBI_ART.captains[model.captainId][model.skinId];
+  const accountLevel = model.accountLevel ?? 1;
+  const accountXp = model.accountXp ?? 0;
+  const nextAccountLevelXp = model.nextAccountLevelXp ?? 80;
+  const stamina = model.stamina ?? 30;
+  const maxStamina = model.maxStamina ?? 30;
+  const nextSpeed = model.nextSpeedUnlock === null
+    ? '最高倍速已解锁'
+    : `下一倍速：Lv.${model.nextSpeedUnlock?.level ?? 10} · ${model.nextSpeedUnlock?.speed ?? 1.5}×`;
+  const accountLabel = `账号 Lv.${accountLevel}，${accountXp} / ${nextAccountLevelXp} XP，体力 ${stamina} / ${maxStamina}，${nextSpeed}`;
 
   return `<section class="station-hero" data-reduced-motion="${model.reducedMotion}" aria-labelledby="station-hero-title">
     <div class="station-hero__world" data-motion-role="background" aria-hidden="true">
@@ -43,6 +58,12 @@ export function renderStationHero(model: StationHeroModel): string {
         <span>航线 ${model.mapName}</span>
         <span>生命 ${model.maxHp}</span>
         <span>永久伤害 +${model.damagePercent}%</span>
+      </div>
+      <div class="station-account-ticket" aria-label="${accountLabel}">
+        <span>账号 Lv.${accountLevel}</span>
+        <span class="station-account-ticket__xp" data-compact-xp="Lv.${accountLevel} · ${Math.floor(accountXp / nextAccountLevelXp * 100)}%">${accountXp} / ${nextAccountLevelXp} XP</span>
+        <span>体力 ${stamina} / ${maxStamina}</span>
+        <span>${nextSpeed}</span>
       </div>
       <button class="station-departure" data-action="start-run">检票出发</button>
     </div>

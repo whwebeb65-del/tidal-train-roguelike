@@ -32,6 +32,27 @@ describe('AppShell', () => {
     expect(html).not.toContain('open-hub-anchor');
   });
 
+  it('renders an account ticket with current xp, stamina, and the next speed gate', () => {
+    const html = renderAppShell({
+      gears: 7,
+      routeMarks: 2,
+      starTickets: 1,
+      account: {
+        level: 12,
+        xp: 340,
+        nextLevelXp: 500,
+        stamina: 25,
+        maxStamina: 30,
+        nextSpeedUnlock: { level: 20, speed: 2 },
+      },
+    });
+
+    expect(html).toContain('账号 Lv.12');
+    expect(html).toContain('340 / 500 XP');
+    expect(html).toContain('体力 25 / 30');
+    expect(html).toContain('下一倍速：Lv.20 · 2×');
+  });
+
   it('reserves a mobile notice lane away from readable content and fixed navigation', () => {
     expect(appShellCss).toContain('.scene-viewport:has(.app-notice.is-visible)');
     expect(appShellCss).toMatch(

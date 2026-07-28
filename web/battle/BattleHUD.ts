@@ -66,6 +66,8 @@ interface HudNodes {
   readonly settlementGears: HTMLElement;
   readonly settlementRouteMarks: HTMLElement;
   readonly settlementStarTickets: HTMLElement;
+  readonly settlementAccount: HTMLElement;
+  readonly settlementMastery: HTMLElement;
   readonly expedition: HTMLElement;
   readonly dailyScore: HTMLElement;
   readonly doubleButton: HTMLButtonElement;
@@ -165,6 +167,10 @@ export function renderBattleHudShell(): string {
           <span><i>齿轮</i><b data-settlement-gears>0</b><small>齿轮</small></span>
           <span><i>徽记</i><b data-settlement-route-marks>0</b><small>航线徽记</small></span>
           <span><i>星票</i><b data-settlement-star-tickets>0</b><small>星票</small></span>
+        </div>
+        <div class="battle-settlement-progression">
+          <p data-settlement-account hidden></p>
+          <p data-settlement-mastery hidden></p>
         </div>
         <div class="battle-settlement-meta">
           <span data-settlement-expedition hidden></span>
@@ -424,6 +430,20 @@ export class BattleHUD {
         nodes.settlementStarTickets,
         String(model.settlement.rewards.starTickets),
       );
+      const account = model.settlement.accountProgression;
+      nodes.settlementAccount.hidden = !account || account.gainedXp <= 0;
+      setText(
+        nodes.settlementAccount,
+        !account || account.gainedXp <= 0
+          ? ''
+          : `账号 XP +${account.gainedXp}${account.staminaSpendXp > 0 ? `（含开局体力 +${account.staminaSpendXp}）` : ''}· Lv.${account.level} · ${account.xp} XP${account.levelsGained > 0 ? ` · 升级 +${account.levelsGained}` : ''}`,
+      );
+      const mastery = Object.entries(model.settlement.skillMastery ?? {})
+        .filter(([, result]) => result.gainedXp > 0)
+        .map(([skillId, result]) => `${skillLabel(skillId)} 熟练度 +${result.gainedXp} · Lv.${result.level}`)
+        .join('；');
+      nodes.settlementMastery.hidden = mastery.length === 0;
+      setText(nodes.settlementMastery, mastery);
       nodes.expedition.hidden = model.settlement.expeditionPoints <= 0;
       setText(
         nodes.expedition,
@@ -538,6 +558,8 @@ function collectNodes(host: HTMLElement): HudNodes {
       host,
       '[data-settlement-star-tickets]',
     ),
+    settlementAccount: requireElement(host, '[data-settlement-account]'),
+    settlementMastery: requireElement(host, '[data-settlement-mastery]'),
     expedition: requireElement(host, '[data-settlement-expedition]'),
     dailyScore: requireElement(host, '[data-settlement-daily-score]'),
     doubleButton: requireElement(
@@ -553,6 +575,14 @@ function collectNodes(host: HTMLElement): HudNodes {
 
 function setText(node: HTMLElement, value: string): void {
   if (node.textContent !== value) node.textContent = value;
+}
+
+function skillLabel(skillId: string): string {
+  return ({
+    'tidal-volley': '潮汐齐射',
+    'bubble-barrier': '泡泡屏障',
+    'extreme-tide': '极潮爆发',
+  } as Readonly<Record<string, string>>)[skillId] ?? skillId;
 }
 
 function setWidth(node: HTMLElement, percent: number): void {

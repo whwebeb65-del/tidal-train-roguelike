@@ -53,6 +53,44 @@ describe('BattleHUD', () => {
     expect(html).not.toContain('data-boss-label');
   });
 
+  it('renders account and used-skill mastery settlement rows beneath currencies without another modal', () => {
+    const hud = new BattleHUD(createCallbacks(), window);
+    const host = document.createElement('div');
+    document.body.append(host);
+    hud.mount(host);
+    hud.update(createBattleHudModel(createFrameFixture({ status: 'victory' }), {
+      ...createHudModelOptionsFixture(),
+      settlement: {
+        title: '潮汐航线通关',
+        description: '奖励已到账。',
+        rewards: { gears: 80, routeMarks: 2, starTickets: 0 },
+        expeditionPoints: 0,
+        dailyTrialScore: null,
+        doubleSettlementAvailable: false,
+        doubled: false,
+        accountProgression: {
+          gainedXp: 74,
+          staminaSpendXp: 50,
+          level: 12,
+          xp: 340,
+          levelsGained: 1,
+        },
+        skillMastery: {
+          'tidal-volley': { gainedXp: 6, level: 3 },
+        },
+      },
+    }));
+
+    expect(host.querySelectorAll('[data-settlement-overlay]')).toHaveLength(1);
+    expect(host.querySelector('[data-settlement-account]')?.textContent)
+      .toContain('账号 XP +74（含开局体力 +50）· Lv.12 · 340 XP · 升级 +1');
+    expect(host.querySelector('[data-settlement-mastery]')?.textContent)
+      .toContain('潮汐齐射 熟练度 +6 · Lv.3');
+
+    hud.dispose();
+    host.remove();
+  });
+
   it('keeps elite and Boss health out of the DOM HUD model', () => {
     const model = createBattleHudModel(createFrameFixture({
       enemies: [{

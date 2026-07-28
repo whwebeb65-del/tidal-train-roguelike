@@ -41,6 +41,27 @@
   font-weight: 900;
 }
 
+.app-account-ticket {
+  display: flex;
+  gap: 5px 9px;
+  flex: 1 1 330px;
+  flex-wrap: wrap;
+  align-items: center;
+  min-height: 44px;
+  padding: 6px 10px;
+  color: var(--ink-drawn);
+  border: 2px dashed var(--ink-drawn);
+  border-radius: 8px 12px 7px 11px;
+  background: var(--paper-warm);
+  background-image: var(--paper-grain);
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.15;
+  transform: rotate(.2deg);
+}
+
+.app-account-ticket > span:first-child { color: #9b3f3b; }
+
 .app-currency > .app-currency__symbol {
   display: grid;
 }
@@ -135,4 +156,13 @@
   .scene-viewport:has(.app-notice.is-visible) {
     padding-top: 72px;
   }
+
+  .app-account-ticket {
+    flex-basis: 100%;
+  }
+}
+
+@media (max-width: 360px) {
+  .app-account-ticket__xp { font-size: 0; }
+  .app-account-ticket__xp::after { content: attr(data-compact-xp); font-size: 11px; }
 }

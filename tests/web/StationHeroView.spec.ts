@@ -52,6 +52,24 @@ function renderHero(): string {
   });
 }
 
+function renderProgressionHero(): string {
+  return (renderStationHero as unknown as (model: Record<string, unknown>) => string)({
+    captainId: 'captain-tide-female',
+    skinId: 'skin-tide-base',
+    mapName: '漂流近郊',
+    stationLevel: 3,
+    maxHp: 116,
+    damagePercent: 8,
+    reducedMotion: false,
+    accountLevel: 12,
+    accountXp: 340,
+    nextAccountLevelXp: 500,
+    stamina: 25,
+    maxStamina: 30,
+    nextSpeedUnlock: { level: 20, speed: 2 },
+  });
+}
+
 const vehicleRoles = [
   'train',
   'captain',
@@ -117,6 +135,16 @@ function moveWakeAndEngineOutsideVehicle(html: string): string {
 }
 
 describe('StationHeroView', () => {
+  it('keeps the station-level stamp separate from the account progression ticket', () => {
+    const html = renderProgressionHero();
+
+    expect(html).toContain('STATION 3');
+    expect(html).toContain('账号 Lv.12');
+    expect(html).toContain('340 / 500 XP');
+    expect(html).toContain('体力 25 / 30');
+    expect(html).toContain('下一倍速：Lv.20 · 2×');
+    expect(html).toContain('aria-label="账号 Lv.12，340 / 500 XP，体力 25 / 30，下一倍速：Lv.20 · 2×"');
+  });
   it('renders four ordered station layers, purposeful actors and ticket UI', () => {
     const html = renderHero();
 

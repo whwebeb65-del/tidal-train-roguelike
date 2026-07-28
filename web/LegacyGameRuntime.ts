@@ -52,6 +52,7 @@ import {
   type ProgressionSnapshot,
 } from '../src/domain/progression/ProgressionStatService';
 import {
+  accountXpToNextLevel,
   availableBattleSpeeds,
   calculateBattleAccountXp,
   grantAccountXp,
@@ -63,6 +64,7 @@ import {
   skillMasteryLevelFromXp,
 } from '../src/domain/progression/SkillMasterySystem';
 import {
+  MAX_STAMINA,
   recoverStamina,
   spendNormalRunStamina,
 } from '../src/domain/progression/StaminaSystem';
@@ -343,6 +345,7 @@ const shell = mountAppShell(app, {
   gears: save.gears,
   routeMarks: save.routeMarks,
   starTickets: save.starTickets,
+  account: accountTicketSnapshot(),
 });
 const featureContext: FeatureSceneContext = {
   renderStation: () => renderStationScene(),
@@ -618,6 +621,25 @@ function commit(next: PlayerSave): void {
   appStateRepository.savePlayer(next);
 }
 
+function accountTicketSnapshot() {
+  const speeds = availableBattleSpeeds(save.accountLevel);
+  const nextSpeedUnlock = !speeds.includes(1.5)
+    ? { level: 10, speed: 1.5 }
+    : !speeds.includes(2)
+      ? { level: 20, speed: 2 }
+      : !speeds.includes(3)
+        ? { level: 30, speed: 3 }
+        : null;
+  return {
+    level: save.accountLevel,
+    xp: save.accountXp,
+    nextLevelXp: accountXpToNextLevel(save.accountLevel),
+    stamina: save.stamina,
+    maxStamina: MAX_STAMINA,
+    nextSpeedUnlock,
+  };
+}
+
 function getEquipmentStateFromSave(): EquipmentState {
   return {
     inventory: save.equipmentInventory,
@@ -826,6 +848,12 @@ function renderStationScene(): string {
       maxHp: progression.maxPlayerHp,
       damagePercent: Math.max(0, Math.round((progression.damageMultiplier - 1) * 100)),
       reducedMotion: effectiveReducedMotion,
+      accountLevel: save.accountLevel,
+      accountXp: save.accountXp,
+      nextAccountLevelXp: accountXpToNextLevel(save.accountLevel),
+      stamina: save.stamina,
+      maxStamina: MAX_STAMINA,
+      nextSpeedUnlock: accountTicketSnapshot().nextSpeedUnlock,
     })}
     <div class="section-title"><h2>航线逐步开放</h2><span>已开放 ${save.unlockedMapIds.length}/${MAP_PROGRESSION.length}</span></div>
     <div class="map-grid">${mapCards}</div>
@@ -1031,6 +1059,7 @@ async function syncView(): Promise<void> {
     routeMarks: save.routeMarks,
     starTickets: save.starTickets,
   });
+  shell.setAccountTicket(accountTicketSnapshot());
   shell.setNotice(notice);
 
   const targetScene: SceneId = !save.selectedCaptainId
