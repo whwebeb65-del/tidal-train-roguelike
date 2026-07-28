@@ -1,6 +1,6 @@
 # P4 Task 7 Release Verification Report
 
-- Capture HEAD: `f5ecfd0`
+- Capture provenance commit: `72fbce9`
 - Date: 2026-07-28
 - Scope: final desktop/mobile release evidence, persistent-progression variants, genuine defeat settlement, and grayscale readability.
 
@@ -34,7 +34,7 @@ Existing mobile evidence remains: station 390×844/430×932, high/low quality an
 
 The collector installs an external, SaveRepository-v4-compatible local-storage fixture before page startup. It changes only persistent `skillMasteryXp` (900 per skill) to unlock the normal variant catalog; it does not mutate engine statistics or a battle build. The normal battle uses visible upgrade controls and acquired `split-tide-arrow` plus `reef-piercer` during the run. The capture also asserts that `.app-topbar` is absent during battle.
 
-The independent failure fixture remains v4-compatible, has zero mastery, station level 8, and unlocked routes. It selects `deep-tunnel` through the public map UI, enters the public daily-trial route, never casts a skill, and prioritizes low-combat-value legal cards. It reached actual `defeat` with `trainHp: 0` at `140216.67 ms`, then used the visible give-up action to reach the settlement capture. No HP, enemy-damage, or live-engine state was overridden.
+The independent failure fixture remains v4-compatible, has zero mastery, station level 8, and unlocked routes. It selects `deep-tunnel` through the visible public map UI, then calls the formal E2E `startDailyTrial` hook. That hook delegates to the production runtime's normal daily-trial startup path; it does not mutate engine statistics or a battle build. The run never casts a skill and prioritizes low-combat-value legal cards. It reached actual `defeat` with `trainHp: 0` at `140216.67 ms`, then used the visible give-up action to reach the settlement capture. No HP, enemy-damage, or live-engine state was overridden.
 
 ## Grayscale review
 
@@ -46,4 +46,3 @@ The independent failure fixture remains v4-compatible, has zero mastery, station
 | Two variants | 42.04 | 41.54 |
 | Boss | 37.74 | 30.95 |
 | Defeat settlement | 51.46 | 61.83 |
-

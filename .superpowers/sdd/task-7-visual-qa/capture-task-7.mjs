@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import { mkdir, mkdtemp, rm, unlink, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -22,6 +23,15 @@ const outputs = [
   'battle-390x844.png',
   'station-low-390x844.png',
   'station-reduced-390x844.png',
+  'station-1440x900.png',
+  'battle-ready-1440x900.png',
+  'upgrade-1440x900.png',
+  'two-variants-1440x900.png',
+  'boss-1440x900.png',
+  'victory-settlement-1440x900.png',
+  'defeat-settlement-1440x900.png',
+];
+const requiredDesktopOutputs = [
   'station-1440x900.png',
   'battle-ready-1440x900.png',
   'upgrade-1440x900.png',
@@ -187,7 +197,7 @@ async function captureVariantEvidence(client) {
       await waitFor(client, `Boolean(document.querySelector('[data-settlement-overlay]:not([hidden])'))`, 'desktop settlement');
       await capture(client, 'victory-settlement-1440x900.png');
       assert.ok(Object.values((await evaluate(client, `window.__TIDAL_TRAIN_E2E__.snapshot()`)).battle ?? {}).length >= 0);
-      return { acquired, bossCaptured, outcome: battle.status };
+      return { acquired, variantsCaptured, bossCaptured, outcome: battle.status };
     }
     if (battle.cooldowns['tidal-volley'] <= 0) await evaluate(client, `window.__TIDAL_TRAIN_E2E__.useSkill('tidal-volley')`);
     if (battle.cooldowns['bubble-barrier'] <= 0) await evaluate(client, `window.__TIDAL_TRAIN_E2E__.useSkill('bubble-barrier')`);
@@ -230,6 +240,15 @@ async function captureDefeatEvidence(client) {
     hp: finalState.battle?.trainHp,
     enemies: finalState.battle?.enemies?.filter((enemy) => enemy.alive).map((enemy) => enemy.kind),
   })}`);
+}
+
+function assertDesktopEvidenceComplete(desktopEvidence, defeatEvidence) {
+  assert.equal(desktopEvidence.variantsCaptured, true, 'two real variants must be captured');
+  assert.equal(desktopEvidence.bossCaptured, true, 'boss must be captured');
+  assert.equal(desktopEvidence.outcome, 'victory', 'desktop normal run must settle as victory');
+  assert.equal(defeatEvidence.status, 'defeat', 'high-risk no-skill run must settle as defeat');
+  const missing = requiredDesktopOutputs.filter((filename) => !existsSync(path.join(outputDirectory, filename)));
+  assert.deepEqual(missing, [], `required desktop evidence is missing: ${missing.join(', ')}`);
 }
 
 async function loadStation(client, width, height, suffix) {
@@ -565,6 +584,7 @@ try {
   });
   await evaluate(client, `localStorage.setItem('tidal-train-prototype-save-v1', ${JSON.stringify(JSON.stringify(weakFixture))}); true`);
   const defeatEvidence = await captureDefeatEvidence(client);
+  assertDesktopEvidenceComplete(desktopEvidence, defeatEvidence);
 
   process.stdout.write(`${JSON.stringify({ outputs, battleCandidate, desktopEvidence, defeatEvidence }, null, 2)}\n`);
 } finally {

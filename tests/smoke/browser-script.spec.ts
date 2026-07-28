@@ -97,6 +97,9 @@ describe('browser smoke script', () => {
     expect(releaseCapture).toContain('battle-ready-1440x900.png');
     expect(releaseCapture).toContain('two-variants-1440x900.png');
     expect(releaseCapture).toContain('defeat-settlement-1440x900.png');
+    expect(releaseCapture).toContain('variantsCaptured');
+    expect(releaseCapture).toContain('assertDesktopEvidenceComplete');
+    expect(releaseCapture).toContain('required desktop evidence is missing');
   });
 
   it('rejects an already occupied preview port before startup', async () => {
