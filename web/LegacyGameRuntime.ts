@@ -1,6 +1,5 @@
 import {
   claimFirstClear,
-  type FirstClearState,
 } from '../src/domain/reward/FirstClearRewardService';
 import {
   claimInteractionReward,
@@ -188,15 +187,41 @@ import { createStationScene, type StationScene } from './scenes/StationScene';
 import { createStoreScene } from './scenes/StoreScene';
 import { StationAmbientDirector } from './station/StationAmbientDirector';
 
-export function settleNormalOutcomeForSave(current: PlayerSave, outcome: BattleOutcome, mapId: MapId = 'drift-suburb'): { readonly accepted: boolean; readonly save: PlayerSave; readonly presentation: BattleSettlementPresentation } {
+export interface NormalSettlementOptions {
+  readonly staminaSpendXp?: number;
+  readonly accountLevelStart?: number;
+  readonly gearMultiplier?: number;
+}
+
+export interface BattleSettlementTransaction {
+  readonly accepted: boolean;
+  readonly save: PlayerSave;
+  readonly presentation: BattleSettlementPresentation;
+}
+
+export function settleNormalOutcomeForSave(
+  current: PlayerSave,
+  outcome: BattleOutcome,
+  mapId: MapId = 'drift-suburb',
+  options: NormalSettlementOptions = {},
+): BattleSettlementTransaction {
   if (current.settledBattleIds.includes(outcome.battleId)) return { accepted: false, save: current, presentation: { title: '本局已结算', description: '该战斗结果已写入存档，不会重复发放奖励。', rewards: { gears: 0, routeMarks: 0, starTickets: 0 }, expeditionPoints: 0, dailyTrialScore: null, doubleSettlementAvailable: false, doubled: false, accountProgression: { gainedXp: 0, staminaSpendXp: 0, level: current.accountLevel, xp: current.accountXp, levelsGained: 0 }, skillMastery: {} } };
-  const firstClear = claimFirstClear({ claimedMapIds: current.firstClearMapIds }, { mapId, gears: 400, routeMarks: 10, starTickets: 3, collectionId: `${mapId}-first-clear` });
+  const firstClear = outcome.victory
+    ? claimFirstClear({ claimedMapIds: current.firstClearMapIds }, { mapId, gears: 400, routeMarks: 10, starTickets: 3, collectionId: `${mapId}-first-clear` })
+    : { granted: false, state: { claimedMapIds: current.firstClearMapIds } };
   const xp = calculateBattleAccountXp({ normalKills: outcome.killCounts?.normal ?? outcome.kills, eliteKills: outcome.killCounts?.elite ?? 0, bossKills: outcome.killCounts?.boss ?? 0, firstClear: firstClear.granted, staminaSpent: 0 });
   const account = grantAccountXp({ level: current.accountLevel, xp: current.accountXp }, xp.total);
   const mastery = settleSkillMastery(current.skillMasteryXp, { castCounts: outcome.skillCastCounts ?? { 'tidal-volley': 0, 'bubble-barrier': 0, 'extreme-tide': 0 }, firstClear: firstClear.granted });
-  const rewards = { gears: firstClear.granted ? 400 : 80, routeMarks: firstClear.granted ? 10 : 2, starTickets: firstClear.granted ? 3 : 0 };
+  const gearMultiplier = options.gearMultiplier ?? 1;
+  const rewards = outcome.victory
+    ? { gears: Math.floor((firstClear.granted ? 400 : 80) * gearMultiplier), routeMarks: firstClear.granted ? 10 : 2, starTickets: firstClear.granted ? 3 : 0 }
+    : { gears: 0, routeMarks: 0, starTickets: 0 };
   const save: PlayerSave = { ...current, gears: current.gears + rewards.gears, routeMarks: current.routeMarks + rewards.routeMarks, starTickets: current.starTickets + rewards.starTickets, firstClearMapIds: [...firstClear.state.claimedMapIds], accountLevel: account.level, accountXp: account.xp, skillMasteryXp: mastery.nextXp, settledBattleIds: appendSettledBattleId(current.settledBattleIds, outcome.battleId) };
-  return { accepted: true, save, presentation: { title: firstClear.granted ? '航线首次打通！' : '潮汐航线通关', description: '', rewards, expeditionPoints: 0, dailyTrialScore: null, doubleSettlementAvailable: !firstClear.granted, doubled: false, accountProgression: { gainedXp: xp.total, staminaSpendXp: 0, level: account.level, xp: account.xp, levelsGained: account.level - current.accountLevel }, skillMastery: {} } };
+  const skillMastery = Object.fromEntries(Object.entries(mastery.gainedXp)
+    .filter(([, gainedXp]) => gainedXp > 0)
+    .map(([skillId, gainedXp]) => [skillId, { gainedXp, level: skillMasteryLevelFromXp(mastery.nextXp[skillId as BattleSkillId]) }]));
+  const staminaSpendXp = options.staminaSpendXp ?? 0;
+  return { accepted: true, save, presentation: { title: outcome.victory ? (firstClear.granted ? '航线首次打通！' : '潮汐航线通关') : '列车撤回', description: '', rewards, expeditionPoints: 0, dailyTrialScore: null, doubleSettlementAvailable: outcome.victory && !firstClear.granted, doubled: false, accountProgression: { gainedXp: xp.total + staminaSpendXp, staminaSpendXp, level: account.level, xp: account.xp, levelsGained: account.level - (options.accountLevelStart ?? current.accountLevel) }, skillMastery } };
 }
 
 export interface LegacyGameRuntime extends BattleE2EController {
@@ -279,7 +304,6 @@ const pendingRecoveryActions = new Set<'ad' | RewardedPlacement>();
 const trackedAdOffers = new Set<RewardedPlacement>();
 let lastRunRecovery: 'ad' | 'none' = 'none';
 let interactionState: InteractionState = createInteractionState();
-let firstClearState: FirstClearState = { claimedMapIds: [...save.firstClearMapIds] };
 let squadSharePending = false;
 let lastDailySubmission: DailyTrialSubmissionResult | null = null;
 let dailyTrialSharePending = false;
@@ -1301,8 +1325,15 @@ function settleDynamicDailyTrial(
 function settleDynamicNormalRun(
   outcome: BattleOutcome,
 ): BattleSettlementPresentation {
-  const persisted = settleNormalOutcomeForSave(save, outcome, currentMapId);
+  const persisted = settleNormalOutcomeForSave(save, outcome, currentMapId, {
+    staminaSpendXp: activeRunStaminaSpent * 10,
+    accountLevelStart: activeRunAccountStart,
+    gearMultiplier: (activeBattleProgression ?? getProgressionSnapshot()).gearsMultiplier,
+  });
   if (!persisted.accepted) return persisted.presentation;
+  // The transaction above is the sole owner of normal-run rewards and progression.
+  // Commit its complete save exactly once before any non-save side effects.
+  commit(persisted.save);
   const expedition = contributeToExpedition(socialState, {
     runId: outcome.battleId,
     outcome: outcome.victory ? 'victory' : 'defeat',
@@ -1317,84 +1348,22 @@ function settleDynamicNormalRun(
     });
   }
 
-  if (!outcome.victory) {
-    settlementDoubleClaimed = false;
-    const progression = settleRunProgression(outcome, false);
-    commit({
-      ...save,
-      accountLevel: progression.accountProgression!.level,
-      accountXp: progression.accountProgression!.xp,
-      skillMasteryXp: progression.skillMasteryXp,
-      settledBattleIds: appendSettledBattleId(save.settledBattleIds, outcome.battleId),
-    });
+  settlementDoubleClaimed = false;
+  const presentation = {
+    ...persisted.presentation,
+    expeditionPoints: expedition.pointsGranted,
+  };
+  if (outcome.victory) {
+    const firstClear = persisted.presentation.rewards.starTickets > 0;
+    track('economy_reward_granted', { source: firstClear ? 'first-clear' : 'repeat-victory', ...persisted.presentation.rewards });
+    track('run_settled', { victory: true, firstClear });
+    notice = firstClear ? '首通高额奖励已到账，同一地图只发放一次。' : '重复通关奖励已到账，可看广告再领取一份普通通关奖励。';
+  } else {
     track('run_settled', { victory: false });
     notice = '列车已撤回车站；本局互动奖励保留，通关奖励未发放。';
-    render();
-    return {
-      title: '列车撤回',
-      description: '整备后可以重新挑战；已领取的局内互动奖励不会回收。',
-      rewards: { gears: 0, routeMarks: 0, starTickets: 0 },
-      expeditionPoints: expedition.pointsGranted,
-      dailyTrialScore: null,
-      doubleSettlementAvailable: false,
-      doubled: false,
-      ...progression,
-    };
   }
-
-  const firstClear = claimFirstClear(firstClearState, {
-    mapId: currentMapId,
-    gears: 400,
-    routeMarks: 10,
-    starTickets: 3,
-    collectionId: `${currentMapId}-first-clear`,
-  });
-  firstClearState = firstClear.state;
-  settlementDoubleClaimed = false;
-  const rewards = {
-    gears: scaleGearReward(firstClear.granted ? 400 : 80),
-    routeMarks: firstClear.granted ? 10 : 2,
-    starTickets: firstClear.granted ? 3 : 0,
-  };
-  const progression = settleRunProgression(outcome, firstClear.granted);
-  commit({
-    ...save,
-    gears: save.gears + rewards.gears,
-    routeMarks: save.routeMarks + rewards.routeMarks,
-    starTickets: save.starTickets + rewards.starTickets,
-    firstClearMapIds: [...firstClearState.claimedMapIds],
-    accountLevel: progression.accountProgression!.level,
-    accountXp: progression.accountProgression!.xp,
-    skillMasteryXp: progression.skillMasteryXp,
-    settledBattleIds: appendSettledBattleId(save.settledBattleIds, outcome.battleId),
-  });
-  track('economy_reward_granted', {
-    source: firstClear.granted ? 'first-clear' : 'repeat-victory',
-    gears: rewards.gears,
-    routeMarks: rewards.routeMarks,
-    starTickets: rewards.starTickets,
-  });
-  track('run_settled', {
-    victory: true,
-    firstClear: firstClear.granted,
-  });
-  notice = firstClear.granted
-    ? '首通高额奖励已到账，同一地图只发放一次。'
-    : '重复通关奖励已到账，可看广告再领取一份普通通关奖励。';
   render();
-  return {
-    title: firstClear.granted ? '航线首次打通！' : '潮汐航线通关',
-    description: firstClear.granted
-      ? '首次通关奖励与收藏记录已经写入存档。'
-      : '这是重复通关结算，可选择观看广告追加一份普通奖励。',
-    rewards,
-    expeditionPoints: expedition.pointsGranted,
-    dailyTrialScore: null,
-    doubleSettlementAvailable: !firstClear.granted,
-    doubled: false,
-    accountProgression: progression.accountProgression,
-    skillMastery: progression.skillMastery,
-  };
+  return presentation;
 }
 
 function emptyAccountProgression(): BattleSettlementPresentation['accountProgression'] {
@@ -1404,54 +1373,6 @@ function emptyAccountProgression(): BattleSettlementPresentation['accountProgres
     level: save.accountLevel,
     xp: save.accountXp,
     levelsGained: 0,
-  };
-}
-
-function settleRunProgression(
-  outcome: BattleOutcome,
-  firstClear: boolean,
-): {
-  readonly accountProgression: BattleSettlementPresentation['accountProgression'];
-  readonly skillMastery: BattleSettlementPresentation['skillMastery'];
-  readonly skillMasteryXp: PlayerSave['skillMasteryXp'];
-} {
-  const accountXp = calculateBattleAccountXp({
-    normalKills: outcome.killCounts?.normal ?? outcome.kills,
-    eliteKills: outcome.killCounts?.elite ?? 0,
-    bossKills: outcome.killCounts?.boss ?? 0,
-    firstClear,
-    staminaSpent: 0,
-  });
-  const account = grantAccountXp({
-    level: save.accountLevel,
-    xp: save.accountXp,
-  }, accountXp.total);
-  const mastery = settleSkillMastery(save.skillMasteryXp, {
-    castCounts: outcome.skillCastCounts ?? {
-      'tidal-volley': 0,
-      'bubble-barrier': 0,
-      'extreme-tide': 0,
-    },
-    firstClear,
-  });
-  const skillMastery = Object.fromEntries(
-    Object.entries(mastery.gainedXp)
-      .filter(([, gainedXp]) => gainedXp > 0)
-      .map(([skillId, gainedXp]) => [skillId, {
-        gainedXp,
-        level: skillMasteryLevelFromXp(mastery.nextXp[skillId as BattleSkillId]),
-      }]),
-  );
-  return {
-    accountProgression: {
-      gainedXp: accountXp.total + activeRunStaminaSpent * 10,
-      staminaSpendXp: activeRunStaminaSpent * 10,
-      level: account.level,
-      xp: account.xp,
-      levelsGained: account.level - activeRunAccountStart,
-    },
-    skillMastery,
-    skillMasteryXp: mastery.nextXp,
   };
 }
 
