@@ -14,7 +14,10 @@ export function recoverStamina(
   const now = Math.max(0, Math.floor(nowMs));
   const current = Math.max(0, Math.min(MAX_STAMINA, Math.floor(state.stamina)));
   if (now <= state.staminaUpdatedAtMs || current >= MAX_STAMINA) {
-    return { stamina: current, staminaUpdatedAtMs: now };
+    return {
+      stamina: current,
+      staminaUpdatedAtMs: Math.max(state.staminaUpdatedAtMs, now),
+    };
   }
 
   const recovered = Math.floor((now - state.staminaUpdatedAtMs) / STAMINA_REGEN_MS);
