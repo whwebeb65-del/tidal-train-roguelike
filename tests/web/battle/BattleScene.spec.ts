@@ -426,16 +426,12 @@ describe('BattleScene', () => {
     scene.unmount();
   });
 
-  it('gives event observers an immutable copy that cannot affect later engine frames', () => {
-    const engine = createEngine(createFrameFixture({ status: 'running' }));
-    engine.events.push({
-      type: 'upgrade-selected', upgradeId: 'multi-barrel', source: 'manual',
-      level: 2, runLevel: 2, nextExperienceThreshold: 20,
-      skillRanks: { 'tidal-volley': 2, 'bubble-barrier': 1, 'extreme-tide': 1 },
-      skillVariants: { 'tidal-volley': ['split-tide-arrow'], 'bubble-barrier': [], 'extreme-tide': [] },
-    });
+  it('gives observers an immutable real engine upgrade event without sharing nested state', () => {
+    const engine = createRealEngine();
+    let captured: Extract<BattleEvent, { type: 'upgrade-selected' }> | undefined;
     const observed = vi.fn((events: readonly BattleEvent[]) => {
       const event = events[0] as Extract<BattleEvent, { type: 'upgrade-selected' }>;
+      captured = event;
       expect(() => { (event.skillRanks as Record<string, number>)['tidal-volley'] = 99; }).toThrow();
       expect(() => { (event.skillVariants['tidal-volley'] as string[]).push('bad'); }).toThrow();
     });
@@ -449,9 +445,11 @@ describe('BattleScene', () => {
       scheduler: new ManualFrameScheduler(), eventTarget: new EventTarget(), getDevicePixelRatio: () => 1,
     });
     scene.mount(host);
-    scene.advanceForE2E(FIXED_STEP_MS);
-    expect(engine.frame.skillRanks['tidal-volley']).toBe(1);
-    expect(engine.frame.skillVariants['tidal-volley']).toEqual([]);
+    scene.advanceForE2E(300_000);
+    expect(scene.chooseFirstUpgradeForE2E()).toBe(true);
+    (scene as unknown as { updateBattle(stepMs: number): void }).updateBattle(FIXED_STEP_MS);
+    expect(captured?.skillRanks['tidal-volley']).toBe(engine.frame.skillRanks['tidal-volley']);
+    expect(captured?.skillVariants['tidal-volley']).toEqual(engine.frame.skillVariants['tidal-volley']);
     scene.unmount();
   });
 
@@ -499,6 +497,36 @@ describe('BattleScene', () => {
       await Promise.all([first, duplicate]);
       expect(engine.frame.status).toBe('running');
       scene.unmount();
+    } finally { vi.useRealTimers(); }
+  });
+
+  it('keeps hidden upgrade waiters pending, then resolves all on visibility recovery or unmount', async () => {
+    vi.useFakeTimers();
+    try {
+      const engine = createEngine(createFrameFixture({ status: 'upgrade', offeredUpgradeIds: ['multi-barrel'] }));
+      const { host } = createHost();
+      const scene = new BattleScene({
+        ...TEST_BATTLE_SPEED_DEPENDENCIES, engine,
+        effects: { view: EMPTY_EFFECT_FRAME_VIEW, consume: vi.fn(), update: vi.fn(), reset: vi.fn() }, assets: { failedIds: [], get: () => null }, callbacks: createCallbacks(),
+        createRenderer: () => ({ render: vi.fn() }), createHud: () => ({ mount: vi.fn(), update: vi.fn(), dispose: vi.fn() }), captainArtId: 'captainFemaleBase', reducedMotion: false, manualStepMode: true,
+        scheduler: new ManualFrameScheduler(), eventTarget: new EventTarget(), getDevicePixelRatio: () => 1,
+      });
+      scene.mount(host);
+      scene.chooseFirstUpgradeForE2E();
+      let resolved = 0;
+      const waiters = [scene.requestResumeForE2E(), scene.requestResumeForE2E()].map((promise) => promise.then(() => { resolved += 1; }));
+      scene.pauseForVisibility();
+      vi.advanceTimersByTime(400);
+      await Promise.resolve();
+      expect(resolved).toBe(0);
+      await scene.resumeForVisibility();
+      await Promise.all(waiters);
+      expect(resolved).toBe(2);
+      scene.chooseFirstUpgradeForE2E();
+      const cancelled = scene.requestResumeForE2E();
+      scene.unmount();
+      await cancelled;
+      expect(vi.getTimerCount()).toBe(0);
     } finally { vi.useRealTimers(); }
   });
 

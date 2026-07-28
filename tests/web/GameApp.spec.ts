@@ -50,13 +50,14 @@ describe('progression telemetry selection', () => {
   it('emits rank changes only for the skill whose rank actually changed', () => {
     const baseline = {
       ranks: { 'tidal-volley': 1, 'bubble-barrier': 1, 'extreme-tide': 1 },
-      variants: { 'tidal-volley': [], 'bubble-barrier': [], 'extreme-tide': [] },
+      variants: { 'tidal-volley': ['split-tide-arrow'], 'bubble-barrier': [], 'extreme-tide': [] },
     } as const;
     const generic = progressionTelemetryForUpgrade({
       skillRanks: baseline.ranks,
       skillVariants: baseline.variants,
     }, baseline);
     expect(generic.events.filter((event) => event.name === 'skill_rank_changed')).toEqual([]);
+    expect(generic.events.filter((event) => event.name === 'skill_variant_acquired')).toEqual([]);
     const ranked = progressionTelemetryForUpgrade({
       skillRanks: { ...baseline.ranks, 'tidal-volley': 2 },
       skillVariants: baseline.variants,
@@ -64,6 +65,7 @@ describe('progression telemetry selection', () => {
     expect(ranked.events.filter((event) => event.name === 'skill_rank_changed')).toEqual([
       { name: 'skill_rank_changed', payload: { skillId: 'tidal-volley', rank: 2 } },
     ]);
+    expect(ranked.events.filter((event) => event.name === 'skill_variant_acquired')).toEqual([]);
   });
 });
 
