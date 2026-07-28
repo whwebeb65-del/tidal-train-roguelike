@@ -375,6 +375,7 @@ export class BattleScene implements GameScene {
 
   public setBattleSpeed(speed: BattleSpeed): boolean {
     if (!this.availableBattleSpeeds.includes(speed)) return false;
+    if (this.battleSpeed === speed) return false;
     this.battleSpeed = speed;
     this.simulationRate?.setSpeed(speed);
     this.dependencies.onBattleSpeedChanged(speed);
@@ -565,7 +566,9 @@ export class BattleScene implements GameScene {
         this.dependencies.engine.frame,
       );
       this.sound.consume(events, this.dependencies.engine.frame);
-      this.dependencies.onBattleEvents(Object.freeze([...events]));
+      this.dependencies.onBattleEvents(
+        Object.freeze(events.map((event) => deepFreeze(structuredClone(event)))),
+      );
       this.handleEvents(events);
     }
     this.dependencies.effects.update(stepMs);
@@ -781,9 +784,17 @@ export class BattleScene implements GameScene {
   }
 
   private clearUpgradeResumeTimer(): void {
-    if (this.upgradeTimerId === null) return;
-    this.timerScheduler.clear(this.upgradeTimerId);
+    if (this.upgradeTimerId !== null) {
+      this.timerScheduler.clear(this.upgradeTimerId);
+    }
     this.upgradeTimerId = null;
+    this.completeUpgradeResume();
+  }
+
+  private completeUpgradeResume(): void {
+    this.resolveUpgradeResume?.();
+    this.resolveUpgradeResume = null;
+    this.upgradeResumePromise = null;
   }
 
   private acceptUpgrade(
@@ -815,9 +826,7 @@ export class BattleScene implements GameScene {
       }
       this.dependencies.engine.resume();
       void this.sound.resume();
-      this.resolveUpgradeResume?.();
-      this.resolveUpgradeResume = null;
-      this.upgradeResumePromise = null;
+      this.completeUpgradeResume();
     }, 400);
     return true;
   }
@@ -1023,4 +1032,14 @@ export class BattleScene implements GameScene {
       }
     }
   }
+}
+
+function deepFreeze<T>(value: T): T {
+  if (value && typeof value === 'object') {
+    for (const nested of Object.values(value as Record<string, unknown>)) {
+      deepFreeze(nested);
+    }
+    Object.freeze(value);
+  }
+  return value;
 }

@@ -1264,6 +1264,12 @@ async function startRun(
       skillMasteryXp: candidateSave.skillMasteryXp,
     }));
     activeBattleEngine = candidateEngine;
+    trackedSkillRanks = { ...candidateEngine.frame.skillRanks };
+    trackedSkillVariants = Object.fromEntries(
+      Object.entries(candidateEngine.frame.skillVariants).map(
+        ([skillId, variants]) => [skillId, [...variants]],
+      ),
+    );
     preparedBattleAccountLevel = candidateSave.accountLevel;
     preparedBattleSpeed = getBattleSpeed(candidateSave.accountLevel);
     activeBattleSpeed = preparedBattleSpeed.initial;
@@ -2267,7 +2273,11 @@ function e2eSnapshot(): BattleE2ESnapshot {
     progression: {
       runLevel: activeBattleEngine?.frame.runLevel ?? 1,
       ranks: { ...(activeBattleEngine?.frame.skillRanks ?? {}) },
-      variants: { ...(activeBattleEngine?.frame.skillVariants ?? {}) },
+      variants: Object.fromEntries(
+        Object.entries(activeBattleEngine?.frame.skillVariants ?? {}).map(
+          ([skillId, variants]) => [skillId, [...variants]],
+        ),
+      ),
       speed: activeBattleScene?.battleSpeedForE2E() ?? activeBattleSpeed,
       accountLevel: save.accountLevel,
       xp: save.accountXp,
