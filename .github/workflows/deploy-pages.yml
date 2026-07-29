@@ -28,11 +28,19 @@ jobs:
           node-version: 22
           cache: npm
 
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
       - name: Configure Pages
         uses: actions/configure-pages@v5
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Install image test dependencies
+        run: python -m pip install Pillow==11.3.0
 
       - name: Test
         run: npm test

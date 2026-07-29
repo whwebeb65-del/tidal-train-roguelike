@@ -39,4 +39,20 @@ describe('prototype tooling', () => {
       previousIndex = index;
     }
   });
+
+  it('installs the image decoder required by production asset tests', () => {
+    const workflow = readFileSync(
+      '.github/workflows/deploy-pages.yml',
+      'utf8',
+    );
+    const setupPython = workflow.indexOf('uses: actions/setup-python@v5');
+    const installPillow = workflow.indexOf(
+      'run: python -m pip install Pillow',
+    );
+    const runTests = workflow.indexOf('run: npm test');
+
+    expect(setupPython).toBeGreaterThan(-1);
+    expect(installPillow).toBeGreaterThan(setupPython);
+    expect(runTests).toBeGreaterThan(installPillow);
+  });
 });
