@@ -6,6 +6,10 @@ describe('living station styles', () => {
     new URL('../../web/styles/living-station-captain.css', import.meta.url),
     'utf8',
   );
+  const workshopCss = readFileSync(
+    new URL('../../web/styles/living-station-workshop.css', import.meta.url),
+    'utf8',
+  );
 
   it('imports the scene language after generic progression styles', () => {
     const entry = readFileSync(new URL('../../web/styles.css', import.meta.url), 'utf8');
@@ -44,5 +48,11 @@ describe('living station styles', () => {
 
   it('keeps the berth rail behind the captain art', () => {
     expect(captainCss).toMatch(/\.captain-berth::after\s*\{[^}]*z-index:\s*0;/);
+  });
+
+  it('keeps workshop equipment controls at the 44px touch-target minimum', () => {
+    expect(workshopCss).toMatch(
+      /\.workbench-item button\s*\{[^}]*min-height:\s*(?:4[4-9]|[5-9]\d|\d{3,})px;/,
+    );
   });
 });
