@@ -286,7 +286,16 @@ const repository = createMemorySaveRepository(initialState.save);
 const telemetry = createMemoryTelemetry();
 const ads = new MockAds('completed');
 const share = new MockShare('completed');
-const store = new MockStore('verified');
+const runtimeSearchParams = new URLSearchParams(window.location.search);
+const e2eEnabled = runtimeSearchParams.get('e2e') === '1';
+const requestedE2EPurchaseDelayMs = Number(
+  runtimeSearchParams.get('e2ePurchaseDelayMs'),
+);
+const e2ePurchaseDelayMs = e2eEnabled
+  && Number.isFinite(requestedE2EPurchaseDelayMs)
+  ? Math.min(Math.max(Math.floor(requestedE2EPurchaseDelayMs), 0), 5_000)
+  : 0;
+const store = new MockStore('verified', e2ePurchaseDelayMs);
 let save = repository.load();
 let socialState = initialState.social;
 let campaignState = initialState.campaign;
@@ -315,8 +324,6 @@ let storeViewTracked = false;
 let settlementDoubleClaimed = false;
 const battleAssetLoader = new BattleAssetLoader(BATTLE_ART_URLS);
 const diagnostics = new BattleDiagnostics();
-const runtimeSearchParams = new URLSearchParams(window.location.search);
-const e2eEnabled = runtimeSearchParams.get('e2e') === '1';
 const requestedE2ESeed = Number(runtimeSearchParams.get('e2eSeed'));
 const e2eSeed = Number.isSafeInteger(requestedE2ESeed)
   && requestedE2ESeed > 0

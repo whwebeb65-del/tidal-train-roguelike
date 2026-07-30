@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { MockAds, MockShare, MockStore } from '../../src/platform/MockPlatform';
 
 describe('MockPlatform', () => {
@@ -40,6 +40,27 @@ describe('MockPlatform', () => {
       transactionId: 'mock-starter-star-ticket-pack-1',
     });
     expect(store.purchases).toEqual(['starter-star-ticket-pack']);
+  });
+
+  it('holds a verified purchase for an explicit QA delay', async () => {
+    vi.useFakeTimers();
+    try {
+      const store = new MockStore('verified', 250);
+      const purchase = store.purchase('starter-star-ticket-pack');
+      let settled = false;
+      void purchase.then(() => { settled = true; });
+
+      await vi.advanceTimersByTimeAsync(249);
+      expect(settled).toBe(false);
+
+      await vi.advanceTimersByTimeAsync(1);
+      await expect(purchase).resolves.toEqual({
+        status: 'verified',
+        transactionId: 'mock-starter-star-ticket-pack-1',
+      });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('does not record cancelled purchases', async () => {

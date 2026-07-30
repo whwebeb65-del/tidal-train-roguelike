@@ -24,17 +24,26 @@ export class MockAds implements IAds {
 export class MockStore implements IStore {
   public readonly purchases: string[] = [];
 
-  public constructor(private readonly result: 'verified' | 'cancelled' | 'failed') {}
+  public constructor(
+    private readonly result: 'verified' | 'cancelled' | 'failed',
+    private readonly delayMs = 0,
+  ) {}
 
   public purchase(productId: string): Promise<PurchaseResult> {
+    let result: PurchaseResult;
     if (this.result === 'verified') {
       this.purchases.push(productId);
-      return Promise.resolve({
+      result = {
         status: 'verified',
         transactionId: `mock-${productId}-${this.purchases.length}`,
-      });
+      };
+    } else {
+      result = { status: this.result };
     }
-    return Promise.resolve({ status: this.result });
+    if (this.delayMs <= 0) return Promise.resolve(result);
+    return new Promise((resolve) => {
+      globalThis.setTimeout(() => resolve(result), this.delayMs);
+    });
   }
 }
 
