@@ -77,29 +77,382 @@ main { width: min(1060px, 100%); margin: 0 auto; padding: 40px 18px 24px; }
 .commerce-card-heading small { color: #888bac; font-size: 10px; }
 .commerce-reward { padding: 10px; border-radius: 10px; background: #1a2942; color: #b8bad0; font-size: 10px; }
 
-.daily-check-in { margin-top: 20px; padding: 20px; border-radius: 20px; background: linear-gradient(145deg, #282133, #122d36 58%, #0c202c); border: 1px solid #79664b; contain: layout paint; }
-.daily-check-in-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; }
-.daily-check-in-heading h2 { margin: 6px 0; font-size: 20px; }
-.daily-check-in-heading p { max-width: 580px; margin: 0; color: #91a4a7; font-size: 12px; }
-.daily-check-in-status { flex: 0 0 auto; padding: 8px 11px; border-radius: 99px; background: #342d2d; border: 1px solid #836d49; color: #f0cc87; font-size: 10px; }
-.daily-check-in-progress { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 16px 0 10px; color: #82a0a5; font-size: 10px; }
-.daily-check-in-progress b { color: #dec48f; font-weight: 600; }
-.daily-check-in-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; }
-.daily-check-in-cell { position: relative; min-width: 0; min-height: 104px; padding: 12px 10px; border-radius: 14px; background: #0c202a; border: 1px solid #2c4b52; overflow: hidden; }
-.daily-check-in-cell::after { content: ""; position: absolute; right: -18px; bottom: -24px; width: 58px; height: 58px; border-radius: 50%; background: #5fd8cd0b; }
+.daily-check-in {
+  margin-top: 20px;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid #466f74;
+  border-radius: 30px 24px 28px 20px;
+  background: #08222c;
+  contain: layout paint;
+}
+.daily-check-in-stage {
+  position: relative;
+  min-height: 720px;
+  padding: 42px 210px 30px 34px;
+  overflow: hidden;
+  isolation: isolate;
+  background: #10323d;
+  perspective: 900px;
+}
+.daily-check-in-layer {
+  position: absolute;
+  inset: -3%;
+  z-index: -6;
+  width: 106%;
+  height: 106%;
+  object-fit: cover;
+  object-position: 50% 66%;
+  pointer-events: none;
+  will-change: transform;
+}
+.daily-check-in-layer--sky {
+  filter: brightness(.58) saturate(.85);
+  animation: daily-check-in-sky-drift 18s ease-in-out infinite alternate;
+}
+.daily-check-in-layer--horizon {
+  z-index: -5;
+  filter: brightness(.82) saturate(1.03);
+  animation: daily-check-in-horizon-drift 15s ease-in-out infinite alternate;
+}
+.daily-check-in-layer--platform {
+  z-index: -3;
+  filter: brightness(.68) saturate(.88);
+  transform: translate3d(0, 5%, 0) scale(1.08);
+  animation: daily-check-in-platform-drift 11s ease-in-out infinite alternate;
+}
+.daily-check-in-layer--foreground {
+  inset: auto -4% -9%;
+  z-index: 4;
+  height: 64%;
+  object-position: 50% 100%;
+  opacity: .58;
+  filter: brightness(.52) saturate(.85);
+  transform: scale(1.1);
+}
+.daily-check-in-light-wash {
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  pointer-events: none;
+  background: radial-gradient(circle at 62% 45%, #ffbd5852, transparent 25%), linear-gradient(90deg, #03141c80, transparent 48%, #06182126);
+}
+.daily-check-in-lights {
+  position: absolute;
+  top: 112px;
+  left: 7%;
+  right: 7%;
+  z-index: 2;
+  height: 40px;
+  border-top: 3px solid #251f1c;
+  border-radius: 50%;
+  transform: rotate(.5deg);
+}
+.daily-check-in-lights i {
+  position: absolute;
+  top: -3px;
+  width: 12px;
+  height: 18px;
+  border-radius: 5px 5px 10px 10px;
+  transform-origin: 50% -9px;
+  animation: daily-check-in-bulb-swing 3s ease-in-out infinite alternate;
+}
+.daily-check-in-lights i::before { content: ""; position: absolute; top: -7px; left: 4px; width: 4px; height: 8px; background: #251f1c; }
+.daily-check-in-lights i:nth-child(1) { left: 5%; background: #f4c45f; box-shadow: 0 0 15px #f4c45f; animation-duration: 2.7s; }
+.daily-check-in-lights i:nth-child(2) { left: 26%; background: #df705d; box-shadow: 0 0 15px #df705d; animation-duration: 3.3s; }
+.daily-check-in-lights i:nth-child(3) { left: 48%; background: #5bd3bd; box-shadow: 0 0 15px #5bd3bd; animation-duration: 2.9s; }
+.daily-check-in-lights i:nth-child(4) { left: 70%; background: #f4c45f; box-shadow: 0 0 15px #f4c45f; animation-duration: 3.6s; }
+.daily-check-in-lights i:nth-child(5) { left: 91%; background: #df705d; box-shadow: 0 0 15px #df705d; animation-duration: 2.6s; }
+.daily-check-in-heading {
+  position: relative;
+  z-index: 6;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+.daily-check-in-sign {
+  position: relative;
+  width: min(440px, 100%);
+  padding: 15px 22px 14px;
+  color: #283a3b;
+  border: 4px solid #3a2e27;
+  border-radius: 8px 16px 7px 12px;
+  background: linear-gradient(145deg, #f6e7bd, #d7bd88);
+  box-shadow: 8px 10px 0 #06121980, inset 0 2px #ffffff80;
+  transform: rotate(-1.4deg) translateZ(44px);
+}
+.daily-check-in-sign .eyebrow { color: #ad5348; font-size: 8px; font-weight: 900; }
+.daily-check-in-sign-kicker { display: block; margin-top: 5px; color: #2f6f70; font-size: 10px; font-weight: 900; letter-spacing: .16em; }
+.daily-check-in-heading h2 { margin: 3px 0; color: #24393c; font-size: 24px; letter-spacing: .06em; }
+.daily-check-in-heading p { max-width: 390px; margin: 0; color: #536768; font-size: 11px; font-weight: 600; }
+.daily-check-in-status {
+  flex: 0 0 auto;
+  padding: 8px 11px;
+  color: #2c3938;
+  border: 3px solid #3b3028;
+  border-radius: 7px 10px 8px 6px;
+  background: #f1c85f;
+  box-shadow: 5px 7px 0 #06121977;
+  font-size: 10px;
+  font-weight: 900;
+  transform: rotate(2deg);
+}
+.daily-check-in-progress {
+  position: relative;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 30px 0 11px;
+  padding: 7px 10px;
+  color: #b7d2ce;
+  border-radius: 8px;
+  background: #09212acc;
+  font-size: 10px;
+}
+.daily-check-in-progress b { color: #f0d394; font-weight: 700; }
+.daily-check-in-stall {
+  position: relative;
+  z-index: 5;
+  padding: 30px 22px 22px;
+  border: 7px solid #39291f;
+  border-radius: 12px 18px 20px 11px;
+  background: repeating-linear-gradient(0deg, #7a5038 0 46px, #65432f 47px 51px);
+  box-shadow: 18px 22px 0 #03121977, inset -18px -20px 38px #2819144d, inset 4px 4px #b77c54;
+  transform: rotateY(2.5deg) rotateZ(-.25deg) translateZ(12px);
+}
+.daily-check-in-stall-label {
+  position: absolute;
+  top: -23px;
+  left: 7%;
+  padding: 7px 15px;
+  color: #3a2c27;
+  border: 4px solid #382921;
+  border-radius: 8px;
+  background: linear-gradient(#f3d883, #d99c53);
+  box-shadow: 5px 7px 0 #0004;
+  font-size: 12px;
+  font-weight: 900;
+  transform: rotate(-2deg);
+}
+.daily-check-in .daily-check-in-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px 10px;
+  margin-top: 0;
+}
+.daily-check-in .daily-check-in-cell {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 135px;
+  padding: 14px 7px 9px;
+  overflow: visible;
+  border: 0;
+  border-bottom: 11px solid #38271f;
+  border-radius: 2px;
+  background: transparent;
+  box-shadow: 0 8px 6px #1b120e52;
+  text-align: center;
+}
+.daily-check-in-cell:nth-child(2n) { transform: translateY(5px) rotate(.7deg); }
+.daily-check-in-cell:nth-child(3n) { transform: translateY(-3px) rotate(-.8deg); }
+.daily-check-in-cell:nth-child(7) { grid-column: span 2; }
 .daily-check-in-cell span, .daily-check-in-cell b, .daily-check-in-cell small { position: relative; z-index: 1; display: block; overflow-wrap: anywhere; }
-.daily-check-in-cell span { color: #6ebeb7; font-size: 9px; }
-.daily-check-in-cell b { margin: 15px 0 8px; color: #e9d8b3; font-size: 11px; line-height: 1.45; }
-.daily-check-in-cell small { color: #667f84; font-size: 9px; }
-.daily-check-in-cell.current { border-color: #e1b867; background: linear-gradient(150deg, #3d332a, #142d35); box-shadow: inset 0 0 24px #ffcb6d12, 0 0 20px #ffc25d0d; }
-.daily-check-in-cell.current small { color: #ffd98e; }
-.daily-check-in-cell.claimed { background: #142c2f; border-color: #397067; }
-.daily-check-in-cell.claimed::before { content: "✓"; position: absolute; top: 8px; right: 9px; color: #6bddc8; font-size: 13px; }
-.daily-check-in-cell.claimed b { color: #9fc6b9; }
-.daily-check-in-cell.grand { background-image: linear-gradient(150deg, #30243d, #132c35); border-color: #715b7f; }
-.daily-check-in-action { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-top: 14px; padding-top: 14px; border-top: 1px solid #ffffff10; }
-.daily-check-in-action small { color: #748d92; font-size: 9px; }
-.daily-check-in-action button { flex: 0 0 auto; }
+.daily-check-in-cell .check-in-day {
+  position: absolute;
+  top: 0;
+  left: 0;
+  padding: 3px 6px;
+  color: #332b26;
+  background: #decda5;
+  font: 900 8px/1.2 monospace;
+  transform: rotate(-5deg);
+}
+.daily-check-in-cell b { margin: 7px 0 2px; color: #f6e5b9; font-size: 11px; line-height: 1.4; text-shadow: 1px 2px #2d201b; }
+.daily-check-in-cell small { color: #d0b98f; font-size: 8px; }
+.daily-check-in-reward-art {
+  position: relative;
+  display: grid !important;
+  place-items: center;
+  width: 60px;
+  height: 60px;
+  margin-top: 19px;
+  overflow: visible !important;
+  filter: drop-shadow(0 9px 6px #160f0c99);
+}
+.reward-art--gears {
+  border: 8px dotted #ffd46b;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 28%, #efb460, #a95c39 68%);
+  box-shadow: inset 0 0 0 7px #e8a948, inset -6px -8px 12px #633526;
+}
+.reward-art--gears i { width: 15px; height: 15px; border: 5px solid #5c382e; border-radius: 50%; background: #efdba2; }
+.reward-art--route-marks {
+  height: 68px;
+  border: 4px solid #e8dfbb;
+  border-radius: 50% 50% 43% 43%;
+  background: radial-gradient(circle at 35% 25%, #79cad0, #32717e 65%);
+  box-shadow: inset -6px -10px 13px #1f4c57;
+}
+.reward-art--route-marks i {
+  width: 28px;
+  height: 28px;
+  background: #f5d16e;
+  clip-path: polygon(50% 0, 61% 35%, 98% 35%, 68% 57%, 79% 93%, 50% 72%, 21% 93%, 32% 57%, 2% 35%, 39% 35%);
+}
+.reward-art--star-tickets {
+  width: 76px;
+  height: 54px;
+  border: 5px solid #f1deaa;
+  border-radius: 9px;
+  background: linear-gradient(145deg, #f18a71, #bb4f49);
+  box-shadow: inset -7px -8px 12px #873d3a;
+  transform: rotate(-4deg);
+}
+.reward-art--star-tickets::before, .reward-art--star-tickets::after { content: ""; position: absolute; top: 15px; width: 14px; height: 14px; border-radius: 50%; background: #6e4330; }
+.reward-art--star-tickets::before { left: -11px; }
+.reward-art--star-tickets::after { right: -11px; }
+.reward-art--star-tickets i {
+  width: 28px;
+  height: 28px;
+  background: #ffdc6a;
+  clip-path: polygon(50% 0, 61% 35%, 98% 35%, 68% 57%, 79% 93%, 50% 72%, 21% 93%, 32% 57%, 2% 35%, 39% 35%);
+}
+.daily-check-in-cell.current {
+  padding-inline: 9px;
+  border: 3px solid #ffd269;
+  border-bottom-width: 11px;
+  border-radius: 48% 44% 46% 42%;
+  background: radial-gradient(circle, #8b4c3866, #4f33257d);
+  box-shadow: 0 0 0 6px #ffd2691c, 0 0 30px #ffbd556b;
+  animation: daily-check-in-today-pulse 2.9s ease-in-out infinite;
+}
+.daily-check-in-cell.current::after {
+  content: "TODAY";
+  position: absolute;
+  top: -13px;
+  right: -10px;
+  padding: 4px 6px;
+  color: #223535;
+  border: 2px solid #e9fff5;
+  background: #64d4be;
+  font: 900 8px/1 monospace;
+  transform: rotate(8deg);
+}
+.daily-check-in-cell.current small { color: #ffe09b; font-weight: 900; }
+.daily-check-in-cell.claimed { filter: saturate(.55); opacity: .62; }
+.daily-check-in-cell.claimed::before {
+  content: "已入库";
+  position: absolute;
+  top: 49%;
+  left: 50%;
+  z-index: 3;
+  padding: 3px 6px;
+  color: #f2dfb0;
+  border: 3px solid #f2dfb0;
+  border-radius: 4px;
+  font-size: 8px;
+  font-weight: 900;
+  transform: translate(-50%, -50%) rotate(-13deg);
+}
+.daily-check-in-cell.claimed b { color: #dfcda6; }
+.daily-check-in-cell.grand {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  min-height: 125px;
+  padding: 14px 15px;
+  border: 6px solid #34271f;
+  border-radius: 10px;
+  background: linear-gradient(35deg, transparent 45%, #5b3e2f 46% 52%, transparent 53%), linear-gradient(145deg, #b87950, #754634);
+  box-shadow: inset 0 0 0 4px #cb8c5c, 7px 10px 0 #0004;
+  transform: rotate(1deg);
+}
+.daily-check-in-cell.grand .check-in-day { top: 8px; }
+.daily-check-in-cell.grand .daily-check-in-reward-art { grid-row: span 2; margin: 12px 6px 0 0; transform: scale(.82) rotate(-4deg); }
+.daily-check-in-cell.grand b, .daily-check-in-cell.grand small { text-align: left; }
+.daily-check-in-speech {
+  position: absolute;
+  top: 190px;
+  right: 24px;
+  z-index: 7;
+  width: 172px;
+  padding: 11px 13px;
+  color: #293b3c;
+  border: 4px solid #394b4a;
+  border-radius: 16px 16px 6px;
+  background: linear-gradient(145deg, #f8eac5, #d9c28d);
+  box-shadow: 6px 8px 0 #0004;
+  font-size: 10px;
+  font-weight: 800;
+  transform: rotate(2deg) translateZ(65px);
+}
+.daily-check-in-speech::after { content: ""; position: absolute; left: 28px; bottom: -17px; width: 21px; height: 19px; background: #dbc58f; clip-path: polygon(0 0, 100% 0, 0 100%); }
+.daily-check-in-mascot {
+  position: absolute;
+  right: -8px;
+  bottom: 67px;
+  z-index: 8;
+  width: 245px;
+  max-height: 350px;
+  object-fit: contain;
+  pointer-events: none;
+  filter: drop-shadow(-14px 18px 12px #020d12a8);
+  transform-origin: 50% 90%;
+  animation: daily-check-in-otter-idle 4.2s ease-in-out infinite;
+}
+.daily-check-in-action {
+  position: relative;
+  z-index: 11;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-top: 18px;
+}
+.daily-check-in-action small {
+  padding: 6px 9px;
+  color: #a9c3c0;
+  border-radius: 7px;
+  background: #071b23c7;
+  font-size: 9px;
+}
+.daily-check-in-action button {
+  flex: 0 0 auto;
+  color: #263839;
+  border: 4px solid #332a22;
+  border-radius: 8px 10px 7px 9px;
+  background: linear-gradient(#f5d46f, #d99a46);
+  box-shadow: 7px 9px 0 #031219, inset 0 2px #ffffff80;
+  transform: rotate(1deg);
+}
+.daily-check-in-action button:disabled { filter: saturate(.45); }
+
+@keyframes daily-check-in-sky-drift {
+  to { transform: translate3d(-2px, 1px, 0) scale(1.01); }
+}
+@keyframes daily-check-in-horizon-drift {
+  to { transform: translate3d(4px, -1px, 0) scale(1.008); }
+}
+@keyframes daily-check-in-platform-drift {
+  to { transform: translate3d(-4px, calc(5% - 2px), 0) scale(1.085); }
+}
+@keyframes daily-check-in-bulb-swing {
+  from { transform: rotate(-3deg); }
+  to { transform: rotate(5deg); }
+}
+@keyframes daily-check-in-otter-idle {
+  0%, 100% { transform: translateY(0) rotate(-.3deg); }
+  50% { transform: translateY(-5px) rotate(.5deg); }
+}
+@keyframes daily-check-in-today-pulse {
+  50% { box-shadow: 0 0 0 9px #ffd26912, 0 0 40px #ffbd558f; filter: saturate(1.1); }
+}
 
 .daily-trial-hub { margin-top: 20px; padding: 20px; border-radius: 20px; background: linear-gradient(145deg, #102b34, #11233b 60%, #1b2039); border: 1px solid #3f7180; contain: layout paint; }
 .daily-trial-hub.locked { filter: saturate(.7); }
@@ -269,10 +622,26 @@ main { width: min(1060px, 100%); margin: 0 auto; padding: 40px 18px 24px; }
   .commerce-heading { align-items: flex-start; flex-direction: column; }
   .commerce-heading > span { width: 100%; text-align: center; }
   .commerce-grid { grid-template-columns: 1fr; }
+  .daily-check-in-stage { min-height: 970px; padding: 28px 14px 24px; }
+  .daily-check-in-layer { object-position: 50% 70%; }
+  .daily-check-in-layer--foreground { display: none; }
+  .daily-check-in-lights { top: 118px; left: 3%; right: 3%; }
   .daily-check-in-heading, .daily-check-in-progress, .daily-check-in-action { align-items: flex-start; flex-direction: column; }
+  .daily-check-in-heading { gap: 12px; }
+  .daily-check-in-sign { width: calc(100% - 10px); padding: 13px 16px; }
+  .daily-check-in-heading h2 { font-size: 21px; }
   .daily-check-in-status, .daily-check-in-action button { width: 100%; text-align: center; }
-  .daily-check-in-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .daily-check-in-progress { margin-top: 28px; }
+  .daily-check-in-progress b { line-height: 1.5; }
+  .daily-check-in-stall { margin-top: 26px; padding: 30px 13px 19px; transform: rotate(-.2deg); }
+  .daily-check-in .daily-check-in-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .daily-check-in-cell { min-height: 137px; }
   .daily-check-in-cell.grand { grid-column: span 2; }
+  .daily-check-in-speech { top: auto; right: 16px; bottom: 258px; width: 160px; }
+  .daily-check-in-mascot { right: -21px; bottom: 70px; width: 205px; }
+  .daily-check-in-action { min-height: 214px; justify-content: flex-end; padding-right: 154px; }
+  .daily-check-in-action small { max-width: 210px; }
+  .daily-check-in-action button { margin-top: auto; }
   .daily-trial-heading, .daily-trial-banner { align-items: flex-start; flex-direction: column; }
   .daily-trial-heading .primary, .daily-settlement-actions, .daily-settlement-actions button { width: 100%; }
   .daily-trial-milestones { grid-template-columns: 1fr; }

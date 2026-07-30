@@ -1,8 +1,10 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
   claimDailyCheckIn,
   createDailyCheckInState,
 } from '../../src/domain/retention/DailyCheckInSystem';
+import { CHIBI_ART } from '../../web/assets/ChibiArtCatalog';
 import { renderDailyCheckIn } from '../../web/views/DailyCheckInView';
 
 function countClass(html: string, className: string): number {
@@ -10,6 +12,18 @@ function countClass(html: string, className: string): number {
 }
 
 describe('DailyCheckInView', () => {
+  it('ships the layered scene, idle motion, and reduced-motion fallback styles', () => {
+    const css = readFileSync(new URL('../../web/styles/legacy.css', import.meta.url), 'utf8');
+
+    expect(css).toContain('.daily-check-in-stage');
+    expect(css).toContain('.daily-check-in-layer--foreground');
+    expect(css).toContain('@keyframes daily-check-in-otter-idle');
+    expect(css).toContain('@keyframes daily-check-in-today-pulse');
+    expect(css).toContain('@media (prefers-reduced-motion: reduce)');
+    expect(css).toContain('.daily-check-in .daily-check-in-grid');
+    expect(css).toContain('.daily-check-in .daily-check-in-cell');
+  });
+
   it('renders seven visible rewards and the initial claim action', () => {
     const html = renderDailyCheckIn({
       state: createDailyCheckInState(),
@@ -24,6 +38,17 @@ describe('DailyCheckInView', () => {
     expect(html).toContain('60 齿轮 · 1 星票');
     expect(html).toContain('data-action="claim-daily-check-in"');
     expect(html).toContain('领取第 1 格');
+    expect(html).toContain('daily-check-in-stage');
+    expect(html).toContain(CHIBI_ART.station.sky);
+    expect(html).toContain(CHIBI_ART.station.horizon);
+    expect(html).toContain(CHIBI_ART.station.platform);
+    expect(html).toContain(CHIBI_ART.station.foreground);
+    expect(html).toContain(CHIBI_ART.otter);
+    expect(countClass(html, 'daily-check-in-reward-art')).toBe(7);
+    expect(html).toContain('reward-art--gears');
+    expect(html).toContain('reward-art--route-marks');
+    expect(html).toContain('reward-art--star-tickets');
+    expect(html).not.toMatch(/[\u{1F300}-\u{1FAFF}]/u);
   });
 
   it('shows one claimed cell and disables a same-day repeat', () => {
