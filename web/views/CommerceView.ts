@@ -39,7 +39,7 @@ export function renderCommerceStore(model: CommerceStoreModel): string {
     </article>`;
   }).join('');
 
-  return `<section class="deferred-section living-zone supply-market commerce-store">
+  return `<section class="deferred-section living-zone supply-market">
     <div class="market-awning commerce-heading"><div><span class="eyebrow">SUPPLY / VERIFIED</span><h2>航线补给站</h2><p>内容与价格购买前完整展示；当前为 Mock 验单，不发生真实扣款。</p></div><span class="market-sign">确定性内容 · 属性购买前完整展示</span></div>
     <div class="commerce-grid supply-crate-grid">${cards}</div>
     <div class="note market-receipt">正式服只在平台服务端验单成功后发货，客户端回调不能直接修改资产。</div>
