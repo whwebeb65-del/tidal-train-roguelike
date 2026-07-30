@@ -26,6 +26,9 @@ describe('WardrobeView', () => {
     });
 
     expect(html).toContain('累计收藏属性');
+    expect(html).toContain('living-zone wardrobe-carriage');
+    expect(html).toContain('carriage-mirror');
+    expect(html).toContain('skin-luggage');
     expect(html).toContain('极光鲸歌');
     expect(html).toContain('男女款式');
     expect(html).toContain('永久叠加');

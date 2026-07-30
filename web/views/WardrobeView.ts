@@ -57,12 +57,12 @@ export function renderWardrobe(model: WardrobeModel): string {
     const pending = product?.id === model.pendingProductId;
     const modifiers = formatModifiers(skin.modifiers);
     const action = owned
-      ? `<button class="secondary" data-action="equip-skin" data-skin-id="${skin.id}" ${equipped ? 'disabled' : ''}>${equipped ? '当前穿戴' : '穿戴此皮肤'}</button>`
+      ? `<button class="secondary" data-action="equip-skin" data-skin-id="${skin.id}" ${equipped ? 'disabled' : ''}>${equipped ? '镜前展示中' : '挂上此套制服'}</button>`
       : product
         ? `<button class="primary" data-skin-id="${skin.id}" data-action="purchase-product" data-product-id="${product.id}" ${pending ? 'disabled' : ''}>${pending ? '验单中…' : `${product.displayPrice} 固定解锁`}</button>`
         : '<button class="secondary" disabled>开服活动获取</button>';
 
-    return `<article class="skin-card ${owned ? 'is-owned' : ''}" data-skin-id="${skin.id}">
+    return `<article class="skin-card skin-luggage ${owned ? 'is-owned' : ''}" data-skin-id="${skin.id}">
       <div class="skin-card__variants" aria-label="${skin.name} 男女款式">
         <img src="${CHIBI_ART.captains['captain-tide-female'][skin.id]}" alt="${skin.name}女款" loading="lazy" decoding="async" />
         <img src="${CHIBI_ART.captains['captain-tide-male'][skin.id]}" alt="${skin.name}男款" loading="lazy" decoding="async" />
@@ -75,13 +75,13 @@ export function renderWardrobe(model: WardrobeModel): string {
     </article>`;
   }).join('');
 
-  return `<section class="wardrobe scene">
+  return `<section class="wardrobe scene living-zone wardrobe-carriage">
     <div class="run-heading">
       <div><span class="eyebrow">CAPTAIN WARDROBE</span><h1>列车长衣柜</h1><p>皮肤用于形象与成长。所有已拥有皮肤的固定属性都会永久叠加，无公平模式归一化。</p></div>
       <button class="secondary" data-action="switch-captain" data-captain-id="${otherCaptain.id}">切换为${otherCaptain.pronounLabel}</button>
     </div>
     <div class="wardrobe-layout">
-      <aside class="wardrobe-preview">
+      <aside class="wardrobe-preview carriage-mirror">
         <img src="${currentArt}" alt="${selectedCaptain.name}当前穿搭" />
         <div><small>当前列车长</small><h2>${selectedCaptain.name}</h2><p>${equippedSkinId === 'skin-tide-base' ? '潮汐制服' : model.skins.find((skin) => skin.id === equippedSkinId)?.name ?? '已穿戴皮肤'}</p></div>
         <div class="collection-stats">
