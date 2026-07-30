@@ -400,6 +400,226 @@
 .tide-trial-yard.is-locked .trial-score-tags,
 .tide-trial-yard.is-locked .trial-signal-lights { filter: saturate(.5) brightness(.8); }
 
+.founder-ticket-office {
+  display: grid;
+  gap: clamp(13px, 2.5vw, 22px);
+  margin-inline: -4px;
+  color: #eee5d2;
+}
+
+.ticket-office-sign {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 16px 21px 17px;
+  color: #302720;
+  border: 8px solid #60422e;
+  border-radius: 5px 8px 4px 7px;
+  background: linear-gradient(106deg, #e6d09b, #f3e6b9 58%, #b58a54);
+  box-shadow: 7px 9px #0719239c, inset 0 0 0 2px #f9edc3, inset 0 0 26px #78552b33;
+  transform: rotate(-.8deg);
+}
+
+.ticket-office-sign::before,
+.ticket-office-sign::after {
+  position: absolute;
+  bottom: -21px;
+  width: 14px;
+  height: 30px;
+  content: '';
+  border: 3px solid #4d3426;
+  border-top: 0;
+  background: #704a2f;
+  box-shadow: inset 3px 0 #a57645;
+}
+
+.ticket-office-sign::before { left: 24px; }
+.ticket-office-sign::after { right: 24px; }
+.ticket-office-sign .eyebrow { color: #7b4a45; }
+.ticket-office-sign h2 { margin: 5px 0; color: #3a2830; font-size: clamp(22px, 3.5vw, 31px); letter-spacing: .08em; text-shadow: 1px 1px #fff0be; }
+.ticket-office-sign p { max-width: 650px; margin: 0; color: #68574a; font-size: 12px; line-height: 1.55; }
+.ticket-office-sign .station-stamp { flex: 0 0 auto; margin-top: 2px; color: #8b3d38; background: #f5deb0a8; }
+.ticket-office-sign .station-stamp.is-complete { color: #437050; }
+
+.founder-counter {
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(220px, .95fr);
+  align-items: stretch;
+  gap: clamp(14px, 2.5vw, 28px);
+  padding-top: 10px;
+}
+
+.founder-window,
+.launch-luggage-cart {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  min-height: 248px;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 28px 23px 21px;
+  overflow: visible;
+}
+
+.founder-window {
+  color: #e9e2cf;
+  border: 10px solid #5d402d;
+  border-radius: 8px 10px 5px 7px;
+  background: linear-gradient(140deg, #2c4651, #19323b 58%, #142a32);
+  box-shadow: 9px 11px #0617209c, inset 0 0 0 3px #c49352, inset 0 0 32px #071921;
+  transform: rotate(1deg);
+}
+
+.founder-window::before {
+  position: absolute;
+  right: 13%;
+  bottom: -21px;
+  left: 7%;
+  height: 24px;
+  content: '';
+  border: 3px solid #4b3024;
+  border-radius: 3px 5px 5px 4px;
+  background: linear-gradient(#c28b4d, #7a4a2d);
+  box-shadow: 5px 7px #08171e88;
+}
+
+.founder-window::after {
+  position: absolute;
+  top: 14px;
+  right: 17px;
+  width: 32px;
+  height: 32px;
+  content: '✦';
+  display: grid;
+  place-items: center;
+  color: #543626;
+  border: 3px solid #f0d488;
+  border-radius: 50%;
+  background: #d5a34f;
+  box-shadow: 0 0 12px #eab95b70;
+  font-weight: 900;
+}
+
+.launch-luggage-cart {
+  color: #402f29;
+  border: 5px solid #593b2a;
+  border-radius: 7px 10px 6px 8px;
+  background: linear-gradient(145deg, #ae7d4c, #d3a65e 52%, #8e5e37);
+  box-shadow: 8px 10px #06172091, inset 0 0 0 3px #e8bf73, inset 0 0 25px #5e352333;
+  transform: rotate(-1.1deg) translateY(10px);
+}
+
+.launch-luggage-cart::before {
+  position: absolute;
+  top: -15px;
+  left: 29%;
+  width: 42%;
+  height: 17px;
+  content: '';
+  border: 5px solid #593b2a;
+  border-bottom: 0;
+  border-radius: 12px 12px 0 0;
+}
+
+.launch-luggage-cart::after {
+  position: absolute;
+  right: 17px;
+  bottom: -17px;
+  width: 16px;
+  height: 16px;
+  content: '';
+  border: 4px solid #3e302a;
+  border-radius: 50%;
+  background: #c6b38b;
+  box-shadow: -135px 0 #c6b38b;
+}
+
+.founder-window__ticket,
+.launch-luggage-cart__tag {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  padding: 5px 8px;
+  border: 2px solid currentColor;
+  border-radius: 2px 6px 3px 5px;
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: .09em;
+}
+
+.founder-window__ticket { color: #efcd73; background: #173a42; }
+.launch-luggage-cart__tag { color: #5d3a2b; background: #f0cf82; }
+.founder-window h3, .launch-luggage-cart h3 { margin: 10px 0 6px; font-size: 21px; }
+.founder-window p, .launch-luggage-cart p { max-width: 390px; margin: 0; font-size: 11px; line-height: 1.55; }
+.founder-window p { color: #bdd1c9; }
+.launch-luggage-cart p { color: #60493d; }
+
+.founder-ticket-office .campaign-rewards {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin: 14px 0;
+}
+
+.founder-ticket-office .campaign-rewards span {
+  padding: 5px 8px;
+  border: 2px solid #674632;
+  border-radius: 3px 7px 4px 5px;
+  color: #f4df9c;
+  background: #18353c;
+  box-shadow: 2px 3px #07192372;
+  font-size: 10px;
+}
+
+.launch-luggage-cart .campaign-rewards span { color: #49362d; border-color: #74472e; background: #f0cf83; }
+.founder-ticket-action { width: 100%; margin-top: auto; border: 3px solid #3d2c27; border-radius: 4px 8px 5px 6px; background: #f0c966; box-shadow: 4px 5px #0817209e, inset 1px 1px #ffefac; }
+.founder-ticket-action:disabled { color: #6a6259; border-color: #4f443b; background: #aaa28d; box-shadow: 3px 4px #08172075; cursor: not-allowed; filter: saturate(.45); }
+.launch-luggage-cart .founder-ticket-action { color: #f7f0db; background: #3a635c; }
+
+.founder-passport {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 2px 5% 0 auto;
+  padding: 9px 13px 10px;
+  color: #4c382d;
+  border: 3px dashed #8a6744;
+  border-radius: 3px 8px 5px 6px;
+  background: #e9d9aa;
+  box-shadow: 5px 6px #07172073;
+  transform: rotate(1deg);
+}
+
+.founder-passport b { margin-right: 3px; font-size: 10px; }
+.founder-passport__badge { padding: 4px 7px; border: 2px solid #6d4b55; border-radius: 2px 6px 4px 5px; color: #6d3f56; background: #f6e8bc; font-size: 10px; }
+.founder-passport small { color: #796653; font-size: 10px; }
+
+.gift-code-checkpoint {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 9px;
+  margin: 3px 2% 0;
+  padding: 18px 17px 13px;
+  color: #e6dac0;
+  border: 5px solid #553b2b;
+  border-radius: 5px 7px 5px 8px;
+  background: linear-gradient(110deg, #294448, #19363d);
+  box-shadow: 7px 8px #0617209e, inset 0 0 0 2px #bc9554;
+  transform: rotate(-.7deg);
+}
+
+.gift-code-checkpoint::before { position: absolute; top: -13px; left: 18px; padding: 3px 8px; content: '检票口'; color: #472f28; border: 2px solid #4d3529; border-radius: 3px 6px 2px 5px; background: #e0b961; font: 900 10px/1 monospace; }
+.gift-code-checkpoint label { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 10px; min-width: 0; }
+.gift-code-checkpoint label > span { color: #d5c295; font-size: 10px; white-space: nowrap; }
+.gift-code-checkpoint input { min-width: 0; width: 100%; padding: 10px 12px; border: 2px solid #876343; border-radius: 3px 6px 4px 5px; outline: none; color: #f7eed8; background: #102a31; font: inherit; text-transform: uppercase; }
+.gift-code-checkpoint input:focus { border-color: #f0cf70; box-shadow: 0 0 0 3px #f0cf7040; }
+.gift-code-checkpoint .secondary { border: 3px solid #3e2d26; border-radius: 4px 7px 5px 6px; background: #a74f40; box-shadow: 3px 4px #07172092; font-weight: 800; }
+.gift-code-checkpoint > small { grid-column: 1 / -1; color: #b9cab8; font-size: 10px; }
+.gift-code-checkpoint > small b { color: #f1cf73; }
+
 @media (max-width: 760px) {
   .tide-trial-yard { grid-template-columns: 1fr; margin-inline: 0; }
   .daily-trial-heading { align-items: stretch; flex-direction: column; padding-inline: 0; }
@@ -408,4 +628,14 @@
   .trial-score-tags, .trial-signal-lights { grid-template-columns: 1fr; }
   .trial-score-tags > span:nth-child(even), .signal-post:nth-child(even) { transform: rotate(0) translateY(0); }
   .signal-post { min-height: 112px; transform: rotate(0); }
+  .founder-ticket-office { margin-inline: 0; }
+  .ticket-office-sign { align-items: stretch; flex-direction: column; transform: rotate(0); }
+  .ticket-office-sign .station-stamp { width: max-content; }
+  .founder-counter { grid-template-columns: 1fr; gap: 22px; }
+  .founder-window, .launch-luggage-cart { min-height: 225px; transform: rotate(0); }
+  .founder-passport { margin-inline: 0; transform: rotate(0); }
+  .gift-code-checkpoint { grid-template-columns: 1fr; margin-inline: 0; transform: rotate(0); }
+  .gift-code-checkpoint label { grid-template-columns: 1fr; }
+  .gift-code-checkpoint .secondary { width: 100%; }
+  .gift-code-checkpoint > small { grid-column: 1; }
 }
