@@ -22,6 +22,20 @@ describe('DailyCheckInView', () => {
     expect(css).toContain('@media (prefers-reduced-motion: reduce)');
     expect(css).toContain('.daily-check-in .daily-check-in-grid');
     expect(css).toContain('.daily-check-in .daily-check-in-cell');
+    expect(css).toContain('.daily-check-in .daily-check-in-status');
+  });
+
+  it('blends into the page without an enclosing system-card shell', () => {
+    const css = readFileSync(new URL('../../web/styles/legacy.css', import.meta.url), 'utf8');
+    const shellRule = css.match(/\.system-card\.daily-check-in\s*\{([^}]*)\}/)?.[1] ?? '';
+
+    expect(shellRule).toContain('overflow: visible');
+    expect(shellRule).toContain('border: 0');
+    expect(shellRule).toContain('border-radius: 0');
+    expect(shellRule).toContain('background: transparent');
+    expect(shellRule).toContain('box-shadow: none');
+    expect(css).toContain('.daily-check-in-stage::before');
+    expect(css).toContain('.daily-check-in-stage::after');
   });
 
   it('renders seven visible rewards and the initial claim action', () => {
