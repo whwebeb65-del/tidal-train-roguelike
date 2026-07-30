@@ -875,8 +875,9 @@ function renderStationScene(): string {
       : canUnlock
         ? `<button class="chip" data-action="unlock-map" data-map-id="${map.id}">解锁地图</button>`
         : `<span class="locked">车站 Lv.${map.minStationLevel} 开放</span>`;
-    return `<article class="map-card ${unlocked ? 'unlocked' : 'locked-card'}">
-      <div class="map-glow"></div><div class="map-copy"><small>区域 ${map.minStationLevel}</small><h3>${map.name}</h3><p>${map.feature}</p></div>${action}
+    return `<article class="route-sign ${unlocked ? 'is-open' : 'is-locked'} ${selected ? 'is-current' : ''}">
+      <div class="route-sign__lamp" aria-hidden="true"></div>
+      <div class="map-copy"><small>站台 ${map.minStationLevel}</small><h3>${map.name}</h3><p>${map.feature}</p></div>${action}
     </article>`;
   }).join('');
 
@@ -896,9 +897,14 @@ function renderStationScene(): string {
       maxStamina: MAX_STAMINA,
       nextSpeedUnlock: accountTicketSnapshot().nextSpeedUnlock,
     })}
-    <div class="section-title"><h2>航线逐步开放</h2><span>已开放 ${save.unlockedMapIds.length}/${MAP_PROGRESSION.length}</span></div>
-    <div class="map-grid">${mapCards}</div>
-    <div class="station-footer"><div><b>车站升级</b><span>当前 Lv.${save.stationLevel} · 下一次需要 ${nextLevelCost} 齿轮</span></div><button class="secondary" data-action="upgrade-station" ${save.gears < nextLevelCost ? 'disabled' : ''}>升级车站</button></div>
+    <div class="station-route-yard living-zone">
+      <div class="station-route-yard__heading"><h2>航线发车牌</h2><span>已开放 ${save.unlockedMapIds.length}/${MAP_PROGRESSION.length}</span></div>
+      <div class="map-grid">${mapCards}</div>
+    </div>
+    <div class="station-work-order station-prop">
+      <div><span class="station-stamp">站务维修</span><b>车站 Lv.${save.stationLevel}</b><small>下一次升级需要 ${nextLevelCost} 齿轮</small></div>
+      <button class="secondary" data-action="upgrade-station" ${save.gears < nextLevelCost ? 'disabled' : ''}>提交升级工单</button>
+    </div>
     ${renderDailyCheckIn({ state: dailyCheckInState, currentDayId })}
     ${renderDailyTrialHub({ stationLevel: save.stationLevel, state: dailyTrialState, definition: dailyDefinition })}
     ${renderLaunchCampaignCenter()}

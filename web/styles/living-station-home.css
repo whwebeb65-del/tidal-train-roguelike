@@ -1,0 +1,152 @@
+.station-route-yard {
+  margin-inline: -8px;
+  padding: 12px 8px 4px;
+}
+
+.station-route-yard__heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 0 8px 14px;
+  color: #f2d591;
+}
+
+.station-route-yard__heading h2 {
+  margin: 0;
+  font-size: clamp(20px, 3vw, 28px);
+  letter-spacing: .08em;
+  text-shadow: 2px 3px #071c25;
+}
+
+.station-route-yard__heading span {
+  color: #a9c7c1;
+  font-size: 12px;
+}
+
+.station-route-yard .map-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: clamp(10px, 2vw, 18px);
+}
+
+.route-sign {
+  position: relative;
+  display: flex;
+  min-height: 174px;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 17px 15px 14px;
+  overflow: visible;
+  color: #e6eadc;
+  border: 3px solid #4b3628;
+  border-radius: 5px 8px 4px 7px;
+  background: linear-gradient(135deg, #214d56, #17333a);
+  box-shadow: 5px 7px 0 #06121999, inset 0 0 0 2px #c39b55;
+  transform: rotate(-1.3deg);
+}
+
+.route-sign:nth-child(even) { transform: rotate(1.1deg) translateY(8px); }
+.route-sign::before, .route-sign::after {
+  position: absolute;
+  top: -7px;
+  width: 12px;
+  height: 12px;
+  content: '';
+  border: 2px solid #402c22;
+  border-radius: 50%;
+  background: #c89448;
+  box-shadow: inset 1px 1px #f5d47f;
+}
+.route-sign::before { left: 13px; }
+.route-sign::after { right: 13px; }
+
+.route-sign .map-copy { position: relative; z-index: 1; }
+.route-sign .map-copy small { color: #d3b875; }
+.route-sign .map-copy h3 { margin: 7px 0 5px; font-size: 20px; }
+.route-sign .map-copy p { margin: 0; color: #b7cdcb; font-size: 11px; line-height: 1.5; }
+.route-sign .chip, .route-sign .locked { position: relative; z-index: 1; align-self: flex-start; margin-top: 12px; }
+
+.route-sign.is-locked { color: #b1aaa0; filter: saturate(.35); }
+.route-sign.is-locked::selection { color: inherit; }
+.route-sign.is-locked .map-copy { opacity: .76; }
+.route-sign.is-locked .locked { color: #e1c38c; }
+.route-sign.is-locked > .map-copy::after {
+  position: absolute;
+  top: 42%;
+  left: -7px;
+  width: calc(100% + 14px);
+  height: 8px;
+  content: '';
+  border-block: 2px solid #49352b;
+  background: repeating-linear-gradient(135deg, #6f6254 0 6px, #393430 6px 12px);
+  box-shadow: 0 2px #10171a;
+  transform: rotate(-8deg);
+}
+
+.route-sign__lamp {
+  position: absolute;
+  right: 15px;
+  bottom: 15px;
+  width: 12px;
+  height: 12px;
+  border: 2px solid #443126;
+  border-radius: 50%;
+  background: #5d6c66;
+}
+
+.route-sign.is-current {
+  border-color: #efd377;
+  background: linear-gradient(135deg, #26616a, #1d4346);
+  box-shadow: 0 0 0 3px #c18b4066, 7px 9px 0 #06121999, inset 0 0 0 2px #f7df96;
+}
+
+.route-sign.is-current .route-sign__lamp {
+  background: #ffda65;
+  box-shadow: 0 0 10px 4px #ffd55d99;
+}
+
+.station-work-order {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  max-width: 720px;
+  margin: 34px 4% 28px auto;
+  padding: 15px 18px;
+  color: #293431;
+  border: 2px solid #80643b;
+  border-radius: 3px 7px 5px 4px;
+  background: linear-gradient(105deg, #e7d8a4 0 64%, #a87838 64% 66%, #d6c48c 66%);
+  box-shadow: 7px 8px 0 #0612198c, inset 0 0 20px #795c301e;
+  transform: rotate(-1.4deg);
+}
+
+.station-work-order::before {
+  position: absolute;
+  top: -10px;
+  left: 26px;
+  width: 36px;
+  height: 16px;
+  content: '';
+  border: 2px solid #4a4030;
+  border-radius: 5px 5px 0 0;
+  background: #667069;
+}
+
+.station-work-order > div { display: grid; gap: 7px; }
+.station-work-order .station-stamp { width: max-content; color: #9a3c2d; }
+.station-work-order b { font-size: 19px; }
+.station-work-order small { color: #58645b; }
+.station-work-order .secondary {
+  border-color: #4b3d2f;
+  background: #31525a;
+  box-shadow: 3px 4px #392a22;
+}
+
+@media (max-width: 760px) {
+  .station-route-yard { margin-inline: 0; padding-inline: 0; }
+  .station-route-yard .map-grid { grid-template-columns: 1fr; gap: 14px; }
+  .route-sign, .route-sign:nth-child(even) { min-height: 142px; transform: rotate(0); }
+  .station-work-order { align-items: stretch; flex-direction: column; margin: 28px 0 22px; }
+  .station-work-order .secondary { width: 100%; }
+}
