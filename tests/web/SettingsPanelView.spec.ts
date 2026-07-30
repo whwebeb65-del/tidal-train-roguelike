@@ -28,5 +28,9 @@ describe('SettingsPanelView', () => {
     expect(html).toContain('当前浏览器未提供 Web Audio');
     expect(html).toContain('data-action="close-settings"');
     expect(html).toContain('data-settings-backdrop');
+    expect(html).toContain('settings-sheet conductor-cabinet');
+    expect(html).toContain('cabinet-gauge');
+    expect(html).toContain('cabinet-switch');
+    expect(html).toContain('sealed-maintenance-note');
   });
 });

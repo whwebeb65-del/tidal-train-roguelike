@@ -16,7 +16,7 @@ function toggleRow(input: {
   readonly checked: boolean;
   readonly disabled?: boolean;
 }): string {
-  return `<label class="settings-row settings-row--toggle">
+  return `<label class="settings-row settings-row--toggle cabinet-switch">
     <span><b>${input.label}</b><small>${input.description}</small></span>
     <input type="checkbox" data-setting="${input.setting}"
       ${input.checked ? 'checked' : ''}
@@ -44,7 +44,7 @@ export function renderSettingsPanel(model: SettingsPanelModel): string {
     <button class="settings-panel__backdrop" type="button"
       data-settings-backdrop data-action="close-settings"
       aria-label="关闭设置"></button>
-    <aside class="settings-sheet" role="dialog" aria-modal="true"
+    <aside class="settings-sheet conductor-cabinet" role="dialog" aria-modal="true"
       aria-labelledby="settings-title">
       <header class="settings-sheet__header">
         <div><small>GAME SETTINGS</small><h2 id="settings-title">游戏设置</h2></div>
@@ -52,7 +52,7 @@ export function renderSettingsPanel(model: SettingsPanelModel): string {
           data-action="close-settings" aria-label="关闭设置">×</button>
       </header>
       <section class="settings-section">
-        <h3>声音</h3>
+        <h3 class="cabinet-gauge">声音</h3>
         ${toggleRow({
           setting: 'musicEnabled',
           label: '音乐',
@@ -70,7 +70,7 @@ export function renderSettingsPanel(model: SettingsPanelModel): string {
         <p class="settings-note">${audioNotice}</p>
       </section>
       <section class="settings-section">
-        <h3>显示</h3>
+        <h3 class="cabinet-gauge">显示</h3>
         ${toggleRow({
           setting: 'reducedMotion',
           label: '减少动态效果',
@@ -88,7 +88,7 @@ export function renderSettingsPanel(model: SettingsPanelModel): string {
           </select>
         </label>
       </section>
-      <footer class="settings-sheet__footer">
+      <footer class="settings-sheet__footer sealed-maintenance-note">
         设置会立即生效并保存在当前设备。战斗速度由战斗内控制按钮管理。
       </footer>
     </aside>
