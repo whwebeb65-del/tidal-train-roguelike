@@ -12,9 +12,13 @@ describe('SocialHubView', () => {
       sharePending: false,
     });
 
+    expect(html).toContain('living-zone lighthouse-dock');
+    expect(html).toContain('dock-gate is-locked');
+    expect(html).toContain('support-platform');
+    expect(html).not.toContain('system-card--social');
+
     expect(html).toContain('潮汐灯塔团');
     expect(html).toContain('data-action="join-legion"');
-    expect(html).toContain('class="system-card');
   });
 
   it('renders active squad, milestone and sharing actions', () => {
@@ -43,5 +47,7 @@ describe('SocialHubView', () => {
     expect(html).toContain('data-action="toggle-support"');
     expect(html).toContain('data-action="share-squad"');
     expect(html).toContain('data-action="claim-expedition"');
+    expect(html).toContain('expedition-chart');
+    expect(html).toContain('support-platform');
   });
 });

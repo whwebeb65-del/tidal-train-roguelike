@@ -1,0 +1,184 @@
+.supply-market,
+.lighthouse-dock {
+  display: grid;
+  gap: clamp(16px, 3vw, 28px);
+  margin-inline: -4px;
+  color: #e9e4d3;
+}
+
+.market-awning,
+.dock-flag {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  min-width: 0;
+  padding: 18px 22px 21px;
+  overflow: visible;
+}
+
+.market-awning {
+  color: #392b22;
+  border: 6px solid #5a3925;
+  border-radius: 8px 10px 5px 7px;
+  background: repeating-linear-gradient(90deg, #d77a30 0 31px, #f2c25d 31px 62px);
+  box-shadow: 8px 10px #0717209c, inset 0 -10px #7b452b, inset 0 0 0 2px #f8db88;
+  transform: rotate(-.8deg);
+}
+
+.market-awning::before,
+.market-awning::after {
+  position: absolute;
+  bottom: -26px;
+  width: 16px;
+  height: 31px;
+  content: '';
+  border: 3px solid #4d3023;
+  border-top: 0;
+  background: #845130;
+  box-shadow: inset 3px 0 #c58a4e;
+}
+
+.market-awning::before { left: 23px; }
+.market-awning::after { right: 23px; }
+.market-awning h2,
+.dock-flag h2 { margin: 5px 0; font-size: clamp(22px, 3.5vw, 31px); letter-spacing: .08em; }
+.market-awning h2 { color: #34241f; text-shadow: 1px 1px #ffe8a0; }
+.market-awning p { max-width: 650px; margin: 0; color: #5a4131; font-size: 12px; line-height: 1.55; }
+.market-awning .eyebrow { color: #7a3f2b; }
+
+.market-sign,
+.market-receipt {
+  border: 2px solid #68402b;
+  border-radius: 3px 7px 4px 6px;
+  box-shadow: 3px 4px #3f261b66;
+  font-size: 10px;
+  font-weight: 900;
+}
+
+.market-sign { align-self: flex-start; padding: 7px 9px; color: #60352b; background: #f6d980; transform: rotate(2deg); }
+
+.supply-crate-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(205px, 1fr));
+  gap: clamp(14px, 2.5vw, 24px);
+  padding: 7px 4px 10px;
+}
+
+.supply-crate {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  min-height: 210px;
+  flex-direction: column;
+  padding: 19px 17px 15px;
+  color: #f0e4c8;
+  border: 5px solid #603b25;
+  border-radius: 5px 8px 4px 7px;
+  background: linear-gradient(135deg, #9a5a2f, #6b3c28 54%, #4d2e25);
+  box-shadow: 7px 9px #06172096, inset 0 0 0 2px #d2914c, inset 0 0 24px #35211999;
+  transform: rotate(-1deg);
+}
+
+.supply-crate:nth-child(even) { transform: rotate(1.2deg) translateY(7px); }
+.supply-crate::before,
+.supply-crate::after { position: absolute; content: ''; background: #dfaa58; opacity: .72; }
+.supply-crate::before { top: 10px; right: 9px; bottom: 10px; left: 9px; border-block: 3px solid #5d3925; }
+.supply-crate::after { top: 50%; left: 0; width: 100%; height: 5px; transform: rotate(-8deg); }
+.supply-crate > * { position: relative; z-index: 1; }
+.supply-crate.owned { filter: saturate(.42) brightness(.84); }
+.supply-crate.owned::after { content: '已验收'; display: grid; place-items: center; height: 26px; color: #582d26; border: 3px solid currentColor; background: #e6bf68; font: 900 10px/1 monospace; opacity: .9; transform: rotate(-11deg); }
+.supply-crate .commerce-card-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.supply-crate .commerce-price { padding: 5px 7px; color: #3a251d; border: 2px solid #513323; border-radius: 3px 6px 4px 5px; background: #e9bd62; font-weight: 900; }
+.supply-crate small { color: #e2c184; font-size: 10px; }
+.supply-crate h3 { margin: 14px 0 7px; font-size: 19px; }
+.supply-crate p { margin: 0; color: #ecd7b1; font-size: 11px; line-height: 1.5; }
+.supply-crate .commerce-reward { margin-top: 11px; color: #ffdc79; font-size: 11px; }
+.supply-crate .chip { align-self: flex-start; margin-top: auto; }
+.market-receipt { justify-self: end; max-width: 680px; padding: 11px 14px; color: #5d4634; background: #ead9a7; transform: rotate(1deg); }
+
+.dock-flag {
+  align-items: center;
+  color: #d7ebe0;
+  border-left: 15px solid #8f3c36;
+  background: linear-gradient(90deg, #214d51, #183a43 72%, transparent 72%);
+  box-shadow: inset 0 -3px #b79b5b;
+}
+
+.dock-flag::before { position: absolute; top: -12px; left: -15px; width: 15px; height: 71px; content: ''; border: 3px solid #49342a; border-radius: 8px 8px 0 0; background: #725039; box-shadow: inset 3px 0 #af8051; }
+.dock-flag h2 { color: #f2d98c; text-shadow: 2px 3px #071b22; }
+.dock-flag p { max-width: 650px; margin: 0; color: #b9d2c8; font-size: 12px; line-height: 1.55; }
+.dock-flag__signal { padding: 5px 8px; color: #4a2925; border: 2px solid #512f29; border-radius: 3px 6px 4px 5px; background: #e2b85d; box-shadow: 0 0 12px #f0c96488; font: 900 10px/1 monospace; }
+
+.dock-gate,
+.expedition-chart,
+.beacon-line,
+.support-platform { position: relative; }
+
+.dock-gate {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  min-height: 125px;
+  padding: 22px 24px 22px 78px;
+  color: #d9ded2;
+  border: 5px solid #553d2f;
+  border-radius: 6px 8px 4px 7px;
+  background: linear-gradient(110deg, #294a4d, #18353c);
+  box-shadow: 8px 9px #06172094, inset 0 0 0 2px #a37b46;
+}
+
+.dock-gate::before { position: absolute; left: 23px; bottom: -14px; width: 29px; height: 112px; content: ''; border: 5px solid #50372b; border-radius: 16px 16px 3px 3px; background: repeating-linear-gradient(#dbc071 0 10px, #7d5840 10px 20px); box-shadow: 0 0 14px #f4d16966; }
+.dock-gate h2 { margin: 0 0 7px; color: #efd686; font-size: 23px; }
+.dock-gate p { max-width: 590px; margin: 0; color: #bed1c7; font-size: 12px; line-height: 1.55; }
+.dock-gate__seal { align-self: flex-start; padding: 5px 8px; color: #a94d40; border: 2px solid currentColor; border-radius: 3px; font: 900 10px/1 monospace; transform: rotate(-7deg); }
+.lighthouse-dock .support-platform:has(.primary) { display: flex; justify-content: flex-end; margin-top: -42px; margin-right: 20px; }
+.lighthouse-dock .support-platform .primary { position: relative; z-index: 1; }
+
+.expedition-chart { padding: 14px 18px 16px 49px; color: #e3e5d7; border: 3px solid #6b5339; border-radius: 4px 7px 5px 6px; background: #1c4147; box-shadow: 5px 7px #06172085, inset 0 0 0 2px #9c8050; transform: rotate(.5deg); }
+.expedition-chart::before { position: absolute; top: 12px; left: 16px; width: 16px; height: 16px; content: ''; border: 3px solid #543c2d; border-radius: 50%; background: #f0c95d; box-shadow: 0 0 11px #f8d76a99, 0 34px 0 -2px #9ad0bb; }
+.expedition-chart > div:first-child { display: flex; justify-content: space-between; gap: 12px; font-size: 12px; }
+.expedition-chart b { color: #f2d97f; }
+.expedition-chart .progress { height: 10px; margin-top: 10px; overflow: hidden; border: 2px solid #47352a; border-radius: 99px; background: #0c262d; }
+.expedition-chart .progress i { display: block; height: 100%; background: repeating-linear-gradient(90deg, #e4be58 0 12px, #a84c3b 12px 16px); box-shadow: 0 0 10px #e8be5f; }
+
+.beacon-line { display: grid; grid-template-columns: repeat(auto-fit, minmax(185px, 1fr)); gap: 16px; padding: 20px 6px 8px; }
+.beacon-line::before { position: absolute; top: 33px; right: 5%; left: 5%; height: 4px; content: ''; background: #8b7e58; box-shadow: 0 2px #1a2e31; }
+.expedition-milestone { position: relative; z-index: 1; display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 92px; padding: 13px 13px 13px 48px; color: #d9e3d5; border: 3px solid #594432; border-radius: 4px 7px 5px 6px; background: #204148; box-shadow: 4px 6px #06172083; }
+.expedition-milestone::before { position: absolute; left: 13px; width: 19px; height: 19px; content: ''; border: 3px solid #513a2c; border-radius: 50%; background: #65736a; }
+.expedition-milestone.reached::before { background: #f4d265; box-shadow: 0 0 13px #f3d162; }
+.expedition-milestone span { display: grid; gap: 3px; }
+.expedition-milestone small { color: #b6d4c4; font-size: 10px; }
+.expedition-milestone em { color: #f0ce74; font-size: 10px; font-style: normal; }
+
+.crew-line { display: flex; align-items: baseline; justify-content: space-between; gap: 14px; padding: 0 7px; }
+.crew-line h2 { margin: 0; color: #efd889; font-size: 20px; letter-spacing: .06em; }
+.crew-line span { color: #b7cec1; font-size: 11px; }
+.support-platform { display: grid; grid-template-columns: repeat(auto-fit, minmax(205px, 1fr)); gap: 15px; padding: 5px 4px 9px; }
+.support-card { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px; min-width: 0; min-height: 90px; padding: 13px; color: #dce7d7; border: 4px solid #594333; border-radius: 5px 8px 4px 7px; background: linear-gradient(135deg, #284a4c, #19383f); box-shadow: 5px 7px #0617208c, inset 0 0 0 2px #8c7047; text-align: left; cursor: pointer; transform: rotate(-.6deg); }
+.support-card:nth-child(even) { transform: rotate(.8deg) translateY(5px); }
+.support-card.selected { border-color: #e1bd62; box-shadow: 0 0 0 2px #b6523f66, 5px 7px #0617208c, inset 0 0 0 2px #d8bd68; }
+.support-avatar { display: grid; width: 35px; height: 35px; place-items: center; color: #3d3026; border: 3px solid #4e382c; border-radius: 50%; background: #e6c161; font-weight: 900; }
+.support-copy { display: grid; min-width: 0; gap: 3px; }
+.support-copy small, .support-copy em { color: #b8d0c1; font-size: 10px; font-style: normal; }
+.support-copy b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.support-card strong { color: #f0cf73; font-size: 10px; }
+
+@media (max-width: 760px) {
+  .supply-market, .lighthouse-dock { margin-inline: 0; gap: 18px; }
+  .market-awning, .dock-flag { align-items: stretch; flex-direction: column; transform: rotate(0); }
+  .market-sign { width: max-content; }
+  .supply-crate-grid, .beacon-line, .support-platform { grid-template-columns: 1fr; gap: 14px; padding-inline: 0; }
+  .supply-crate, .supply-crate:nth-child(even), .support-card, .support-card:nth-child(even), .expedition-chart { transform: rotate(0); }
+  .supply-crate { min-height: 190px; }
+  .market-receipt { justify-self: stretch; max-width: none; transform: rotate(0); }
+  .dock-gate { align-items: stretch; flex-direction: column; padding: 20px 18px 20px 61px; }
+  .dock-gate::before { left: 16px; height: 100px; }
+  .lighthouse-dock .support-platform:has(.primary) { display: block; margin: -33px 0 0; padding-left: 61px; }
+  .lighthouse-dock .support-platform .primary { width: 100%; }
+  .expedition-chart { padding-left: 47px; }
+  .beacon-line::before { display: none; }
+  .crew-line { align-items: stretch; flex-direction: column; gap: 6px; padding-inline: 0; }
+}

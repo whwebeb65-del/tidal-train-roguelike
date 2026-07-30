@@ -10,6 +10,10 @@ describe('CommerceView', () => {
       pendingProductId: null,
     });
 
+    expect(html).toContain('living-zone supply-market');
+    expect(html).toContain('supply-crate');
+    expect(html).not.toContain('system-card--commerce');
+
     expect(html).toContain('首航星票补给');
     expect(html).toContain('¥6');
     expect(html).toContain('固定获得 60 星票');
