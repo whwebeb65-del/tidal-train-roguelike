@@ -43,23 +43,24 @@ export function renderDailyTrialHub(model: DailyTrialHubViewModel): string {
     const claimed = model.state.claimedMilestoneIds.includes(milestone.id);
     const reached = model.state.bestScore >= milestone.threshold;
     const progress = Math.min(model.state.bestScore, milestone.threshold);
-    return `<article class="system-card__item daily-trial-milestone ${reached ? 'reached' : ''}">
+    const signalState = claimed ? 'is-stamped' : reached ? 'is-lit' : 'is-unlit';
+    return `<article class="daily-trial-milestone signal-post ${signalState}">
       <span><small>${progress}/${milestone.threshold}</small><b>${milestone.label}</b><em>${formatReward(milestone.reward)}</em></span>
       <button class="chip" data-action="claim-daily-trial" data-milestone-id="${milestone.id}" ${claimed || !reached ? 'disabled' : ''}>${claimed ? '已领取' : reached ? '领取' : '未达成'}</button>
     </article>`;
   }).join('');
   const startAction = unlocked
-    ? '<button class="primary" data-action="start-daily-trial">开始今日试炼</button>'
-    : '<button class="primary" disabled>车站 Lv.2 开放</button>';
+    ? '<button class="trial-bell" data-action="start-daily-trial">敲钟开始试炼</button>'
+    : '<button class="trial-bell" disabled>车站 Lv.2 点亮信号</button>';
 
-  return `<section class="system-card system-card--trial deferred-section daily-trial-hub ${unlocked ? '' : 'locked'}">
-    <div class="system-card__heading daily-trial-heading"><div><span class="eyebrow">DAILY / ${model.definition.dayId}</span><h2>今日潮汐试炼</h2><p>固定种子、同一规则、无限重试；冲击个人最佳，不售卖挑战次数。</p></div>${startAction}</div>
-    <div class="daily-trial-rule"><span class="daily-rule-mark">潮</span><div><small>今日规则 · 种子 ${model.definition.seed}</small><b>${rule.name}</b><p>${rule.description}</p></div></div>
-    <div class="daily-trial-modifiers">
+  return `<section class="deferred-section living-zone tide-trial-yard ${unlocked ? '' : 'is-locked'}">
+    <div class="daily-trial-heading"><div><span class="eyebrow">DAILY / ${model.definition.dayId}</span><h2>今日潮汐试炼</h2><p>固定种子、同一规则、无限重试；冲击个人最佳，不售卖挑战次数。</p></div>${startAction}</div>
+    <div class="trial-chalkboard station-prop"><div class="daily-trial-rule"><span class="daily-rule-mark">潮</span><div><small>今日规则 · 种子 ${model.definition.seed}</small><b>${rule.name}</b><p>${rule.description}</p></div></div></div>
+    <div class="daily-trial-modifiers trial-hangtags">
       <span>敌人生命 ${signed(rule.enemyHpBonus)}</span><span>列车生命 ${signed(rule.maxPlayerHpDelta)}</span><span>开场动能 ${signed(rule.initialMomentumBonus)}</span><span>行动伤害 ${signed(rule.damageBonus)}</span>
     </div>
-    <div class="daily-trial-stats"><span>今日尝试 <b>${model.state.attempts}</b></span><span>个人最佳 <b>${model.state.bestScore}</b></span></div>
-    <div class="system-card__grid daily-trial-milestones">${milestones}</div>
+    <div class="daily-trial-stats trial-score-tags"><span>今日尝试 <b>${model.state.attempts}</b></span><span>个人最佳 <b>${model.state.bestScore}</b></span></div>
+    <div class="daily-trial-milestones trial-signal-lights">${milestones}</div>
   </section>`;
 }
 

@@ -18,7 +18,7 @@ describe('DailyTrialView', () => {
 
     expect(html).toContain('DAILY / 2026-07-16');
     expect(html).toContain(definition.rule.name);
-    expect(html).toContain('车站 Lv.2 开放');
+    expect(html).toContain('车站 Lv.2 点亮信号');
     expect(html).not.toContain('data-action="start-daily-trial"');
   });
 
@@ -26,10 +26,21 @@ describe('DailyTrialView', () => {
     const html = renderDailyTrialHub({ stationLevel: 2, state, definition });
 
     expect(html).toContain('data-action="start-daily-trial"');
-    expect(html).toContain('开始今日试炼');
+    expect(html).toContain('敲钟开始试炼');
     expect(html).toContain('今日出发');
     expect(html).toContain('无损航标');
     expect(html).toContain('0/20');
+  });
+
+  it('renders the trial as a physical challenge board', () => {
+    const html = renderDailyTrialHub({ stationLevel: 2, state, definition });
+
+    expect(html).toContain('living-zone tide-trial-yard');
+    expect(html).toContain('trial-chalkboard');
+    expect(html).toContain('trial-signal-lights');
+    expect(html).toContain('trial-score-tags');
+    expect(html).not.toContain('system-card system-card--trial');
+    expect(html).toContain('data-action="start-daily-trial"');
   });
 
   it('renders the active combat rule and exact modifiers', () => {
