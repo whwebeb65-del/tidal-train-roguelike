@@ -26,4 +26,13 @@ describe('living station home composition', () => {
     expect(css).toContain('.station-work-order');
     expect(css).toContain('@media (max-width: 760px)');
   });
+
+  it('anchors the work-order metal clip to its paper slip', () => {
+    const css = readFileSync(
+      new URL('../../web/styles/living-station-home.css', import.meta.url),
+      'utf8',
+    );
+    expect(css).toMatch(/\.station-work-order\s*\{[^}]*position:\s*relative;/);
+    expect(css).toMatch(/\.station-work-order::before\s*\{[^}]*position:\s*absolute;/);
+  });
 });
