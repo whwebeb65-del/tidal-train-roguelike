@@ -64,6 +64,17 @@ describe('AppShell', () => {
     expect(appShellCss).toContain('display: none');
   });
 
+  it('styles navigation as an accessible station wayfinding rail', () => {
+    const css = [
+      readFileSync(new URL('../../web/styles/shell.css', import.meta.url), 'utf8'),
+      readFileSync(new URL('../../web/styles/app-shell-v2.css', import.meta.url), 'utf8'),
+    ].join('\n');
+
+    expect(css).toContain('.app-hub-nav::before');
+    expect(css).toContain('.hub-nav__item[aria-current="page"]');
+    expect(css).toContain('min-height: 44px');
+  });
+
   it('reserves a mobile notice lane away from readable content and fixed navigation', () => {
     expect(appShellCss).toContain('.scene-viewport:has(.app-notice.is-visible)');
     expect(appShellCss).toMatch(
