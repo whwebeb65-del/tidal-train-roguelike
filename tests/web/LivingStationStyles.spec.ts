@@ -2,6 +2,11 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 describe('living station styles', () => {
+  const captainCss = readFileSync(
+    new URL('../../web/styles/living-station-captain.css', import.meta.url),
+    'utf8',
+  );
+
   it('imports the scene language after generic progression styles', () => {
     const entry = readFileSync(new URL('../../web/styles.css', import.meta.url), 'utf8');
     expect(entry.indexOf('progression.css')).toBeLessThan(
@@ -21,5 +26,23 @@ describe('living station styles', () => {
     expect(css).toContain('.station-stamp');
     expect(css).toContain('.station-hangtag');
     expect(css).toContain('@media (prefers-reduced-motion: reduce)');
+  });
+
+  it('keeps the carriage mirror positioned and non-interactive on mobile', () => {
+    expect(captainCss).toMatch(/\.carriage-mirror\s*\{[^}]*position:\s*relative;/);
+    expect(captainCss).toMatch(/\.carriage-mirror::before\s*\{[^}]*pointer-events:\s*none;/);
+    expect(captainCss).not.toMatch(/@media \(max-width: 760px\)[\s\S]*?\.carriage-mirror\s*\{[^}]*position:\s*static;/);
+  });
+
+  it('switches the captain lineup to one berth per mobile row', () => {
+    const mobileCss = captainCss.slice(
+      captainCss.indexOf('@media (max-width: 760px)'),
+      captainCss.indexOf('@media (max-width: 430px)'),
+    );
+    expect(mobileCss).toMatch(/\.captain-platform \.platform-lineup\s*\{[^}]*grid-template-columns:\s*1fr;/);
+  });
+
+  it('keeps the berth rail behind the captain art', () => {
+    expect(captainCss).toMatch(/\.captain-berth::after\s*\{[^}]*z-index:\s*0;/);
   });
 });
