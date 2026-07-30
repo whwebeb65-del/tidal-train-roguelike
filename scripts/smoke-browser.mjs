@@ -422,9 +422,9 @@ async function assertMobileReadingSafety(client, label) {
   );
 
   for (const [selector, index] of [
-    ['.section-title', 0],
-    ['.map-card', 0],
-    ['.map-card', 3],
+    ['.station-route-yard__heading', 0],
+    ['.route-sign', 0],
+    ['.route-sign', 3],
   ]) {
     const visibleRouteContent = await inspectSafeReadingTarget(client, selector, index);
     assert.equal(

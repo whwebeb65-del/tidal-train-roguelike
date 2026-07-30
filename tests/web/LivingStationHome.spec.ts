@@ -35,4 +35,16 @@ describe('living station home composition', () => {
     expect(css).toMatch(/\.station-work-order\s*\{[^}]*position:\s*relative;/);
     expect(css).toMatch(/\.station-work-order::before\s*\{[^}]*position:\s*absolute;/);
   });
+
+  it('keeps browser mobile reading checks aligned with the route-yard markup', () => {
+    const smoke = readFileSync(
+      new URL('../../scripts/smoke-browser.mjs', import.meta.url),
+      'utf8',
+    );
+    expect(smoke).toContain("['.station-route-yard__heading', 0]");
+    expect(smoke).toContain("['.route-sign', 0]");
+    expect(smoke).toContain("['.route-sign', 3]");
+    expect(smoke).not.toContain("['.map-card', 0]");
+    expect(smoke).not.toContain("['.map-card', 3]");
+  });
 });
