@@ -1,0 +1,39 @@
+.living-zone {
+  position: relative;
+  isolation: isolate;
+  margin-block: clamp(34px, 6vw, 72px);
+  padding: 0;
+  overflow: visible;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.station-prop { position: relative; z-index: 2; }
+.station-stamp {
+  display: inline-flex;
+  padding: 4px 7px;
+  border: 3px solid currentColor;
+  border-radius: 4px;
+  font: 900 9px/1 monospace;
+  transform: rotate(-4deg);
+}
+.station-hangtag {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  padding: 8px 11px;
+  color: #2f3634;
+  border: 3px solid #3b3028;
+  border-radius: 6px 10px 7px 8px;
+  background: #f1d17b;
+  box-shadow: 5px 7px #06121973;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .living-zone *, .living-zone *::before, .living-zone *::after {
+    animation: none !important;
+    transition-duration: .01ms !important;
+  }
+}
