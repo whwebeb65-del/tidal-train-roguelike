@@ -22,5 +22,10 @@ describe('EquipmentView', () => {
     expect(html).toContain('data-action="reroll-equipment"');
     expect(html).toContain('data-nav-scene="captain"');
     expect(html).not.toContain('概率');
+    expect(html).toContain('living-zone otter-workshop');
+    expect(html).toContain('tool-wall');
+    expect(html).toContain('workbench-item');
+    expect(html).toContain('parts-bin');
+    expect(html).toContain('maintenance-tag');
   });
 });

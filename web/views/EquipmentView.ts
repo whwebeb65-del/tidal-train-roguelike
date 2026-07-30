@@ -64,7 +64,7 @@ function renderEquipmentCard(instance: EquipmentInstance, state: EquipmentState)
   const fragments = state.fragments[instance.definitionId] ?? 0;
   const rerollPreview = PROTOTYPE_REROLL[definition.slot].map(affixLabel).join(' · ');
 
-  return `<article class="equipment-card ${equipped ? 'is-equipped' : ''}">
+  return `<article class="equipment-card workbench-item ${equipped ? 'is-equipped' : ''}">
     <div class="equipment-card__heading"><small>${SLOT_LABELS[definition.slot]} · ${SET_LABELS[definition.setId]}</small><span>${'★'.repeat(instance.stars)}${'☆'.repeat(5 - instance.stars)}</span></div>
     <h3>${definition.name}</h3>
     <p>Lv.${instance.level} · ${modifierSummary(definition.baseModifiers)}</p>
@@ -92,7 +92,7 @@ export function renderEquipment(model: EquipmentViewModel): string {
     const instanceId = state.equippedEquipmentIds[slot];
     const instance = state.inventory.find((item) => item.instanceId === instanceId);
     const name = instance ? getEquipmentDefinition(instance.definitionId).name : '未装备';
-    return `<div class="equipment-slot" data-slot="${slot}"><small>${SLOT_LABELS[slot]}</small><b>${name}</b></div>`;
+    return `<div class="equipment-slot maintenance-tag" data-slot="${slot}"><small>${SLOT_LABELS[slot]}</small><b>${name}</b></div>`;
   }).join('');
 
   const groups = SLOTS.map((slot) => {
@@ -100,28 +100,28 @@ export function renderEquipment(model: EquipmentViewModel): string {
       .filter((instance) => getEquipmentDefinition(instance.definitionId).slot === slot)
       .map((instance) => renderEquipmentCard(instance, state))
       .join('');
-    return `<section class="equipment-group"><h2>${SLOT_LABELS[slot]}</h2><div class="equipment-grid">${cards || '<p>暂无装备</p>'}</div></section>`;
+    return `<section class="equipment-group"><h2>${SLOT_LABELS[slot]}</h2><div class="equipment-grid">${cards || '<p class="empty-hook">暂无装备</p>'}</div></section>`;
   }).join('');
 
   const setBonuses = (Object.keys(EQUIPMENT_SET_BONUSES) as EquipmentSetId[]).map((setId) => {
     const count = setCounts.get(setId) ?? 0;
     const bonus = EQUIPMENT_SET_BONUSES[setId];
-    return `<article class="set-bonus ${count >= 2 ? 'is-active' : ''}">
+    return `<article class="set-bonus workshop-blueprint ${count >= 2 ? 'is-active' : ''}">
       <h3>${SET_LABELS[setId]} · ${count}/4</h3>
       <p>2 件：${modifierSummary(bonus.twoPiece)} ${count >= 2 ? '· 已激活' : ''}</p>
       <p>4 件：${modifierSummary(bonus.fourPiece)} ${count >= 4 ? '· 已激活' : ''}</p>
     </article>`;
   }).join('');
 
-  return `<section class="equipment scene">
-    <div class="run-heading"><div><span class="eyebrow">TRAIN EQUIPMENT</span><h1>四槽装备舱</h1><p>装备、强化、升星和定向重铸都会保留。付费装备与免费装备遵循同一套成长规则。</p></div><button class="secondary" data-nav-scene="captain">返回角色</button></div>
+  return `<section class="equipment scene living-zone otter-workshop">
+    <div class="run-heading workshop-sign"><div><span class="eyebrow">OTTER MAINTENANCE BAY</span><h1>海獭维修工坊</h1><p>工具墙、零件箱和工作台都已就位。装备、强化、升星和定向重铸遵循同一套成长规则。</p></div><button class="secondary" data-nav-scene="captain">返回角色</button></div>
     <div class="equipment-layout">
-      <aside>
+      <aside class="tool-wall">
         <div class="equipment-loadout">${slots}</div>
         <div class="equipment-wallet"><span>可用齿轮</span><b>${state.gears}</b></div>
         <div class="set-bonus-list">${setBonuses}</div>
       </aside>
-      <div class="equipment-inventory">${groups}</div>
+      <div class="equipment-inventory parts-bin">${groups}</div>
     </div>
   </section>`;
 }

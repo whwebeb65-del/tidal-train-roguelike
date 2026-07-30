@@ -1,0 +1,238 @@
+.otter-workshop {
+  min-height: 100%;
+  padding: 10px 3% 38px;
+  color: #f0e4c4;
+}
+
+.otter-workshop::before {
+  position: absolute;
+  z-index: -1;
+  inset: 75px 1% 16px;
+  content: '';
+  border: 7px solid #4a3427;
+  border-radius: 7px 11px 5px 8px;
+  background:
+    radial-gradient(circle at 18% 15%, #ffd9792d 0 2px, transparent 3px),
+    radial-gradient(circle at 72% 27%, #85c6bd24 0 2px, transparent 3px),
+    linear-gradient(90deg, #0e2a31b5 0 19%, transparent 19% 21%, #5b392a 21% 22%, transparent 22%),
+    linear-gradient(180deg, #234951, #173840 62%, #67422d 62% 100%);
+  background-size: auto, auto, 44px 44px, auto;
+  box-shadow: 9px 12px #06141b99, inset 0 0 0 2px #b48446, inset 0 0 42px #8ad0c426;
+}
+
+.otter-workshop::after {
+  position: absolute;
+  z-index: -1;
+  right: 8%;
+  bottom: 1px;
+  left: 8%;
+  height: 23px;
+  content: '';
+  border: 3px solid #2e2824;
+  border-radius: 50%;
+  background: repeating-linear-gradient(90deg, #78513a 0 33px, #342d29 33px 43px);
+  box-shadow: 0 7px #07141a;
+}
+
+.workshop-sign {
+  position: relative;
+  z-index: 1;
+  margin: 0 3% 17px;
+  padding: 16px 20px;
+  border: 5px solid #59402c;
+  border-radius: 5px 9px 4px 7px;
+  background: linear-gradient(110deg, #184048, #255c5c 54%, #193942);
+  box-shadow: 7px 8px #07151c9c, inset 0 0 0 2px #bf9855;
+  transform: rotate(-.7deg);
+}
+
+.workshop-sign::before {
+  position: absolute;
+  top: 50%;
+  left: 14px;
+  width: 13px;
+  height: 13px;
+  content: '';
+  border: 3px solid #3c2d24;
+  border-radius: 50%;
+  background: #e7bd58;
+  box-shadow: calc(100vw - 95px) 0 #e7bd58, 0 0 12px #f6d77385;
+  transform: translateY(-50%);
+}
+
+.workshop-sign h1 { color: #f2dca3; }
+.workshop-sign p { max-width: 720px; color: #c0d4ca; }
+.workshop-sign .eyebrow { color: #f0cd73; }
+
+.otter-workshop .equipment-layout {
+  position: relative;
+  z-index: 1;
+  align-items: start;
+  margin: 0 2%;
+  gap: 22px;
+}
+
+.tool-wall {
+  position: relative;
+  padding: 26px 16px 18px;
+  border: 6px solid #4d3829;
+  border-radius: 7px 10px 5px 8px;
+  background:
+    radial-gradient(circle, #102d32 0 3px, transparent 3.5px) 0 0 / 20px 20px,
+    linear-gradient(135deg, #315963, #21464e 62%, #19383e);
+  box-shadow: 7px 9px #06151d9c, inset 0 0 0 2px #b98d4c, inset 0 0 28px #0b202880;
+  transform: rotate(.65deg);
+}
+
+.tool-wall::before {
+  position: absolute;
+  top: 13px;
+  right: 13%;
+  left: 13%;
+  height: 5px;
+  content: '';
+  background: #d5ab5b;
+  box-shadow: 0 4px #392b24, 0 26px #d5ab5b, 0 30px #392b24;
+}
+
+.tool-wall::after {
+  position: absolute;
+  right: 13px;
+  bottom: 15px;
+  width: 18px;
+  height: 45px;
+  content: '';
+  border: 4px solid #3c2d24;
+  border-radius: 11px 11px 4px 4px;
+  background: linear-gradient(90deg, #b8d9d0, #5a9d99, #b8d9d0);
+  box-shadow: -34px 13px 0 -5px #d1a95a, -34px 13px 0 -1px #3d2d24;
+  opacity: .72;
+}
+
+.tool-wall .equipment-loadout { display: grid; gap: 11px; margin-top: 20px; }
+
+.tool-wall .maintenance-tag {
+  position: relative;
+  min-height: 69px;
+  padding: 11px 12px 10px 26px;
+  border: 3px solid #62442f;
+  border-radius: 3px 7px 4px 5px;
+  background: linear-gradient(100deg, #e2c683, #b99154 72%, #977143);
+  box-shadow: 3px 4px #0b1c2294, inset 0 0 0 1px #f5dfa4;
+  color: #3c2d25;
+  text-align: left;
+  transform: rotate(-.7deg);
+}
+
+.tool-wall .maintenance-tag:nth-child(even) { transform: rotate(.8deg) translateX(5px); }
+.tool-wall .maintenance-tag::before { position: absolute; top: 50%; left: 8px; width: 9px; height: 9px; content: ''; border: 2px solid #4a3429; border-radius: 50%; background: #304d4d; transform: translateY(-50%); }
+.tool-wall .maintenance-tag small { color: #625033; font-weight: 800; letter-spacing: .08em; }
+.tool-wall .maintenance-tag b { display: block; margin-top: 3px; color: #372923; font-size: 13px; }
+
+.tool-wall .equipment-wallet {
+  position: relative;
+  z-index: 1;
+  margin: 19px 4px 13px;
+  padding: 9px 11px;
+  border: 3px solid #62442e;
+  border-radius: 4px 8px 5px 6px;
+  background: #21454a;
+  box-shadow: 3px 4px #08181e80, inset 0 0 0 1px #a87a43;
+}
+
+.tool-wall .equipment-wallet span { color: #c9d9c9; }
+.tool-wall .equipment-wallet b { color: #f2c963; }
+.tool-wall .set-bonus-list { gap: 13px; }
+
+.workshop-blueprint {
+  position: relative;
+  padding: 15px 14px 12px 24px;
+  overflow: hidden;
+  border: 3px dashed #75a8a3;
+  border-radius: 2px 6px 4px 5px;
+  background: linear-gradient(135deg, #1b5057e8, #123640ed);
+  box-shadow: 4px 5px #07182082, inset 0 0 0 1px #b6ded156;
+  opacity: .78;
+  transform: rotate(-.5deg);
+}
+
+.workshop-blueprint::before { position: absolute; inset: 8px; content: ''; border: 1px solid #a2d8cf43; background: linear-gradient(90deg, transparent 49%, #a2d8cf2d 50% 51%, transparent 52%), linear-gradient(transparent 49%, #a2d8cf2d 50% 51%, transparent 52%); background-size: 14px 14px; pointer-events: none; }
+.workshop-blueprint > * { position: relative; z-index: 1; }
+.workshop-blueprint.is-active { border-color: #e2cf73; background: linear-gradient(135deg, #28646b, #174751); box-shadow: 0 0 18px #e4d27d65, 4px 5px #07182082, inset 0 0 0 1px #fcdea36b; opacity: 1; }
+.workshop-blueprint h3 { color: #f1d98f; }
+.workshop-blueprint p { color: #d1e1d1; }
+
+.parts-bin {
+  position: relative;
+  padding: 24px 21px 32px;
+  border: 7px solid #61402d;
+  border-radius: 7px 11px 5px 8px;
+  background: linear-gradient(90deg, #a36b3f 0 3%, transparent 3% 97%, #8c5634 97%), repeating-linear-gradient(0deg, #785039 0 23px, #6a4332 23px 27px);
+  box-shadow: 8px 10px #06151d9c, inset 0 0 0 2px #d09a53, inset 0 0 33px #24191575;
+  transform: rotate(-.35deg);
+}
+
+.parts-bin::before { position: absolute; top: 10px; right: 8%; left: 8%; height: 4px; content: ''; background: #ddae62; box-shadow: 0 4px #3c2c25; }
+.parts-bin .equipment-group + .equipment-group { margin-top: 29px; }
+.parts-bin .equipment-group h2 { display: inline-block; margin: 0 0 13px; padding: 5px 13px; color: #4a3428; border: 2px solid #59412e; border-radius: 3px 7px 4px 5px; background: #dfbd72; box-shadow: 3px 4px #2c201a70; font-size: 14px; transform: rotate(-1deg); }
+.parts-bin .equipment-grid { gap: 15px; }
+
+.workbench-item {
+  position: relative;
+  min-height: 213px;
+  padding: 16px 15px 14px;
+  overflow: visible;
+  border: 5px solid #513827;
+  border-radius: 5px 9px 4px 7px;
+  background: linear-gradient(145deg, #c89455, #8a5939 67%, #65402e);
+  box-shadow: 6px 8px #16101291, inset 0 0 0 2px #ebbd6d, inset 0 0 19px #27191555;
+  color: #30251f;
+  transform: rotate(.65deg);
+}
+
+.workbench-item:nth-child(even) { transform: rotate(-.8deg) translateY(5px); }
+.workbench-item::before { position: absolute; top: -12px; left: 18px; width: 36px; height: 10px; content: ''; border: 4px solid #4a3326; border-bottom: 0; border-radius: 12px 12px 0 0; }
+.workbench-item::after { position: absolute; top: 10px; right: 11px; width: 9px; height: 9px; content: '✦'; color: #5b3a28; border: 2px solid #65432d; border-radius: 50%; background: #e7c36d; box-shadow: -15px 0 #e7c36d, -30px 0 #e7c36d, 2px 3px #3121196b; font: 700 8px/9px sans-serif; text-align: center; }
+.workbench-item.is-equipped { border-color: #f0d276; box-shadow: 0 0 16px #ecce7375, 6px 8px #16101291, inset 0 0 0 2px #fff0aa; }
+.workbench-item .equipment-card__heading { padding-right: 42px; color: #5a3b28; }
+.workbench-item .equipment-card__heading span { color: #724329; font-size: 15px; letter-spacing: .05em; }
+.workbench-item h3 { color: #38271f; }
+.workbench-item p { color: #533c2c; }
+.workbench-item .equipment-actions { margin-top: 12px; }
+.workbench-item button { min-height: 39px; border-color: #5d3d2b; background: #ebc370; color: #38271f; box-shadow: 2px 3px #3c291f80; }
+.workbench-item button.chip { background: #2e5c5b; color: #e8e2bd; }
+.workbench-item button:disabled { opacity: .55; }
+
+.empty-hook {
+  position: relative;
+  min-height: 76px;
+  margin: 0;
+  padding: 26px 16px 14px;
+  color: #f4d998;
+  border: 3px dashed #d6aa62;
+  border-radius: 4px 8px 5px 6px;
+  background: #38282080;
+  text-align: center;
+}
+
+.empty-hook::before { position: absolute; top: 8px; left: calc(50% - 8px); width: 14px; height: 11px; content: ''; border: 3px solid #d6aa62; border-bottom: 0; border-radius: 9px 9px 0 0; }
+
+@media (max-width: 760px) {
+  .otter-workshop { padding-inline: 0; }
+  .otter-workshop::before { inset: 102px 0 16px; }
+  .workshop-sign { margin-inline: 0; transform: none; }
+  .otter-workshop .equipment-layout { margin-inline: 0; gap: 17px; }
+  .tool-wall, .parts-bin { transform: none; }
+  .tool-wall { padding-inline: 13px; }
+  .parts-bin { padding: 20px 13px 29px; }
+}
+
+@media (max-width: 430px) {
+  .workshop-sign { padding: 14px 18px 14px 28px; }
+  .workshop-sign::before { left: 8px; }
+  .tool-wall .maintenance-tag:nth-child(even), .workbench-item, .workbench-item:nth-child(even) { transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .workshop-sign, .tool-wall, .parts-bin, .tool-wall .maintenance-tag, .workbench-item, .workbench-item:nth-child(even), .workshop-blueprint { transform: none; }
+}
