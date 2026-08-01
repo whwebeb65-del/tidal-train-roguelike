@@ -59,9 +59,16 @@ describe('AppShell', () => {
     expect(html).not.toMatch(/[⚙◇☆]/u);
   });
 
-  it('defines a compact battle chrome mode that hides station topbar details', () => {
+  it('removes station navigation chrome during battle overlays', () => {
     expect(appShellCss).toContain('.app-shell--battle .app-topbar');
     expect(appShellCss).toContain('display: none');
+    expect(appShellCss).toContain('.app-shell--battle .app-hub-nav');
+    expect(appShellCss).toMatch(
+      /\.app-shell--battle \.app-hub-nav\s*\{[^}]*display:\s*none/s,
+    );
+    expect(appShellCss).toMatch(
+      /\.app-shell--battle:has\(\.battle-overlay:not\(\[hidden\]\)\) \.app-notice\s*\{[^}]*display:\s*none/s,
+    );
   });
 
   it('styles navigation as an accessible station wayfinding rail', () => {

@@ -12,6 +12,15 @@
   display: none;
 }
 
+/* Battle overlays own the viewport; station wayfinding must not cover HUD actions. */
+.app-shell--battle .app-hub-nav {
+  display: none;
+}
+
+.app-shell--battle:has(.battle-overlay:not([hidden])) .app-notice {
+  display: none;
+}
+
 .app-shell--battle .scene-viewport {
   width: 100%;
   padding: 0;
