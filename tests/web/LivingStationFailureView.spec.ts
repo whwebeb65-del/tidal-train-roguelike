@@ -53,4 +53,18 @@ describe('living station failure and notices', () => {
       /\.repair-bay \.repair-bay__sheet\s*\{[^}]*z-index:\s*1;/,
     );
   });
+
+  it('keeps visible battle announcements out of the battle viewport cascade', () => {
+    const appShellCss = readFileSync(
+      new URL('../../web/styles/app-shell-v2.css', import.meta.url),
+      'utf8',
+    );
+
+    expect(appShellCss).toMatch(
+      /\.app-shell--battle \.scene-viewport:has\(\.app-notice\.is-visible\)\s*\{[^}]*padding:\s*0;/,
+    );
+    expect(appShellCss).toMatch(
+      /\.app-shell--battle \.app-notice\.station-announcement\s*\{[^}]*top:\s*auto;[^}]*bottom:\s*calc\(210px[^}]*width:\s*min\(340px,/,
+    );
+  });
 });

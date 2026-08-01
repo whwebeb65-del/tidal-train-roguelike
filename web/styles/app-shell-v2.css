@@ -180,6 +180,18 @@
   transform: rotate(-3deg);
 }
 
+/* Battle owns the full viewport: keep notices off its HUD and out of layout. */
+.app-shell--battle .scene-viewport:has(.app-notice.is-visible) {
+  padding: 0;
+}
+
+.app-shell--battle .app-notice.station-announcement {
+  top: auto;
+  bottom: calc(210px + env(safe-area-inset-bottom));
+  width: min(340px, calc(100% - 32px));
+  margin: 0;
+}
+
 .app-hub-nav {
   isolation: isolate;
   overflow: visible;
