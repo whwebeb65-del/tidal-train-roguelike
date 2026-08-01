@@ -30,7 +30,11 @@ describe('RunSceneView', () => {
     });
 
     expect(routeHtml).toContain('data-action="route"');
+    expect(routeHtml).toContain('living-zone dispatch-table');
+    expect(routeHtml).toContain('route-ticket');
     expect(rewardHtml).toContain('data-action="reward"');
+    expect(rewardHtml).toContain('living-zone cargo-unloading');
+    expect(rewardHtml).toContain('reward-crate');
     expect(settlementHtml).toContain('data-action="back-station"');
   });
 });

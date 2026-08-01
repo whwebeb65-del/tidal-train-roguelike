@@ -45,26 +45,26 @@ const REWARD_LABELS: Readonly<Record<RewardOption['kind'], string>> = {
 };
 
 export function renderRouteCards(model: RouteCardsModel): string {
-  const cards = model.nodes.map((node) => `<button class="route-card route-choice" data-action="route" data-node-id="${model.escapeHtml(node.id)}">
+  const cards = model.nodes.map((node) => `<button class="route-card route-choice route-ticket" data-action="route" data-node-id="${model.escapeHtml(node.id)}">
     <small>深度 ${node.depth} · 风险 ${Math.round(node.risk * 100)}%</small>
     <b>${NODE_LABELS[node.type]}</b>
     <span>${node.type === 'boss' ? '首通高额奖励正在终点等待' : '路线事件与奖励会随风险提高'}</span>
   </button>`).join('');
 
-  return `<section class="run scene compact">
-    <div class="run-heading"><div><span class="eyebrow">ROUTE CHOICE</span><h1>下一站去哪？</h1><p>补给更安全，高额奖励藏在潮位更高的分支。</p></div><span class="choice-count">航线 ${model.escapeHtml(model.mapName)}</span></div>
+  return `<section class="run scene compact living-zone dispatch-table">
+    <div class="run-heading dispatch-board"><div><span class="eyebrow">ROUTE CHOICE</span><h1>下一站去哪？</h1><p>补给更安全，高额奖励藏在潮位更高的分支。</p></div><span class="choice-count">航线 ${model.escapeHtml(model.mapName)}</span></div>
     <div class="choice-grid">${cards}</div>
   </section>`;
 }
 
 export function renderRewardCards(model: RewardCardsModel): string {
-  const cards = model.options.map((option) => `<button class="reward-card choice-card" data-action="reward" data-option-id="${model.escapeHtml(option.id)}">
+  const cards = model.options.map((option) => `<button class="reward-card choice-card reward-crate" data-action="reward" data-option-id="${model.escapeHtml(option.id)}">
     <small>${REWARD_LABELS[option.kind]}</small>
     <b>${model.escapeHtml(option.contentId)}</b>
     <span>${model.dailyTrial ? '试炼本局临时选择' : option.kind === 'gear' ? '补充车站齿轮' : '加入本局构筑'}</span>
   </button>`).join('');
 
-  return `<section class="run scene compact">
+  return `<section class="run scene compact living-zone cargo-unloading">
     <div class="run-heading"><div><span class="eyebrow">REWARD CHOICE</span><h1>潮汐回响</h1><p>只选一张，下一站会记住你的构筑。</p></div><span class="choice-count">${model.options.length} 选 1</span></div>
     <div class="choice-grid">${cards}</div>
     ${model.rerollHtml}
