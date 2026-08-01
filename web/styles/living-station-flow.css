@@ -238,6 +238,74 @@
 .arrival-platform > p,
 .trial-record-board > p { color: #c5d7c5; }
 
+.arrival-ticket {
+  position: relative;
+  display: grid;
+  width: min(235px, 88vw);
+  gap: 2px;
+  margin: 13px 0 2px;
+  padding: 9px 31px 10px 13px;
+  overflow: hidden;
+  border: 2px solid #cda768;
+  border-radius: 3px;
+  font-family: ui-monospace, "Cascadia Code", monospace;
+  letter-spacing: .11em;
+  text-align: left;
+}
+
+.arrival-ticket span { font-size: 9px; font-weight: 800; }
+.arrival-ticket b { font-size: 13px; letter-spacing: .16em; }
+
+.arrival-platform.is-first-clear .arrival-ticket {
+  border-color: #ddb96c;
+  background: linear-gradient(105deg, #f6e3aa, #d9ad65);
+  box-shadow: 4px 5px #06171d8c, inset 0 0 0 2px #fff3c46b;
+  color: #244341;
+  transform: rotate(-2deg);
+}
+
+.arrival-ticket--first-clear::after {
+  position: absolute;
+  top: 7px;
+  right: 7px;
+  display: grid;
+  width: 43px;
+  height: 43px;
+  place-items: center;
+  border: 3px double #a7342e;
+  border-radius: 50%;
+  color: #a7342e;
+  content: 'CLEAR';
+  font: 900 8px/1 system-ui, sans-serif;
+  letter-spacing: 0;
+  transform: rotate(13deg);
+}
+
+.arrival-platform.is-repeat-clear .arrival-ticket {
+  border-color: #93714b;
+  border-style: dashed;
+  background:
+    repeating-linear-gradient(-20deg, #b99863 0 2px, #c9a873 2px 8px),
+    #c9a873;
+  box-shadow: 3px 4px #06171d8c, inset 0 0 11px #52381b78;
+  color: #4d422d;
+  opacity: .86;
+  transform: rotate(1.5deg);
+}
+
+.arrival-ticket--repeat-clear::before,
+.arrival-ticket--repeat-clear::after {
+  position: absolute;
+  right: 0;
+  left: 0;
+  height: 5px;
+  background: repeating-linear-gradient(90deg, transparent 0 5px, #6a513766 5px 9px);
+  content: '';
+}
+
+.arrival-ticket--repeat-clear::before { top: 0; }
+.arrival-ticket--repeat-clear::after { bottom: 0; }
+
 .reward-luggage {
   position: relative;
   display: grid;

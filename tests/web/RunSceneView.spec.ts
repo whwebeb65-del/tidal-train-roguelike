@@ -39,4 +39,28 @@ describe('RunSceneView', () => {
     expect(settlementHtml).toContain('reward-luggage');
     expect(settlementHtml).toContain('data-action="back-station"');
   });
+
+  it('renders a stamped first-clear ticket and worn repeat-clear ticket', () => {
+    const firstClear = renderSettlementCard({
+      firstClear: true,
+      mapName: '漂流近郊',
+      rewards: { gears: 400, routeMarks: 10, starTickets: 3 },
+      doubleActionHtml: '',
+      expeditionHtml: '',
+      escapeHtml,
+    });
+    const repeatClear = renderSettlementCard({
+      firstClear: false,
+      mapName: '漂流近郊',
+      rewards: { gears: 40, routeMarks: 1, starTickets: 0 },
+      doubleActionHtml: '',
+      expeditionHtml: '',
+      escapeHtml,
+    });
+
+    expect(firstClear).toContain('arrival-platform is-first-clear');
+    expect(firstClear).toContain('arrival-ticket arrival-ticket--first-clear');
+    expect(repeatClear).toContain('arrival-platform is-repeat-clear');
+    expect(repeatClear).toContain('arrival-ticket arrival-ticket--repeat-clear');
+  });
 });

@@ -77,10 +77,14 @@ export function renderSettlementCard(model: SettlementCardModel): string {
   const description = model.firstClear
     ? `你完成了 ${model.escapeHtml(model.mapName)} 的首次通关，已获得高额开荒奖励。`
     : '这条线路的首通奖励已领取，重复挑战转为稳定收益。';
+  const arrivalTicket = model.firstClear
+    ? '<div class="arrival-ticket arrival-ticket--first-clear" aria-label="首次通关到站票"><span>ARRIVAL PASS</span><b>FIRST CLEAR</b></div>'
+    : '<div class="arrival-ticket arrival-ticket--repeat-clear" aria-label="重复通关到站票"><span>ARRIVAL PASS</span><b>REPEAT RUN</b></div>';
 
   return `<section class="settlement-card settlement scene living-zone arrival-platform ${model.firstClear ? 'is-first-clear' : 'is-repeat-clear'}">
     <div class="settlement-symbol">✦</div>
     <span class="eyebrow">RUN SETTLED</span>
+    ${arrivalTicket}
     <h1>${title}</h1>
     <p>${description}</p>
     <div class="settlement-rewards reward-luggage">
