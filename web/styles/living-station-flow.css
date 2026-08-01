@@ -411,6 +411,129 @@
 .trial-record-board .daily-settlement-actions { position: relative; z-index: 1; margin-bottom: 16px; }
 .trial-record-board .note { position: relative; z-index: 1; border-color: #c79e5d; background: #09292edb; }
 
+/* Failure repair bay: a hanging work order framed by a damaged train silhouette. */
+.repair-bay {
+  isolation: isolate;
+  background:
+    radial-gradient(ellipse at 50% 12%, rgb(255 211 117 / 20%), transparent 26%),
+    linear-gradient(180deg, rgb(16 40 42 / 95%), rgb(8 22 29 / 97%));
+}
+
+.repair-bay::before,
+.repair-bay::after {
+  position: absolute;
+  z-index: 0;
+  content: '';
+  pointer-events: none;
+}
+
+.repair-bay::before {
+  top: 11%;
+  right: -8%;
+  left: -8%;
+  height: 9px;
+  border-block: 2px solid #c48b3e;
+  background: repeating-linear-gradient(135deg, #e9bd57 0 12px, #25383a 12px 24px);
+  box-shadow: 0 10px 0 rgb(3 14 18 / 80%);
+  transform: rotate(-1.2deg);
+}
+
+.repair-bay::after {
+  inset: auto -5% 10% -5%;
+  height: 120px;
+  border-top: 6px solid #84613b;
+  background: repeating-linear-gradient(90deg, #0a171c 0 18px, #314344 18px 29px);
+  box-shadow: 0 -17px #173f40, 0 -25px rgb(218 163 75 / 25%);
+  transform: perspective(520px) rotateX(48deg);
+}
+
+.repair-bay .repair-bay__sheet {
+  position: relative;
+  z-index: 1;
+  overflow: hidden;
+  border-color: #b78a4b;
+  border-radius: 4px 8px 5px 10px;
+  color: #2b453e;
+  background:
+    repeating-linear-gradient(0deg, transparent 0 28px, rgb(63 90 78 / 13%) 28px 30px),
+    #efe0ad;
+  box-shadow: 7px 9px #06171dcc, inset 0 0 0 3px rgb(255 247 211 / 72%);
+}
+
+.repair-bay__sheet::before,
+.repair-bay__sheet::after {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 18px;
+  background: repeating-linear-gradient(135deg, #d79e45 0 7px, #55412b 7px 14px);
+  content: '';
+  pointer-events: none;
+}
+
+.repair-bay__sheet::before { left: 0; }
+.repair-bay__sheet::after { right: 0; }
+.repair-bay .battle-dialog__eyebrow { position: relative; color: #8e4633; }
+.repair-bay .battle-dialog h2 { position: relative; color: #274b48; }
+
+.repair-bay__train {
+  position: relative;
+  width: min(184px, 72%);
+  height: 48px;
+  margin: 0 auto 12px;
+  border: 3px solid #335052;
+  border-radius: 14px 23px 8px 10px;
+  background: linear-gradient(145deg, #557472 0 26%, #213f42 27% 74%, #8a5639 75%);
+  box-shadow: 0 8px 0 #14272d, inset 0 -9px #142b31;
+  pointer-events: none;
+  transform: rotate(-2deg);
+}
+
+.repair-bay__train::before,
+.repair-bay__train::after {
+  position: absolute;
+  bottom: -13px;
+  width: 23px;
+  height: 23px;
+  border: 4px solid #172c31;
+  border-radius: 50%;
+  background: #b77d41;
+  box-shadow: inset 0 0 0 4px #304848;
+  content: '';
+}
+
+.repair-bay__train::before { left: 17px; }
+.repair-bay__train::after { right: 17px; }
+.repair-bay__train i { position: absolute; top: 9px; width: 27px; height: 15px; border: 2px solid #dfc86e; background: #24494d; }
+.repair-bay__train i:nth-child(1) { left: 20px; }
+.repair-bay__train i:nth-child(2) { left: 59px; }
+.repair-bay__train i:nth-child(3) { right: 18px; width: 13px; border-color: #b84436; background: #712f2c; }
+
+.damage-report {
+  position: relative;
+  display: grid;
+  gap: 4px;
+  margin: 12px 8px 0;
+  padding: 11px 13px;
+  border: 2px dashed #8f6139;
+  color: #3e594f;
+  background: rgb(255 247 211 / 58%);
+  text-align: left;
+}
+
+.damage-report > span { color: #9c4534; font-size: 10px; font-weight: 900; letter-spacing: .12em; }
+.repair-bay .damage-report > p { max-width: none; margin: 0; color: #3d5c56; font-size: 12px; }
+.repair-actions { position: relative; margin-inline: 8px; }
+.repair-actions .battle-button { border-color: #6d5437; }
+.repair-actions .battle-button--primary { background: #276b65; }
+.repair-actions .battle-button--ghost { color: #5f4435; background: #dec887; }
+
+@media (max-width: 430px) {
+  .repair-bay .repair-bay__sheet { padding: 20px 22px; }
+  .repair-bay__train { width: min(170px, 76%); }
+  .damage-report, .repair-actions { margin-inline: 0; }
+}
+
 @media (max-width: 760px) {
   .living-zone.arrival-platform,
   .living-zone.trial-record-board { min-height: 0; padding: 30px 15px 116px; }

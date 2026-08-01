@@ -92,7 +92,7 @@ export function renderAppShell(snapshot: CurrencySnapshot): string {
     </header>
     <main class="scene-viewport">
       <div id="scene-host" class="scene-host" aria-live="polite"></div>
-      <div id="app-notice" class="notice app-notice" role="status"></div>
+      <div id="app-notice" class="notice app-notice station-announcement" role="status" aria-atomic="true"></div>
     </main>
     <nav class="hub-nav app-hub-nav" aria-label="主要功能">
       ${navigationItem('station', '⌂', '车站')}

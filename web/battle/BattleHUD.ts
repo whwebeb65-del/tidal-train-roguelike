@@ -146,12 +146,13 @@ export function renderBattleHudShell(): string {
       </div>
     </section>
 
-    <section class="battle-overlay battle-overlay--failure" data-failure-overlay hidden>
-      <div class="battle-dialog">
-        <span class="battle-dialog__eyebrow">TRAIN BREACHED</span>
-        <h2>列车防线失守</h2>
-        <p data-failure-summary></p>
-        <div class="battle-dialog__actions">
+    <section class="battle-overlay battle-overlay--failure failure-panel repair-bay" data-failure-overlay hidden>
+      <div class="battle-dialog repair-bay__sheet">
+        <div class="repair-bay__train" aria-hidden="true"><i></i><i></i><i></i></div>
+        <span class="battle-dialog__eyebrow">REPAIR BAY / DAMAGE REPORT</span>
+        <h2>列车进入维修库</h2>
+        <div class="damage-report"><span>损伤报告</span><p data-failure-summary></p></div>
+        <div class="battle-dialog__actions repair-actions">
           <button type="button" class="battle-button battle-button--primary" data-battle-action="revive">看广告复活</button>
           <button type="button" class="battle-button battle-button--ghost" data-battle-action="give-up">放弃本局并结算</button>
         </div>
