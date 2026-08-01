@@ -288,6 +288,8 @@ const ads = new MockAds('completed');
 const share = new MockShare('completed');
 const runtimeSearchParams = new URLSearchParams(window.location.search);
 const e2eEnabled = runtimeSearchParams.get('e2e') === '1';
+const e2eEquipmentEmpty = e2eEnabled
+  && runtimeSearchParams.get('e2eEquipmentEmpty') === '1';
 const requestedE2EPurchaseDelayMs = Number(
   runtimeSearchParams.get('e2ePurchaseDelayMs'),
 );
@@ -297,6 +299,18 @@ const e2ePurchaseDelayMs = e2eEnabled
   : 0;
 const store = new MockStore('verified', e2ePurchaseDelayMs);
 let save = repository.load();
+if (e2eEquipmentEmpty) {
+  save = {
+    ...save,
+    equipmentInventory: [],
+    equippedEquipmentIds: {
+      cannon: null,
+      carriage: null,
+      core: null,
+      instrument: null,
+    },
+  };
+}
 let socialState = initialState.social;
 let campaignState = initialState.campaign;
 let dailyTrialState = initialState.dailyTrial;

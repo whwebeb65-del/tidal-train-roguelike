@@ -181,6 +181,17 @@
 .skin-luggage p, .skin-luggage .skin-stack-note { color: #e6d5b2; }
 .skin-luggage > small { color: #f1d47d; }
 
+@media (min-width: 761px) {
+  .scene-viewport:has(.wardrobe-carriage) { overflow: visible; }
+
+  .wardrobe-carriage .carriage-mirror {
+    position: sticky;
+    top: 90px;
+    max-height: calc(100vh - 110px);
+    overflow-y: auto;
+  }
+}
+
 @media (max-width: 760px) {
   .captain-platform::before, .wardrobe-carriage::before { inset: 102px 0 18px; }
   .platform-departure-sign { grid-template-columns: auto minmax(0, 1fr); margin: 0; transform: rotate(0); }

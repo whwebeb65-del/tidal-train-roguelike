@@ -11,4 +11,14 @@ describe('LegacyGameRuntime E2E purchase controls', () => {
     expect(source).toContain("runtimeSearchParams.get('e2ePurchaseDelayMs')");
     expect(source).toMatch(/const e2ePurchaseDelayMs = e2eEnabled[\s\S]*new MockStore\('verified', e2ePurchaseDelayMs\)/);
   });
+
+  it('allows empty-equipment visual QA only behind the exact e2e gate', () => {
+    const source = readFileSync(
+      new URL('../../web/LegacyGameRuntime.ts', import.meta.url),
+      'utf8',
+    );
+
+    expect(source).toContain("runtimeSearchParams.get('e2eEquipmentEmpty') === '1'");
+    expect(source).toMatch(/const e2eEquipmentEmpty = e2eEnabled\s*&&[\s\S]*equipmentInventory: \[\]/);
+  });
 });

@@ -38,6 +38,15 @@ describe('living station styles', () => {
     expect(captainCss).not.toMatch(/@media \(max-width: 760px\)[\s\S]*?\.carriage-mirror\s*\{[^}]*position:\s*static;/);
   });
 
+  it('keeps the desktop wardrobe mirror sticky while browsing skin luggage', () => {
+    expect(captainCss).toMatch(
+      /@media \(min-width: 761px\)[\s\S]*?\.wardrobe-carriage \.carriage-mirror\s*\{[^}]*position:\s*sticky;[^}]*top:\s*90px;[^}]*max-height:\s*calc\(100vh - 110px\);[^}]*overflow-y:\s*auto;/,
+    );
+    expect(captainCss).toMatch(
+      /\.scene-viewport:has\(\.wardrobe-carriage\)\s*\{[^}]*overflow:\s*visible;/,
+    );
+  });
+
   it('switches the captain lineup to one berth per mobile row', () => {
     const mobileCss = captainCss.slice(
       captainCss.indexOf('@media (max-width: 760px)'),
