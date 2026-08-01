@@ -73,10 +73,10 @@ export function renderDailyTrialRunBanner(model: DailyTrialRunViewModel): string
 }
 
 export function renderDailyTrialSettlement(model: DailyTrialSettlementViewModel): string {
-  return `<section class="daily-trial-settlement scene">
+  return `<section class="daily-trial-settlement scene living-zone trial-record-board">
     <div class="settlement-symbol daily-trial-symbol">潮</div><span class="eyebrow">DAILY TRIAL SETTLED</span><h1>今日航迹已记录</h1>
     <p>固定种子成绩只更新个人最佳；返回车站领取已经达到的里程碑。</p>
-    <div class="daily-score"><small>本局得分</small><b>${model.score}</b>${model.improved ? '<strong>刷新最佳</strong>' : '<span>未超过最佳</span>'}</div>
+    <div class="daily-score score-stamp"><small>本局得分</small><b>${model.score}</b>${model.improved ? '<strong>刷新最佳</strong>' : '<span>未超过最佳</span>'}</div>
     <div class="daily-trial-stats settlement-stats"><span>今日最佳 <b>${model.bestScore}</b></span><span>今日尝试 <b>${model.attempts}</b></span><span>${model.assisted ? '救援成绩 · -25' : '无救援成绩'}</span></div>
     <div class="daily-settlement-actions"><button class="secondary" data-action="share-daily-trial" ${model.sharePending ? 'disabled' : ''}>${model.sharePending ? '生成成绩卡中…' : '分享同种子试炼'}</button><button class="primary" data-action="back-station">回到车站</button></div>
     <div class="note">分享成绩不直接发放货币；正式排行榜将由服务端校验日期、种子、战斗和救援记录。</div>

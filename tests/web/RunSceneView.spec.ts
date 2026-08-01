@@ -35,6 +35,8 @@ describe('RunSceneView', () => {
     expect(rewardHtml).toContain('data-action="reward"');
     expect(rewardHtml).toContain('living-zone cargo-unloading');
     expect(rewardHtml).toContain('reward-crate');
+    expect(settlementHtml).toContain('living-zone arrival-platform');
+    expect(settlementHtml).toContain('reward-luggage');
     expect(settlementHtml).toContain('data-action="back-station"');
   });
 });

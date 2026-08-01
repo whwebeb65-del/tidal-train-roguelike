@@ -78,12 +78,12 @@ export function renderSettlementCard(model: SettlementCardModel): string {
     ? `你完成了 ${model.escapeHtml(model.mapName)} 的首次通关，已获得高额开荒奖励。`
     : '这条线路的首通奖励已领取，重复挑战转为稳定收益。';
 
-  return `<section class="settlement-card settlement scene">
+  return `<section class="settlement-card settlement scene living-zone arrival-platform ${model.firstClear ? 'is-first-clear' : 'is-repeat-clear'}">
     <div class="settlement-symbol">✦</div>
     <span class="eyebrow">RUN SETTLED</span>
     <h1>${title}</h1>
     <p>${description}</p>
-    <div class="settlement-rewards">
+    <div class="settlement-rewards reward-luggage">
       <span class="currency gear"><b>${model.rewards.gears}</b>齿轮</span>
       <span class="currency route-mark"><b>${model.rewards.routeMarks}</b>航线徽记</span>
       <span class="currency ticket"><b>${model.rewards.starTickets}</b>星票</span>

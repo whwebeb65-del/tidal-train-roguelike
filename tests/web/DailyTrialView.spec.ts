@@ -71,6 +71,8 @@ describe('DailyTrialView', () => {
 
     expect(normal).toContain('刷新最佳');
     expect(normal).toContain('分享同种子试炼');
+    expect(normal).toContain('living-zone trial-record-board');
+    expect(normal).toContain('score-stamp');
     expect(normal).toContain('data-action="back-station"');
     expect(assisted).toContain('救援成绩 · -25');
     expect(assisted).toContain('生成成绩卡中…');
