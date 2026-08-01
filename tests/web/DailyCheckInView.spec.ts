@@ -25,9 +25,9 @@ describe('DailyCheckInView', () => {
     expect(css).toContain('.daily-check-in .daily-check-in-status');
   });
 
-  it('blends into the page without an enclosing system-card shell', () => {
+  it('blends into the page as a living scene without an enclosing system-card shell', () => {
     const css = readFileSync(new URL('../../web/styles/legacy.css', import.meta.url), 'utf8');
-    const shellRule = css.match(/\.system-card\.daily-check-in\s*\{([^}]*)\}/)?.[1] ?? '';
+    const shellRule = css.match(/\.daily-check-in\s*\{([^}]*)\}/)?.[1] ?? '';
 
     expect(shellRule).toContain('overflow: visible');
     expect(shellRule).toContain('border: 0');
@@ -53,6 +53,8 @@ describe('DailyCheckInView', () => {
     expect(html).toContain('data-action="claim-daily-check-in"');
     expect(html).toContain('领取第 1 格');
     expect(html).toContain('daily-check-in-stage');
+    expect(html).toContain('living-zone daily-check-in');
+    expect(html).not.toContain('system-card system-card--check-in');
     expect(html).toContain(CHIBI_ART.station.sky);
     expect(html).toContain(CHIBI_ART.station.horizon);
     expect(html).toContain(CHIBI_ART.station.platform);

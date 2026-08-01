@@ -69,7 +69,7 @@ export function renderDailyCheckIn(input: DailyCheckInViewInput): string {
     ? `第 ${displayCycleNumber} 轮全部领取 · 累计 ${input.state.totalClaims} 次`
     : `第 ${displayCycleNumber} 轮 · ${displayClaimCount}/7 · 累计 ${input.state.totalClaims} 次`;
 
-  return `<section class="system-card system-card--check-in deferred-section daily-check-in">
+  return `<section class="deferred-section living-zone daily-check-in">
     <div class="daily-check-in-stage">
       <img class="daily-check-in-layer daily-check-in-layer--sky" src="${CHIBI_ART.station.sky}" alt="">
       <img class="daily-check-in-layer daily-check-in-layer--horizon" src="${CHIBI_ART.station.horizon}" alt="">
