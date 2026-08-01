@@ -179,6 +179,54 @@ async function assertNoHorizontalOverflow(client, label) {
   );
 }
 
+async function assertLivingZoneAccessibility(client, label) {
+  const result = await evaluate(
+    client,
+    `(() => {
+      const livingZones = [...document.querySelectorAll('.living-zone')];
+      const buttons = livingZones.flatMap((zone) => [
+        ...zone.querySelectorAll('button:not([disabled])'),
+      ]);
+      const undersizedButtons = buttons
+        .map((button) => ({
+          label: button.textContent?.trim() ?? '',
+          height: button.getBoundingClientRect().height,
+        }))
+        .filter(({ height }) => height < 44);
+      const interactivePseudos = [...document.querySelectorAll('.living-zone, .living-zone *')]
+        .flatMap((element) => ['::before', '::after'].map((pseudo) => ({
+          element: element.className || element.tagName,
+          pseudo,
+          style: getComputedStyle(element, pseudo),
+        })))
+        .filter(({ style }) => style.content !== 'none' && style.pointerEvents !== 'none')
+        .map(({ element, pseudo }) => ({ element, pseudo }));
+      return {
+        scrollWidth: document.documentElement.scrollWidth,
+        innerWidth: window.innerWidth,
+        livingZoneCount: livingZones.length,
+        undersizedButtons,
+        interactivePseudos,
+      };
+    })()`,
+  );
+  assert.ok(
+    result.scrollWidth <= result.innerWidth,
+    `${label} living station overflow: ${result.scrollWidth} > ${result.innerWidth}`,
+  );
+  assert.ok(result.livingZoneCount >= 1, `${label} missing living zone`);
+  assert.deepEqual(
+    result.undersizedButtons,
+    [],
+    `${label} small touch target(s): ${JSON.stringify(result.undersizedButtons)}`,
+  );
+  assert.deepEqual(
+    result.interactivePseudos,
+    [],
+    `${label} decorative pseudo-element intercepts input: ${JSON.stringify(result.interactivePseudos)}`,
+  );
+}
+
 async function assertBattleHudGeometry(client, label) {
   const geometry = await evaluate(client, `(() => {
     const hud = document.querySelector('.battle-hud__tide-log');
@@ -249,7 +297,10 @@ async function assertBattleHudGeometry(client, label) {
     };
   })()`);
   assert.ok(geometry.hudBottom <= 108, `${label} HUD bottom exceeds 108px: ${geometry.hudBottom}`);
-  assert.ok(geometry.enemyLaneTop - geometry.hudBottom >= 12, `${label} enemy lane gap is below 12px`);
+  assert.ok(
+    geometry.enemyLaneTop - geometry.hudBottom >= 12,
+    `${label} enemy lane gap is below 12px: ${JSON.stringify(geometry)}`,
+  );
   assert.ok(geometry.skillMin >= 56, `${label} skill target is below 56px`);
   assert.ok(geometry.skillCopy.every((copy) => copy.nameVisible), `${label} skill names are clipped or ellipsized`);
   assert.ok(geometry.skillCopy.every((copy) => copy.statusVisible), `${label} skill cooldown copy is clipped or ellipsized`);
@@ -1879,15 +1930,19 @@ async function resetSaveBetweenViewports(client) {
 }
 
 async function exerciseScenes(client, label) {
-  for (const sceneId of [
-    'station',
-    'captain',
-    'equipment',
-    'legion',
-    'store',
-  ]) {
+  const placeRoots = {
+    station: '.station-hero',
+    captain: '.wardrobe-carriage',
+    equipment: '.otter-workshop',
+    legion: '.lighthouse-dock',
+    store: '.supply-market',
+  };
+  for (const [sceneId, placeRoot] of Object.entries(placeRoots)) {
     await navigateScene(client, sceneId);
+    const rootExists = await evaluate(client, `Boolean(document.querySelector(${JSON.stringify(placeRoot)}))`);
+    assert.equal(rootExists, true, `${label} ${sceneId} expected place root is missing: ${placeRoot}`);
     await assertNoHorizontalOverflow(client, `${label} ${sceneId}`);
+    await assertLivingZoneAccessibility(client, `${label} ${sceneId}`);
   }
   await navigateScene(client, 'station');
 }

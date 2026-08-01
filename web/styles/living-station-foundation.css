@@ -10,6 +10,13 @@
   box-shadow: none;
 }
 
+.living-zone::before,
+.living-zone::after,
+.living-zone ::before,
+.living-zone ::after {
+  pointer-events: none;
+}
+
 .station-prop { position: relative; z-index: 2; }
 .station-stamp {
   display: inline-flex;

@@ -199,7 +199,7 @@
 .workbench-item h3 { color: #38271f; }
 .workbench-item p { color: #533c2c; }
 .workbench-item .equipment-actions { margin-top: 12px; }
-.workbench-item button { min-height: 44px; border-color: #5d3d2b; background: #ebc370; color: #38271f; box-shadow: 2px 3px #3c291f80; }
+.workbench-item button { min-height: 46px; border-color: #5d3d2b; background: #ebc370; color: #38271f; box-shadow: 2px 3px #3c291f80; }
 .workbench-item button.chip { background: #2e5c5b; color: #e8e2bd; }
 .workbench-item button:disabled { opacity: .55; }
 

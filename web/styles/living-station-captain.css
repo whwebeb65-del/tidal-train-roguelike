@@ -159,6 +159,7 @@
 .carriage-mirror > * { position: relative; z-index: 1; }
 .carriage-mirror > img { height: min(48vh, 440px); }
 .carriage-mirror .collection-stats { border: 3px dashed #c7ac70; border-radius: 4px 8px 5px 6px; background: #173640dc; }
+.carriage-mirror .chip { min-height: 46px; }
 
 .wardrobe-carriage .skin-grid { align-items: start; }
 .skin-luggage {

@@ -65,6 +65,7 @@
 .route-sign .map-copy h3 { margin: 7px 0 5px; font-size: 20px; }
 .route-sign .map-copy p { margin: 0; color: #b7cdcb; font-size: 11px; line-height: 1.5; }
 .route-sign .chip, .route-sign .locked { position: relative; z-index: 1; align-self: flex-start; margin-top: 12px; }
+.route-sign .chip { min-height: 46px; }
 
 .route-sign.is-locked { color: #b1aaa0; filter: saturate(.35); }
 .route-sign.is-locked::selection { color: inherit; }

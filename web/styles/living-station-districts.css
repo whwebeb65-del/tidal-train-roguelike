@@ -95,7 +95,7 @@
 .supply-crate h3 { margin: 14px 0 7px; font-size: 19px; }
 .supply-crate p { margin: 0; color: #ecd7b1; font-size: 11px; line-height: 1.5; }
 .supply-crate .commerce-reward { margin-top: 11px; color: #ffdc79; font-size: 11px; }
-.supply-crate .chip { align-self: flex-start; margin-top: auto; }
+.supply-crate .chip { align-self: flex-start; min-height: 46px; margin-top: auto; }
 .market-receipt { justify-self: end; max-width: 680px; padding: 11px 14px; color: #5d4634; background: #ead9a7; transform: rotate(1deg); }
 
 .dock-flag {
