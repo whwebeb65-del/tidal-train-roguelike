@@ -90,6 +90,14 @@ describe('browser smoke script', () => {
     expect(source).toContain('chooseStrategicUpgrade');
     expect(source).toContain("[data-upgrade-id=");
     expect(source).toContain('resetSaveBetweenViewports');
+    expect(source).toContain('assertGlobalInteractiveTargets');
+    expect(source).toContain("button:not([disabled])");
+    expect(source).toContain('a[href]');
+    expect(source).toContain("input:not([disabled]):not([type=\"hidden\"])");
+    expect(source).toContain('select:not([disabled])');
+    expect(source).toContain('width < 44 || height < 44');
+    expect(source).toContain('getClientRects().length > 0');
+    expect(source).toContain('settings-panel');
     expect(releaseCapture).toContain('tidal-train-prototype-save-v1');
     expect(releaseCapture).toContain('captureDesktopEvidence');
     expect(releaseCapture).toContain('captureVariantEvidence');

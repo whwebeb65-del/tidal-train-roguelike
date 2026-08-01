@@ -179,6 +179,47 @@ async function assertNoHorizontalOverflow(client, label) {
   );
 }
 
+async function assertGlobalInteractiveTargets(client, label) {
+  const interactiveSelector = [
+    'button:not([disabled])',
+    'a[href]',
+    'input:not([disabled]):not([type="hidden"])',
+    'select:not([disabled])',
+  ].join(', ');
+  const undersized = await evaluate(
+    client,
+    `(() => [...document.querySelectorAll(${JSON.stringify(interactiveSelector)})]
+      .filter((element) => {
+        const style = getComputedStyle(element);
+        return element.getClientRects().length > 0
+          && style.display !== 'none'
+          && style.visibility !== 'hidden'
+          && Number.parseFloat(style.opacity) > 0;
+      })
+      .map((element) => {
+        const rect = element.getBoundingClientRect();
+        return {
+          tag: element.tagName.toLowerCase(),
+          action: element.getAttribute('data-action')
+            ?? element.getAttribute('data-battle-action')
+            ?? element.getAttribute('href')
+            ?? '',
+          label: element.getAttribute('aria-label')
+            ?? element.textContent?.trim()
+            ?? '',
+          width: rect.width,
+          height: rect.height,
+        };
+      })
+      .filter(({ width, height }) => width < 44 || height < 44))()`,
+  );
+  assert.deepEqual(
+    undersized,
+    [],
+    `${label} interactive target(s) below 44x44: ${JSON.stringify(undersized)}`,
+  );
+}
+
 async function assertLivingZoneAccessibility(client, label) {
   const result = await evaluate(
     client,
@@ -411,9 +452,9 @@ async function assertMobileReadingSafety(client, label) {
         && brand.scrollWidth <= brand.clientWidth + 1
         && brandBox.left >= 0
         && brandBox.right <= innerWidth;
-      const controlsUsable = [resetBox, settingsBox].every((box) => (
-        box.width >= 32
-        && box.height >= 32
+       const controlsUsable = [resetBox, settingsBox].every((box) => (
+         box.width >= 44
+         && box.height >= 44
         && box.left >= 0
         && box.right <= innerWidth
       ));
@@ -1943,8 +1984,34 @@ async function exerciseScenes(client, label) {
     assert.equal(rootExists, true, `${label} ${sceneId} expected place root is missing: ${placeRoot}`);
     await assertNoHorizontalOverflow(client, `${label} ${sceneId}`);
     await assertLivingZoneAccessibility(client, `${label} ${sceneId}`);
+    await assertGlobalInteractiveTargets(client, `${label} ${sceneId}`);
   }
   await navigateScene(client, 'station');
+  const settingsOpened = await evaluate(client, `(() => {
+    const button = document.querySelector('[data-action="open-settings"]');
+    if (!(button instanceof HTMLButtonElement)) return false;
+    button.click();
+    return true;
+  })()`);
+  assert.equal(settingsOpened, true, `${label} settings control must open the form`);
+  await waitForEvaluation(
+    client,
+    `Boolean(document.querySelector('.settings-panel'))`,
+    { label: `${label} settings-panel` },
+  );
+  await assertGlobalInteractiveTargets(client, `${label} settings/form`);
+  const settingsClosed = await evaluate(client, `(() => {
+    const button = document.querySelector('[data-action="close-settings"]');
+    if (!(button instanceof HTMLButtonElement)) return false;
+    button.click();
+    return true;
+  })()`);
+  assert.equal(settingsClosed, true, `${label} settings close control must remain available`);
+  await waitForEvaluation(
+    client,
+    `!document.querySelector('.settings-panel')`,
+    { label: `${label} closed settings-panel` },
+  );
 }
 
 async function runViewport(client, viewport, smokeId, browserErrors) {

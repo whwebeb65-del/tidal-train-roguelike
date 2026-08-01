@@ -594,7 +594,7 @@
 }
 
 .founder-passport b { margin-right: 3px; font-size: 10px; }
-.founder-passport__badge { padding: 4px 7px; border: 2px solid #6d4b55; border-radius: 2px 6px 4px 5px; color: #6d3f56; background: #f6e8bc; font-size: 10px; }
+.founder-passport .founder-passport__badge { padding: 4px 7px; border: 2px solid #6d4b55; border-radius: 2px 6px 4px 5px; color: #6d3f56; background: #f6e8bc; font-size: 10px; }
 .founder-passport small { color: #796653; font-size: 10px; }
 
 .gift-code-checkpoint {
@@ -615,7 +615,7 @@
 .gift-code-checkpoint::before { position: absolute; top: -13px; left: 18px; padding: 3px 8px; content: '检票口'; color: #472f28; border: 2px solid #4d3529; border-radius: 3px 6px 2px 5px; background: #e0b961; font: 900 10px/1 monospace; }
 .gift-code-checkpoint label { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 10px; min-width: 0; }
 .gift-code-checkpoint label > span { color: #d5c295; font-size: 10px; white-space: nowrap; }
-.gift-code-checkpoint input { min-width: 0; width: 100%; padding: 10px 12px; border: 2px solid #876343; border-radius: 3px 6px 4px 5px; outline: none; color: #f7eed8; background: #102a31; font: inherit; text-transform: uppercase; }
+.gift-code-checkpoint input { min-width: 0; width: 100%; min-height: 44px; padding: 10px 12px; border: 2px solid #876343; border-radius: 3px 6px 4px 5px; outline: none; color: #f7eed8; background: #102a31; font: inherit; text-transform: uppercase; }
 .gift-code-checkpoint input:focus { border-color: #f0cf70; box-shadow: 0 0 0 3px #f0cf7040; }
 .gift-code-checkpoint .secondary { border: 3px solid #3e2d26; border-radius: 4px 7px 5px 6px; background: #a74f40; box-shadow: 3px 4px #07172092; font-weight: 800; }
 .gift-code-checkpoint > small { grid-column: 1 / -1; color: #b9cab8; font-size: 10px; }

@@ -66,10 +66,14 @@ interface HudNodes {
   readonly settlementGears: HTMLElement;
   readonly settlementRouteMarks: HTMLElement;
   readonly settlementStarTickets: HTMLElement;
+  readonly settlementRewards: HTMLElement;
+  readonly settlementProgression: HTMLElement;
   readonly settlementAccount: HTMLElement;
   readonly settlementMastery: HTMLElement;
   readonly expedition: HTMLElement;
   readonly dailyScore: HTMLElement;
+  readonly firstClearTicket: HTMLElement;
+  readonly repeatClearTicket: HTMLElement;
   readonly doubleButton: HTMLButtonElement;
   readonly returnButton: HTMLButtonElement;
 }
@@ -133,11 +137,11 @@ export function renderBattleHudShell(): string {
       </div>
     </section>
 
-    <section class="battle-overlay battle-overlay--upgrade" data-upgrade-overlay hidden>
-      <div class="battle-dialog battle-dialog--upgrade">
-        <span class="battle-dialog__eyebrow">ROGUELITE UPGRADE</span>
-        <h2>选择一项潮汐强化</h2>
-        <p>本次选择立即生效，最高可叠加至 3 级。</p>
+    <section class="battle-overlay battle-overlay--upgrade living-zone cargo-unloading" data-upgrade-overlay hidden>
+      <div class="battle-dialog battle-dialog--upgrade cargo-unloading__manifest">
+        <span class="battle-dialog__eyebrow">CARGO UNLOADING / ROGUELITE UPGRADE</span>
+        <h2>打开一只潮汐奖励箱</h2>
+        <p>三选一立即装车，最高可叠加至 3 级。</p>
         <div class="battle-upgrade-grid" data-upgrade-options>
           ${Array.from({ length: 3 }, (_, index) => upgradeSlot(index)).join('')}
         </div>
@@ -159,15 +163,19 @@ export function renderBattleHudShell(): string {
       </div>
     </section>
 
-    <section class="battle-overlay battle-overlay--settlement" data-settlement-overlay hidden>
+    <section class="battle-overlay battle-overlay--settlement living-zone" data-settlement-overlay hidden>
       <div class="battle-dialog battle-dialog--settlement">
+        <div class="settlement-symbol" aria-hidden="true">潮</div>
         <span class="battle-dialog__eyebrow">RUN SETTLED</span>
         <h2 data-settlement-title></h2>
         <p data-settlement-description></p>
-        <div class="battle-settlement-rewards">
-          <span><i>齿轮</i><b data-settlement-gears>0</b><small>齿轮</small></span>
-          <span><i>徽记</i><b data-settlement-route-marks>0</b><small>航线徽记</small></span>
-          <span><i>星票</i><b data-settlement-star-tickets>0</b><small>星票</small></span>
+        <div class="arrival-ticket arrival-ticket--first-clear" data-arrival-ticket="first" aria-label="首次通关到站票" hidden><span>ARRIVAL PASS</span><b>FIRST CLEAR</b></div>
+        <div class="arrival-ticket arrival-ticket--repeat-clear" data-arrival-ticket="repeat" aria-label="重复通关到站票" hidden><span>ARRIVAL PASS</span><b>REPEAT RUN</b></div>
+        <div class="daily-score score-stamp" data-trial-score-stamp data-settlement-daily-score hidden></div>
+        <div class="battle-settlement-rewards reward-luggage">
+          <span class="currency"><i>齿轮</i><b data-settlement-gears>0</b><small>齿轮</small></span>
+          <span class="currency"><i>徽记</i><b data-settlement-route-marks>0</b><small>航线徽记</small></span>
+          <span class="currency"><i>星票</i><b data-settlement-star-tickets>0</b><small>星票</small></span>
         </div>
         <div class="battle-settlement-progression">
           <p data-settlement-account hidden></p>
@@ -175,7 +183,6 @@ export function renderBattleHudShell(): string {
         </div>
         <div class="battle-settlement-meta">
           <span data-settlement-expedition hidden></span>
-          <span data-settlement-daily-score hidden></span>
         </div>
         <div class="battle-dialog__actions">
           <button type="button" class="battle-button battle-button--accent" data-battle-action="double-settlement" hidden>看广告领取重复通关双倍</button>
@@ -413,6 +420,37 @@ export class BattleHUD {
     nodes.reviveButton.disabled = model.pendingActions.has('revive');
 
     nodes.settlementOverlay.hidden = !model.settlementVisible;
+    const trialSettlement = model.settlement !== null
+      && model.settlement.dailyTrialScore !== null;
+    const firstClearSettlement = !trialSettlement
+      && model.settlement?.firstClear === true;
+    const repeatClearSettlement = !trialSettlement
+      && model.settlement?.firstClear === false;
+    nodes.settlementOverlay.classList.toggle(
+      'arrival-platform',
+      model.settlement !== null && !trialSettlement,
+    );
+    nodes.settlementOverlay.classList.toggle(
+      'trial-record-board',
+      trialSettlement,
+    );
+    nodes.settlementOverlay.classList.toggle(
+      'is-first-clear',
+      firstClearSettlement,
+    );
+    nodes.settlementOverlay.classList.toggle(
+      'is-repeat-clear',
+      repeatClearSettlement,
+    );
+    nodes.settlementOverlay.classList.toggle(
+      'is-returned',
+      model.settlement !== null
+        && !trialSettlement
+        && model.settlement.firstClear == null,
+    );
+    nodes.firstClearTicket.hidden = !firstClearSettlement;
+    nodes.repeatClearTicket.hidden = !repeatClearSettlement;
+    nodes.settlementRewards.hidden = trialSettlement;
     if (model.settlement) {
       setText(nodes.settlementTitle, model.settlement.title);
       setText(
@@ -445,6 +483,8 @@ export class BattleHUD {
         .join('；');
       nodes.settlementMastery.hidden = mastery.length === 0;
       setText(nodes.settlementMastery, mastery);
+      nodes.settlementProgression.hidden =
+        nodes.settlementAccount.hidden && nodes.settlementMastery.hidden;
       nodes.expedition.hidden = model.settlement.expeditionPoints <= 0;
       setText(
         nodes.expedition,
@@ -455,7 +495,7 @@ export class BattleHUD {
         nodes.dailyScore,
         model.settlement.dailyTrialScore === null
           ? ''
-          : `每日试炼得分 ${model.settlement.dailyTrialScore}`,
+          : `本局得分 ${model.settlement.dailyTrialScore}`,
       );
     }
     nodes.doubleButton.hidden = !model.doubleSettlementVisible;
@@ -492,7 +532,7 @@ function skillButton(
 }
 
 function upgradeSlot(index: number): string {
-  return `<button class="battle-upgrade-card" type="button" data-upgrade-slot="${index}" hidden>
+  return `<button class="battle-upgrade-card reward-crate" type="button" data-upgrade-slot="${index}" hidden>
     <span data-upgrade-level></span>
     <b data-upgrade-name></b>
     <p data-upgrade-effect></p>
@@ -559,10 +599,17 @@ function collectNodes(host: HTMLElement): HudNodes {
       host,
       '[data-settlement-star-tickets]',
     ),
+    settlementRewards: requireElement(host, '.battle-settlement-rewards'),
+    settlementProgression: requireElement(
+      host,
+      '.battle-settlement-progression',
+    ),
     settlementAccount: requireElement(host, '[data-settlement-account]'),
     settlementMastery: requireElement(host, '[data-settlement-mastery]'),
     expedition: requireElement(host, '[data-settlement-expedition]'),
     dailyScore: requireElement(host, '[data-settlement-daily-score]'),
+    firstClearTicket: requireElement(host, '[data-arrival-ticket="first"]'),
+    repeatClearTicket: requireElement(host, '[data-arrival-ticket="repeat"]'),
     doubleButton: requireElement(
       host,
       '[data-battle-action="double-settlement"]',

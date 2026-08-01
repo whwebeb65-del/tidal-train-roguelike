@@ -104,7 +104,8 @@
 }
 
 .app-shell__reset {
-  min-height: 32px;
+  min-width: 44px;
+  min-height: 44px;
   padding: 5px 9px;
   border: 1px solid var(--line);
   border-radius: 999px;
@@ -307,6 +308,12 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .app-notice,
+  .app-notice.is-visible {
+    transition: none;
+    transform: translateX(-50%);
+  }
+
   .hub-nav__item[aria-current="page"],
   .hub-nav__item.is-active {
     transform: none;

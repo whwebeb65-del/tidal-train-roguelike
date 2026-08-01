@@ -18,6 +18,10 @@ const battleHudCss = readFileSync(
   resolve(process.cwd(), 'web/styles/battle-hud.css'),
   'utf8',
 );
+const livingStationFlowCss = readFileSync(
+  resolve(process.cwd(), 'web/styles/living-station-flow.css'),
+  'utf8',
+);
 
 describe('BattleHUD', () => {
   function createCallbacks(
@@ -58,6 +62,104 @@ describe('BattleHUD', () => {
     expect(html).not.toContain('✦');
     expect(html).not.toContain('data-boss-bar');
     expect(html).not.toContain('data-boss-label');
+  });
+
+  it('uses the real upgrade overlay as cargo unloading without changing battle actions', () => {
+    const host = document.createElement('div');
+    host.innerHTML = renderBattleHudShell();
+
+    expect(host.querySelector(
+      '[data-upgrade-overlay].living-zone.cargo-unloading',
+    )).not.toBeNull();
+    expect(host.querySelectorAll(
+      '[data-upgrade-options] [data-upgrade-slot].reward-crate',
+    )).toHaveLength(3);
+    expect(host.querySelector(
+      '[data-battle-action="upgrade-reroll"]',
+    )).not.toBeNull();
+    expect(livingStationFlowCss).toContain('.cargo-unloading');
+    expect(livingStationFlowCss).toContain('.reward-crate');
+  });
+
+  it('switches the real settlement overlay between arrival tickets and a trial score stamp', () => {
+    const hud = new BattleHUD(createCallbacks(), window);
+    const host = document.createElement('div');
+    document.body.append(host);
+    hud.mount(host);
+    const frame = createFrameFixture({ status: 'victory' });
+    const settlement = {
+      title: '潮汐航线通关',
+      description: '奖励已到账。',
+      rewards: { gears: 400, routeMarks: 10, starTickets: 3 },
+      expeditionPoints: 8,
+      dailyTrialScore: null,
+      doubleSettlementAvailable: false,
+      doubled: false,
+      firstClear: true,
+    };
+
+    hud.update(createBattleHudModel(frame, {
+      ...createHudModelOptionsFixture(),
+      settlement,
+    }));
+
+    const overlay = host.querySelector<HTMLElement>('[data-settlement-overlay]');
+    const firstTicket = host.querySelector<HTMLElement>('[data-arrival-ticket="first"]');
+    const repeatTicket = host.querySelector<HTMLElement>('[data-arrival-ticket="repeat"]');
+    const scoreStamp = host.querySelector<HTMLElement>('[data-trial-score-stamp]');
+    expect(overlay?.hidden).toBe(false);
+    expect(overlay?.matches(
+      '.living-zone.arrival-platform.is-first-clear:not(.trial-record-board)',
+    )).toBe(true);
+    expect(host.querySelector('.reward-luggage')).not.toBeNull();
+    expect(firstTicket?.hidden).toBe(false);
+    expect(repeatTicket?.hidden).toBe(true);
+    expect(scoreStamp?.hidden).toBe(true);
+
+    hud.update(createBattleHudModel(frame, {
+      ...createHudModelOptionsFixture(),
+      settlement: {
+        ...settlement,
+        rewards: { gears: 80, routeMarks: 2, starTickets: 0 },
+        firstClear: false,
+        doubleSettlementAvailable: true,
+      },
+    }));
+    expect(overlay?.matches(
+      '.living-zone.arrival-platform.is-repeat-clear:not(.trial-record-board)',
+    )).toBe(true);
+    expect(firstTicket?.hidden).toBe(true);
+    expect(repeatTicket?.hidden).toBe(false);
+
+    hud.update(createBattleHudModel(frame, {
+      ...createHudModelOptionsFixture(),
+      mode: 'daily-trial',
+      settlement: {
+        ...settlement,
+        title: '每日试炼完成',
+        rewards: { gears: 0, routeMarks: 0, starTickets: 0 },
+        expeditionPoints: 0,
+        dailyTrialScore: 215,
+        firstClear: null,
+      },
+    }));
+    expect(overlay?.matches(
+      '.living-zone.trial-record-board:not(.arrival-platform)',
+    )).toBe(true);
+    expect(firstTicket?.hidden).toBe(true);
+    expect(repeatTicket?.hidden).toBe(true);
+    expect(scoreStamp?.hidden).toBe(false);
+    expect(scoreStamp?.classList.contains('score-stamp')).toBe(true);
+    expect(scoreStamp?.textContent).toContain('215');
+    expect(host.querySelector<HTMLElement>(
+      '.battle-settlement-progression',
+    )?.hidden).toBe(true);
+    expect(host.querySelector(
+      '[data-battle-action="return-station"]',
+    )).not.toBeNull();
+
+    hud.dispose();
+    host.remove();
   });
 
   it('renders account and used-skill mastery settlement rows beneath currencies without another modal', () => {

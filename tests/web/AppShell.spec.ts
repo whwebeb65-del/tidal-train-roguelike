@@ -82,6 +82,24 @@ describe('AppShell', () => {
     expect(css).toContain('min-height: 44px');
   });
 
+  it('keeps topbar actions at least 44px on both axes in mobile overrides', () => {
+    const css = [
+      readFileSync(new URL('../../web/styles/responsive.css', import.meta.url), 'utf8'),
+      readFileSync(new URL('../../web/styles/app-shell-v2.css', import.meta.url), 'utf8'),
+      readFileSync(new URL('../../web/styles/settings-panel.css', import.meta.url), 'utf8'),
+    ].join('\n');
+
+    expect(css).toMatch(
+      /\.app-shell__reset,[\s\S]*?\.app-shell__settings\s*\{[^}]*min-width:\s*44px;[^}]*min-height:\s*44px;/,
+    );
+  });
+
+  it('removes notice transition and vertical displacement for reduced motion', () => {
+    expect(appShellCss).toMatch(
+      /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.app-notice,[\s\S]*?\.app-notice\.is-visible\s*\{[^}]*transition:\s*none;[^}]*transform:\s*translateX\(-50%\);/,
+    );
+  });
+
   it('reserves a mobile notice lane away from readable content and fixed navigation', () => {
     expect(appShellCss).toContain('.scene-viewport:has(.app-notice.is-visible)');
     expect(appShellCss).toMatch(

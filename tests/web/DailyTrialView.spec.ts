@@ -1,3 +1,5 @@
+// @vitest-environment jsdom
+
 import { describe, expect, it } from 'vitest';
 import {
   createDailyTrialState,
@@ -6,7 +8,6 @@ import {
 import {
   renderDailyTrialHub,
   renderDailyTrialRunBanner,
-  renderDailyTrialSettlement,
 } from '../../web/views/DailyTrialView';
 
 const definition = getDailyTrialDefinition('2026-07-16');
@@ -43,6 +44,59 @@ describe('DailyTrialView', () => {
     expect(html).toContain('data-action="start-daily-trial"');
   });
 
+  it.each([
+    {
+      label: 'unlit and disabled before reaching the milestone',
+      bestScore: 0,
+      claimedMilestoneIds: [],
+      signalState: 'unlit',
+      className: 'is-unlit',
+      disabled: true,
+    },
+    {
+      label: 'lit and claimable after reaching the milestone',
+      bestScore: 20,
+      claimedMilestoneIds: [],
+      signalState: 'lit',
+      className: 'is-lit',
+      disabled: false,
+    },
+    {
+      label: 'stamped and disabled after claiming the milestone',
+      bestScore: 20,
+      claimedMilestoneIds: ['participation'] as const,
+      signalState: 'stamped',
+      className: 'is-stamped',
+      disabled: true,
+    },
+  ])('maps participation to $label', ({
+    bestScore,
+    claimedMilestoneIds,
+    signalState,
+    className,
+    disabled,
+  }) => {
+    const html = renderDailyTrialHub({
+      stationLevel: 2,
+      definition,
+      state: {
+        ...state,
+        bestScore,
+        claimedMilestoneIds,
+      },
+    });
+    const host = document.createElement('div');
+    host.innerHTML = html;
+    const button = host.querySelector<HTMLButtonElement>(
+      '[data-milestone-id="participation"]',
+    );
+    const signal = button?.closest<HTMLElement>('.signal-post');
+
+    expect(signal?.dataset.signalState).toBe(signalState);
+    expect(signal?.classList.contains(className)).toBe(true);
+    expect(button?.disabled).toBe(disabled);
+  });
+
   it('renders the active combat rule and exact modifiers', () => {
     const html = renderDailyTrialRunBanner({ definition });
 
@@ -51,30 +105,4 @@ describe('DailyTrialView', () => {
     expect(html).toContain(`种子 ${definition.seed}`);
   });
 
-  it('renders best-score, assistance, and share states', () => {
-    const normal = renderDailyTrialSettlement({
-      score: 20,
-      bestScore: 20,
-      attempts: 1,
-      improved: true,
-      assisted: false,
-      sharePending: false,
-    });
-    const assisted = renderDailyTrialSettlement({
-      score: 215,
-      bestScore: 240,
-      attempts: 3,
-      improved: false,
-      assisted: true,
-      sharePending: true,
-    });
-
-    expect(normal).toContain('刷新最佳');
-    expect(normal).toContain('分享同种子试炼');
-    expect(normal).toContain('living-zone trial-record-board');
-    expect(normal).toContain('score-stamp');
-    expect(normal).toContain('data-action="back-station"');
-    expect(assisted).toContain('救援成绩 · -25');
-    expect(assisted).toContain('生成成绩卡中…');
-  });
 });

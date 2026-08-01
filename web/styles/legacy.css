@@ -513,18 +513,12 @@ main { width: min(1060px, 100%); margin: 0 auto; padding: 40px 18px 24px; }
 .daily-trial-banner small { color: #7f99a5; font-size: 9px; }
 .compact-modifiers { justify-content: flex-end; margin-top: 0; }
 .daily-trial-fairness { margin: 18px 0; border-left-color: #a98bff; }
-.daily-trial-settlement { display: flex; align-items: center; flex-direction: column; justify-content: center; text-align: center; }
-.daily-trial-symbol { background: linear-gradient(135deg, #62ded1, #a78cff); }
-.daily-trial-settlement h1 { margin-bottom: 8px; }
-.daily-trial-settlement > p { max-width: 560px; margin-top: 0; color: #87a3aa; }
 .daily-score { min-width: min(320px, 100%); margin: 20px 0 4px; padding: 16px; border-radius: 16px; background: #0c2330; border: 1px solid #315664; }
 .daily-score small, .daily-score b, .daily-score strong, .daily-score span { display: block; }
 .daily-score small { color: #7497a0; font-size: 10px; }
 .daily-score b { margin: 3px 0; color: #f1ce88; font-size: 36px; }
 .daily-score strong { color: #61dacd; font-size: 10px; }
 .daily-score span { color: #6d8992; font-size: 10px; }
-.settlement-stats { width: min(520px, 100%); }
-.daily-settlement-actions { display: flex; gap: 10px; margin: 18px 0; }
 
 .launch-campaign { margin-top: 20px; padding: 20px; border-radius: 20px; background: linear-gradient(145deg, #241d35, #11273a 62%, #0b202c); border: 1px solid #6c527a; contain: layout paint; }
 .campaign-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; }
@@ -675,9 +669,9 @@ main { width: min(1060px, 100%); margin: 0 auto; padding: 40px 18px 24px; }
   .daily-check-in-action small { max-width: 210px; }
   .daily-check-in-action button { margin-top: auto; }
   .daily-trial-heading, .daily-trial-banner { align-items: flex-start; flex-direction: column; }
-  .daily-trial-heading .primary, .daily-settlement-actions, .daily-settlement-actions button { width: 100%; }
+  .daily-trial-heading .primary { width: 100%; }
   .daily-trial-milestones { grid-template-columns: 1fr; }
-  .daily-trial-stats, .daily-settlement-actions { flex-direction: column; }
+  .daily-trial-stats { flex-direction: column; }
   .compact-modifiers { justify-content: flex-start; }
   .campaign-heading { flex-direction: column; } .campaign-status { width: 100%; text-align: center; }
   .campaign-grid, .gift-code-form { grid-template-columns: 1fr; }

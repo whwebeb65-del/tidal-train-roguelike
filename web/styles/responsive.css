@@ -72,9 +72,10 @@
   .currency span { display: none; }
   .app-shell__reset,
   .app-shell__settings {
-    flex: 0 0 34px;
-    width: 34px;
-    min-height: 32px;
+    flex: 0 0 44px;
+    width: 44px;
+    min-width: 44px;
+    min-height: 44px;
     padding: 4px 2px;
     font-size: 9px;
   }

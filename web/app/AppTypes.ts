@@ -39,6 +39,7 @@ export interface BattleSettlementPresentation {
   };
   readonly expeditionPoints: number;
   readonly dailyTrialScore: number | null;
+  readonly firstClear?: boolean | null;
   readonly doubleSettlementAvailable: boolean;
   readonly doubled: boolean;
   readonly accountProgression?: {

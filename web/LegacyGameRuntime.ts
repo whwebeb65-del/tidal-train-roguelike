@@ -208,7 +208,7 @@ export function settleNormalOutcomeForSave(
   mapId: MapId = 'drift-suburb',
   options: NormalSettlementOptions = {},
 ): BattleSettlementTransaction {
-  if (current.settledBattleIds.includes(outcome.battleId)) return { accepted: false, save: current, presentation: { title: '本局已结算', description: '该战斗结果已写入存档，不会重复发放奖励。', rewards: { gears: 0, routeMarks: 0, starTickets: 0 }, expeditionPoints: 0, dailyTrialScore: null, doubleSettlementAvailable: false, doubled: false, accountProgression: { gainedXp: 0, staminaSpendXp: 0, level: current.accountLevel, xp: current.accountXp, levelsGained: 0 }, skillMastery: {} } };
+  if (current.settledBattleIds.includes(outcome.battleId)) return { accepted: false, save: current, presentation: { title: '本局已结算', description: '该战斗结果已写入存档，不会重复发放奖励。', rewards: { gears: 0, routeMarks: 0, starTickets: 0 }, expeditionPoints: 0, dailyTrialScore: null, firstClear: null, doubleSettlementAvailable: false, doubled: false, accountProgression: { gainedXp: 0, staminaSpendXp: 0, level: current.accountLevel, xp: current.accountXp, levelsGained: 0 }, skillMastery: {} } };
   const firstClear = outcome.victory
     ? claimFirstClear({ claimedMapIds: current.firstClearMapIds }, { mapId, gears: 400, routeMarks: 10, starTickets: 3, collectionId: `${mapId}-first-clear` })
     : { granted: false, state: { claimedMapIds: current.firstClearMapIds } };
@@ -224,7 +224,7 @@ export function settleNormalOutcomeForSave(
     .filter(([, gainedXp]) => gainedXp > 0)
     .map(([skillId, gainedXp]) => [skillId, { gainedXp, level: skillMasteryLevelFromXp(mastery.nextXp[skillId as BattleSkillId]) }]));
   const staminaSpendXp = options.staminaSpendXp ?? 0;
-  return { accepted: true, save, presentation: { title: outcome.victory ? (firstClear.granted ? '航线首次打通！' : '潮汐航线通关') : '列车撤回', description: '', rewards, expeditionPoints: 0, dailyTrialScore: null, doubleSettlementAvailable: outcome.victory && !firstClear.granted, doubled: false, accountProgression: { gainedXp: xp.total + staminaSpendXp, staminaSpendXp, level: account.level, xp: account.xp, levelsGained: account.level - (options.accountLevelStart ?? current.accountLevel) }, skillMastery } };
+  return { accepted: true, save, presentation: { title: outcome.victory ? (firstClear.granted ? '航线首次打通！' : '潮汐航线通关') : '列车撤回', description: '', rewards, expeditionPoints: 0, dailyTrialScore: null, firstClear: outcome.victory ? firstClear.granted : null, doubleSettlementAvailable: outcome.victory && !firstClear.granted, doubled: false, accountProgression: { gainedXp: xp.total + staminaSpendXp, staminaSpendXp, level: account.level, xp: account.xp, levelsGained: account.level - (options.accountLevelStart ?? current.accountLevel) }, skillMastery } };
 }
 
 export interface LegacyGameRuntime extends BattleE2EController {
@@ -271,6 +271,28 @@ export interface LegacyRuntimeDependencies {
   ) => void;
 }
 
+export interface RuntimeE2EConfig {
+  readonly enabled: boolean;
+  readonly equipmentEmpty: boolean;
+  readonly purchaseDelayMs: number;
+}
+
+export function parseRuntimeE2EConfig(search: string): RuntimeE2EConfig {
+  const searchParams = new URLSearchParams(search);
+  const enabled = searchParams.get('e2e') === '1';
+  if (!enabled) {
+    return { enabled: false, equipmentEmpty: false, purchaseDelayMs: 0 };
+  }
+  const requestedDelayMs = Number(searchParams.get('e2ePurchaseDelayMs'));
+  return {
+    enabled: true,
+    equipmentEmpty: searchParams.get('e2eEquipmentEmpty') === '1',
+    purchaseDelayMs: Number.isFinite(requestedDelayMs)
+      ? Math.min(Math.max(Math.floor(requestedDelayMs), 0), 5_000)
+      : 0,
+  };
+}
+
 export function createLegacyGameRuntime(
   app: HTMLElement,
   storage: Storage,
@@ -287,16 +309,10 @@ const telemetry = createMemoryTelemetry();
 const ads = new MockAds('completed');
 const share = new MockShare('completed');
 const runtimeSearchParams = new URLSearchParams(window.location.search);
-const e2eEnabled = runtimeSearchParams.get('e2e') === '1';
-const e2eEquipmentEmpty = e2eEnabled
-  && runtimeSearchParams.get('e2eEquipmentEmpty') === '1';
-const requestedE2EPurchaseDelayMs = Number(
-  runtimeSearchParams.get('e2ePurchaseDelayMs'),
-);
-const e2ePurchaseDelayMs = e2eEnabled
-  && Number.isFinite(requestedE2EPurchaseDelayMs)
-  ? Math.min(Math.max(Math.floor(requestedE2EPurchaseDelayMs), 0), 5_000)
-  : 0;
+const runtimeE2EConfig = parseRuntimeE2EConfig(window.location.search);
+const e2eEnabled = runtimeE2EConfig.enabled;
+const e2eEquipmentEmpty = runtimeE2EConfig.equipmentEmpty;
+const e2ePurchaseDelayMs = runtimeE2EConfig.purchaseDelayMs;
 const store = new MockStore('verified', e2ePurchaseDelayMs);
 let save = repository.load();
 if (e2eEquipmentEmpty) {
@@ -1378,6 +1394,7 @@ function settledBattlePresentation(outcome: BattleOutcome): BattleSettlementPres
     rewards: { gears: 0, routeMarks: 0, starTickets: 0 },
     expeditionPoints: 0,
     dailyTrialScore: null,
+    firstClear: null,
     doubleSettlementAvailable: false,
     doubled: false,
     accountProgression: emptyAccountProgression(),
@@ -1422,6 +1439,7 @@ function settleDynamicDailyTrial(
     rewards: { gears: 0, routeMarks: 0, starTickets: 0 },
     expeditionPoints: 0,
     dailyTrialScore: result.score,
+    firstClear: null,
     doubleSettlementAvailable: false,
     doubled: false,
     accountProgression: emptyAccountProgression(),

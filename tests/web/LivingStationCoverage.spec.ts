@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createRequire } from 'node:module';
+import { readFileSync } from 'node:fs';
 import { PRODUCT_CATALOG } from '../../src/domain/commerce/ProductCatalog';
 import { createStarterEquipmentState } from '../../src/domain/equipment/EquipmentSystem';
 import { createDailyTrialState, getDailyTrialDefinition } from '../../src/domain/challenge/DailyTrialSystem';
@@ -99,15 +100,31 @@ describe('living station non-battle coverage', () => {
     expect(dialog?.classList.contains('system-card')).toBe(false);
   });
 
-  it('covers the real BattleHUD failure and settlement paths, not the orphan RunSceneView', () => {
+  it('covers the BattleHUD surfaces instantiated by the production runtime', () => {
     const hud = root(renderBattleHudShell());
+    const upgrade = hud.querySelector(
+      '[data-upgrade-overlay].living-zone.cargo-unloading',
+    );
     const repairBay = hud.querySelector('[data-failure-overlay].repair-bay');
-    const settlement = hud.querySelector('[data-settlement-overlay] > .battle-dialog--settlement');
+    const settlement = hud.querySelector(
+      '[data-settlement-overlay].living-zone > .battle-dialog--settlement',
+    );
+    const runtime = readFileSync(
+      new URL('../../web/LegacyGameRuntime.ts', import.meta.url),
+      'utf8',
+    );
 
     expect(hud.matches('[data-battle-hud-root]')).toBe(true);
+    expect(upgrade).not.toBeNull();
+    expect(upgrade?.querySelectorAll('.reward-crate')).toHaveLength(3);
     expect(repairBay).not.toBeNull();
     expect(settlement).not.toBeNull();
+    expect(settlement?.querySelector('.reward-luggage')).not.toBeNull();
+    expect(settlement?.querySelector('[data-arrival-ticket="first"]')).not.toBeNull();
+    expect(settlement?.querySelector('[data-trial-score-stamp]')).not.toBeNull();
     expect(repairBay?.classList.contains('system-card')).toBe(false);
     expect(settlement?.classList.contains('system-card')).toBe(false);
+    expect(runtime).toContain("import { BattleHUD } from './battle/BattleHUD'");
+    expect(runtime).toContain('createHud: (callbacks) => new BattleHUD(callbacks)');
   });
 });
