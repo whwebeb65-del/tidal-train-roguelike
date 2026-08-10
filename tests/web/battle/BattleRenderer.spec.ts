@@ -291,6 +291,29 @@ describe('BattleRenderer', () => {
     expect(findCommand<LineDrawCommand>(commands, (item) => item.kind === 'effect-extreme-vortex').points).toHaveLength(3);
     expect(findCommand<LineDrawCommand>(commands, (item) => item.kind === 'effect-second-crest').points).toHaveLength(5);
   });
+
+  it('renders premium impact signatures as readable strokes and ripples', () => {
+    const effects: EffectFrameView = {
+      particles: [
+        { id: 31, kind: 'critical-shard', layer: 'front-effects', x: 140, y: 260, size: 9, color: '#fff0a8', alpha: 1, rotation: 0.4, progress: 0.2 },
+        { id: 32, kind: 'armour-spark', layer: 'front-effects', x: 170, y: 280, size: 8, color: '#ff9c69', alpha: 1, rotation: 1.1, progress: 0.3 },
+        { id: 33, kind: 'weakpoint-flare', layer: 'front-effects', x: 195, y: 240, size: 12, color: '#fff4a8', alpha: 1, rotation: 0, progress: 0.1 },
+      ],
+      rings: [{ id: 34, kind: 'boss-entrance-ripple', x: 195, y: 250, radius: 88, color: '#ff7b72', secondaryColor: '#706cff', alpha: 0.8 }],
+      damageNumbers: [],
+      camera: { x: 0, y: 0, rotation: 0, amplitude: 0 },
+      cinematic: { darken: 0, title: null, slowMotion: 0 },
+    };
+    const commands = renderCommands({ effects });
+    expect(commands.map((item) => item.kind)).toEqual(expect.arrayContaining([
+      'effect-critical-shard',
+      'effect-armour-spark',
+      'effect-weakpoint-flare',
+      'boss-entrance-ripple',
+      'boss-entrance-ripple-secondary',
+    ]));
+    expect(commands.filter((item) => item.kind === 'effect-weakpoint-flare')).toHaveLength(2);
+  });
   it.each(Object.keys(ENEMY_GEOMETRY) as EnemyKind[])(
     'keeps animated %s sprite, label, and health bar below the HUD gap',
     (kind) => {

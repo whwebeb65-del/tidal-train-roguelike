@@ -4,6 +4,31 @@ import { getRenderBudget } from '../../../web/battle/QualityMonitor';
 import { createFrameFixture } from './helpers/BattleFixtures';
 
 describe('EffectSystem', () => {
+  it('separates critical, armour, weak-point, and boss-arrival signatures', () => {
+    const effects = new EffectSystem({
+      particleLimit: 120,
+      damageNumberLimit: 8,
+      reducedMotion: false,
+    });
+    effects.consume([
+      { type: 'projectile-hit', enemyId: 1, damage: 90, critical: true, source: 'main' },
+      { type: 'enemy-armour-broken', enemyId: 2 },
+      { type: 'boss-weakpoint-hit', enemyId: 1, bonusDamage: 40 },
+      { type: 'boss-intro-started' },
+    ], createFrameFixture());
+
+    const kinds = effects.view.particles.map((item) => item.kind);
+    expect(kinds).toEqual(expect.arrayContaining([
+      'critical-shard',
+      'armour-spark',
+      'weakpoint-flare',
+    ]));
+    expect(kinds.filter((kind) => kind === 'critical-shard').length).toBeLessThan(8);
+    expect(effects.view.rings).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: 'boss-entrance-ripple' }),
+    ]));
+  });
+
   it('maps tide-beast warnings and weak points to distinct bounded effects', () => {
     const effects = new EffectSystem({
       particleLimit: 80,

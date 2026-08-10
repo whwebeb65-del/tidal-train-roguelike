@@ -1165,6 +1165,43 @@ export class BattleRenderer {
         });
         continue;
       }
+      if (particle.kind === 'critical-shard' || particle.kind === 'armour-spark') {
+        const angle = particle.rotation;
+        const length = particle.size * (particle.kind === 'critical-shard' ? 3.1 : 2.2);
+        this.painter.line({
+          kind: `effect-${particle.kind}`,
+          layer,
+          points: [
+            { x: particle.x - Math.cos(angle) * length * 0.25, y: particle.y - Math.sin(angle) * length * 0.25 },
+            { x: particle.x + Math.cos(angle) * length, y: particle.y + Math.sin(angle) * length },
+          ],
+          stroke: particle.color,
+          lineWidth: particle.kind === 'critical-shard' ? 3.6 : 2.8,
+          lineCap: 'round',
+          alpha: particle.alpha,
+          blendMode: 'screen',
+        });
+        continue;
+      }
+      if (particle.kind === 'weakpoint-flare') {
+        const radius = particle.size * (1.8 - particle.progress * 0.5);
+        for (const angle of [particle.rotation, particle.rotation + Math.PI / 2]) {
+          this.painter.line({
+            kind: 'effect-weakpoint-flare',
+            layer,
+            points: [
+              { x: particle.x - Math.cos(angle) * radius, y: particle.y - Math.sin(angle) * radius },
+              { x: particle.x + Math.cos(angle) * radius, y: particle.y + Math.sin(angle) * radius },
+            ],
+            stroke: particle.color,
+            lineWidth: 3,
+            lineCap: 'round',
+            alpha: particle.alpha,
+            blendMode: 'screen',
+          });
+        }
+        continue;
+      }
       const stretched = (
         particle.kind === 'armour-shard'
         || particle.kind === 'defeat-shard'
@@ -1207,7 +1244,9 @@ export class BattleRenderer {
       });
       if (ring.secondaryColor) {
         this.painter.ellipse({
-          kind: 'impact-ring-secondary',
+          kind: ring.kind && ring.kind !== 'impact-ring'
+            ? `${ring.kind}-secondary`
+            : 'impact-ring-secondary',
           layer: 'front-effects',
           x: ring.x,
           y: ring.y,

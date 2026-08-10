@@ -33,7 +33,10 @@ export type EffectParticleKind =
   | 'support-wave'
   | 'elite-charge'
   | 'boss-tide'
-  | 'weakpoint-burst';
+  | 'weakpoint-burst'
+  | 'critical-shard'
+  | 'armour-spark'
+  | 'weakpoint-flare';
 
 export interface EffectParticleView {
   readonly id: number;
@@ -62,7 +65,11 @@ export interface DamageNumberView {
 
 export interface ImpactRingView {
   readonly id: number;
-  readonly kind?: 'impact-ring' | 'barrier-membrane' | 'static-skill-silhouette';
+  readonly kind?:
+    | 'impact-ring'
+    | 'barrier-membrane'
+    | 'static-skill-silhouette'
+    | 'boss-entrance-ripple';
   readonly x: number;
   readonly y: number;
   readonly radius: number;
@@ -355,6 +362,18 @@ export class EffectSystem {
           event.critical ? 2 : 1,
           'front-effects',
         );
+        if (event.critical) {
+          this.spawnBurst(
+            x,
+            y,
+            this.majorCount(5),
+            '#fff0a8',
+            'critical-shard',
+            520,
+            5,
+            'front-effects',
+          );
+        }
         this.addRing(
           x,
           y,
@@ -386,6 +405,18 @@ export class EffectSystem {
           2,
           'front-effects',
         );
+        if (!this.isLowQuality()) {
+          this.spawnBurst(
+            x,
+            y,
+            4,
+            '#ff9c69',
+            'armour-spark',
+            440,
+            5,
+            'front-effects',
+          );
+        }
         this.addRing(x, y, 8, 38, '#eaffff', 2);
       }
       if (event.type === 'enemy-ranged-warning') {
@@ -452,6 +483,7 @@ export class EffectSystem {
         const x = enemy?.x ?? this.lastEventX;
         const y = enemy?.y ?? this.lastEventY;
         this.spawnBurst(x, y, this.majorCount(10), '#fff09a', 'weakpoint-burst', 620, 10, 'front-effects');
+        this.spawnBurst(x, y, this.majorCount(4), '#fff4a8', 'weakpoint-flare', 480, 10, 'front-effects');
         this.addRing(x, y, 8, 62, '#fff4a8', 10, '#ff765e');
         this.addDamageNumber(x, y, event.bonusDamage, true);
         this.title = '精准破潮';
@@ -595,6 +627,16 @@ export class EffectSystem {
         this.darken = 0.58;
         this.darkenRemainingMs = 6000;
         this.spawnWarningBurst(195, 170, 14);
+        this.addRing(
+          195,
+          260,
+          24,
+          168,
+          '#ff7b72',
+          10,
+          '#706cff',
+          'boss-entrance-ripple',
+        );
       }
       if (event.type === 'boss-charge-started') {
         this.title = '潮压冲锋';
