@@ -45,6 +45,14 @@ describe('AudioManager', () => {
       },
       { type: 'boss-intro-started' },
       { type: 'boss-charge-started', durationMs: 1200 },
+      { type: 'enemy-ranged-warning', enemyId: 3 },
+      { type: 'enemy-ranged-fired', enemyId: 3 },
+      { type: 'enemy-support-pulse', enemyId: 4, targetIds: [1] },
+      { type: 'elite-charge-telegraph', enemyId: 5, lane: 2, durationMs: 800 },
+      { type: 'elite-exposed', enemyId: 5, durationMs: 1200 },
+      { type: 'boss-tide-warning', safeLane: 1, durationMs: 1200 },
+      { type: 'boss-tide-impact', safeLane: 1, avoided: false },
+      { type: 'boss-weakpoint-hit', enemyId: 6, bonusDamage: 40 },
     ];
 
     audio.consume(events, createFrameFixture());
@@ -60,6 +68,14 @@ describe('AudioManager', () => {
       'upgrade-open',
       'boss-alarm',
       'boss-charge',
+      'ranged-warning',
+      'ranged-fire',
+      'support-pulse',
+      'elite-charge-warning',
+      'elite-exposed',
+      'boss-tide-warning',
+      'boss-tide-impact',
+      'boss-weakpoint',
     ]);
     expect(audio.debugState.musicCue).toBe('boss');
   });

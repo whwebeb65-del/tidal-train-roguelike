@@ -4,6 +4,48 @@ import { getRenderBudget } from '../../../web/battle/QualityMonitor';
 import { createFrameFixture } from './helpers/BattleFixtures';
 
 describe('EffectSystem', () => {
+  it('maps tide-beast warnings and weak points to distinct bounded effects', () => {
+    const effects = new EffectSystem({
+      particleLimit: 80,
+      damageNumberLimit: 8,
+      reducedMotion: false,
+    });
+    effects.consume([
+      { type: 'enemy-ranged-warning', enemyId: 1 },
+      { type: 'enemy-support-pulse', enemyId: 3, targetIds: [1, 2] },
+      { type: 'elite-charge-telegraph', enemyId: 4, lane: 0, durationMs: 800 },
+      { type: 'boss-tide-warning', safeLane: 2, durationMs: 1200 },
+      { type: 'boss-weakpoint-hit', enemyId: 5, bonusDamage: 40 },
+    ], createFrameFixture());
+
+    expect(effects.view.particles.map((item) => item.kind)).toEqual(expect.arrayContaining([
+      'ranged-warning',
+      'support-wave',
+      'elite-charge',
+      'boss-tide',
+      'weakpoint-burst',
+    ]));
+    expect(effects.view.damageNumbers).toEqual(expect.arrayContaining([
+      expect.objectContaining({ value: 40, critical: true }),
+    ]));
+    expect(effects.view.camera.amplitude).toBeLessThanOrEqual(6);
+  });
+
+  it('retains static danger feedback with reduced motion', () => {
+    const effects = new EffectSystem({
+      particleLimit: 20,
+      damageNumberLimit: 4,
+      reducedMotion: true,
+    });
+    effects.consume([
+      { type: 'elite-charge-telegraph', enemyId: 1, lane: 1, durationMs: 800 },
+      { type: 'boss-tide-warning', safeLane: 0, durationMs: 1200 },
+    ], createFrameFixture());
+
+    expect(effects.view.camera.amplitude).toBe(0);
+    expect(effects.view.rings.length).toBeGreaterThanOrEqual(2);
+  });
+
   it('adds brush smears to weapon fire and projectile impacts', () => {
     const weaponEffects = new EffectSystem({
       particleLimit: 80,

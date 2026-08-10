@@ -46,6 +46,14 @@ const GROUP_BY_CUE: Readonly<Record<SoundCue, SfxGroup>> = {
   'elite-down': 'major',
   'boss-alarm': 'major',
   'boss-charge': 'major',
+  'ranged-warning': 'other',
+  'ranged-fire': 'other',
+  'support-pulse': 'other',
+  'elite-charge-warning': 'major',
+  'elite-exposed': 'major',
+  'boss-tide-warning': 'major',
+  'boss-tide-impact': 'major',
+  'boss-weakpoint': 'hit',
   'boss-down': 'major',
   'train-charge': 'major',
   'train-depart': 'major',
@@ -189,6 +197,30 @@ export class SfxSynth {
         return;
       case 'boss-charge':
         this.arpeggio(nowSeconds, [82.41, 110, 146.83, 220], 0.045, 0.13, 0.14, 'sawtooth');
+        return;
+      case 'ranged-warning':
+        this.arpeggio(nowSeconds, [740, 880], 0.07, 0.12, 0.06, 'sine');
+        return;
+      case 'ranged-fire':
+        this.arpeggio(nowSeconds, [510, 255, 170], 0.025, 0.09, 0.09, 'square');
+        return;
+      case 'support-pulse':
+        this.chord(nowSeconds, [246.94, 369.99, 554.37], 0.28, 0.07, 'sine');
+        return;
+      case 'elite-charge-warning':
+        this.arpeggio(nowSeconds, [116.54, 174.61, 261.63, 392], 0.055, 0.14, 0.12, 'sawtooth');
+        return;
+      case 'elite-exposed':
+        this.arpeggio(nowSeconds, [392, 587.33, 783.99], 0.035, 0.12, 0.1, 'triangle');
+        return;
+      case 'boss-tide-warning':
+        this.arpeggio(nowSeconds, [73.42, 110, 164.81], 0.11, 0.22, 0.13, 'sine');
+        return;
+      case 'boss-tide-impact':
+        this.chord(nowSeconds, [55, 82.41, 123.47, 185], 0.34, 0.17, 'sawtooth');
+        return;
+      case 'boss-weakpoint':
+        this.arpeggio(nowSeconds, [659.25, 987.77, 1318.51], 0.018, 0.1, 0.11, 'triangle');
         return;
       case 'boss-down':
         this.arpeggio(nowSeconds, [196, 146.83, 98, 62, 48], 0.065, 0.25, 0.23, 'triangle');

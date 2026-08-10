@@ -73,11 +73,32 @@ describe('SfxSynth', () => {
       'train-charge', 'train-depart', 'loot', 'upgrade-open',
       'upgrade-select', 'skill-volley', 'skill-barrier', 'skill-extreme',
       'skill-refresh', 'revive', 'victory', 'defeat',
+      'ranged-warning', 'ranged-fire', 'support-pulse',
+      'elite-charge-warning', 'elite-exposed', 'boss-tide-warning',
+      'boss-tide-impact', 'boss-weakpoint',
     ] as const;
 
     expect(cues.map((cue, index) => synth.play(cue, 10 + index))).toEqual(
       cues.map(() => true),
     );
+  });
+
+  it('gives tide-beast warnings, impacts and weak points distinct pitch signatures', () => {
+    const backend = new RecordingAudioBackend();
+    const synth = new SfxSynth(backend);
+    const cues = [
+      'ranged-warning', 'ranged-fire', 'support-pulse',
+      'elite-charge-warning', 'elite-exposed', 'boss-tide-warning',
+      'boss-tide-impact', 'boss-weakpoint',
+    ] as const;
+
+    const signatures = cues.map((cue, index) => {
+      const before = backend.instructions.length;
+      expect(synth.play(cue, 30 + index)).toBe(true);
+      return backend.instructions.slice(before).map((tone) => tone.frequencyHz).join(',');
+    });
+
+    expect(new Set(signatures).size).toBe(cues.length);
   });
 
   it('rotates cannon pitch and limits dense hit polyphony', () => {

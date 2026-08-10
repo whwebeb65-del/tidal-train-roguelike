@@ -167,6 +167,14 @@ export class AudioManager implements BattleSoundPort {
       if (event.type === 'boss-charge-started') {
         this.playSound('boss-charge');
       }
+      if (event.type === 'enemy-ranged-warning') this.playSound('ranged-warning');
+      if (event.type === 'enemy-ranged-fired') this.playSound('ranged-fire');
+      if (event.type === 'enemy-support-pulse') this.playSound('support-pulse');
+      if (event.type === 'elite-charge-telegraph') this.playSound('elite-charge-warning');
+      if (event.type === 'elite-exposed') this.playSound('elite-exposed');
+      if (event.type === 'boss-tide-warning') this.playSound('boss-tide-warning');
+      if (event.type === 'boss-tide-impact') this.playSound('boss-tide-impact');
+      if (event.type === 'boss-weakpoint-hit') this.playSound('boss-weakpoint');
       if (event.type === 'battle-won') {
         this.setMusicCue('victory');
         this.playSound('victory');

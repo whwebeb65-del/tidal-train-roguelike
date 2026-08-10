@@ -8,6 +8,7 @@ import {
   type EntityPoolStats,
 } from './EntityPool';
 import type { RenderBudget } from './QualityMonitor';
+import { LANE_X } from './BattleConfig';
 
 export type EffectParticleKind =
   | 'muzzle'
@@ -27,7 +28,12 @@ export type EffectParticleKind =
   | 'reflection'
   | 'extreme-pull'
   | 'extreme-vortex'
-  | 'second-crest';
+  | 'second-crest'
+  | 'ranged-warning'
+  | 'support-wave'
+  | 'elite-charge'
+  | 'boss-tide'
+  | 'weakpoint-burst';
 
 export interface EffectParticleView {
   readonly id: number;
@@ -381,6 +387,74 @@ export class EffectSystem {
           'front-effects',
         );
         this.addRing(x, y, 8, 38, '#eaffff', 2);
+      }
+      if (event.type === 'enemy-ranged-warning') {
+        const enemy = findEnemy(frame, event.enemyId);
+        const x = enemy?.x ?? this.lastEventX;
+        const y = enemy?.y ?? this.lastEventY;
+        this.spawnBurst(x, y, this.majorCount(5), '#ffd978', 'ranged-warning', 800, 6, 'front-effects');
+        this.addRing(x, y, 18, 58, '#ff806b', 7);
+      }
+      if (event.type === 'enemy-ranged-fired') {
+        const enemy = findEnemy(frame, event.enemyId);
+        const x = enemy?.x ?? this.lastEventX;
+        const y = enemy?.y ?? this.lastEventY;
+        this.spawnBurst(x, y, this.majorCount(5), '#ffb36d', 'ranged-warning', 420, 6, 'front-effects');
+      }
+      if (event.type === 'enemy-support-pulse') {
+        const source = findEnemy(frame, event.enemyId);
+        const x = source?.x ?? this.lastEventX;
+        const y = source?.y ?? this.lastEventY;
+        this.spawnBurst(x, y, this.majorCount(7), '#9effbd', 'support-wave', 720, 6, 'front-effects');
+        this.addRing(x, y, 14, 72, '#b8ffd0', 6);
+        for (const targetId of event.targetIds) {
+          const target = findEnemy(frame, targetId);
+          if (target) this.addRing(target.x, target.y, 8, 34, '#b8f8ff', 5);
+        }
+      }
+      if (event.type === 'elite-charge-telegraph') {
+        const x = LANE_X[event.lane];
+        this.spawnBurst(x, 320, this.majorCount(9), '#ff806b', 'elite-charge', event.durationMs, 8, 'front-effects');
+        this.addRing(x, 320, 30, 108, '#ff735f', 8);
+        this.title = '雷鳐冲锋 · 注意航道';
+        this.titleRemainingMs = event.durationMs;
+        this.shake(2.2, event.durationMs);
+      }
+      if (event.type === 'elite-exposed') {
+        const enemy = findEnemy(frame, event.enemyId);
+        const x = enemy?.x ?? this.lastEventX;
+        const y = enemy?.y ?? this.lastEventY;
+        this.spawnBurst(x, y, this.majorCount(8), '#ffe48a', 'elite-charge', event.durationMs, 8, 'front-effects');
+        this.addRing(x, y, 12, 74, '#fff0a3', 8);
+      }
+      if (event.type === 'boss-phase-changed') {
+        this.title = event.phase === 'boss-tide'
+          ? '断潮航道'
+          : event.phase === 'boss-enraged'
+            ? '狂暴潮眼'
+            : '回响召集';
+        this.titleRemainingMs = 1400;
+      }
+      if (event.type === 'boss-tide-warning') {
+        const x = LANE_X[event.safeLane];
+        this.spawnBurst(x, 390, this.majorCount(10), '#69ffd1', 'boss-tide', event.durationMs, 9, 'front-effects');
+        this.addRing(x, 390, 28, 120, '#79ffda', 9);
+        this.title = '点按绿色安全航道';
+        this.titleRemainingMs = event.durationMs;
+      }
+      if (event.type === 'boss-tide-impact') {
+        const x = LANE_X[event.safeLane];
+        this.spawnBurst(x, 500, this.majorCount(12), event.avoided ? '#8fffe1' : '#ff765e', 'boss-tide', 620, 9, 'front-effects');
+        if (!event.avoided) this.shake(5, 220);
+      }
+      if (event.type === 'boss-weakpoint-hit') {
+        const enemy = findEnemy(frame, event.enemyId);
+        const x = enemy?.x ?? this.lastEventX;
+        const y = enemy?.y ?? this.lastEventY;
+        this.spawnBurst(x, y, this.majorCount(10), '#fff09a', 'weakpoint-burst', 620, 10, 'front-effects');
+        this.addRing(x, y, 8, 62, '#fff4a8', 10, '#ff765e');
+        this.addDamageNumber(x, y, event.bonusDamage, true);
+        this.shake(3.5, 120);
       }
       if (event.type === 'enemy-killed') {
         this.remember(event.x, event.y);
