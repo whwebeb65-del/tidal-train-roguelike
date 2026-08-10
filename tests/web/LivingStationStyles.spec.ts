@@ -14,6 +14,10 @@ describe('living station styles', () => {
     new URL('../../web/styles/captain-guidebook.css', import.meta.url),
     'utf8',
   );
+  const battleHudCss = readFileSync(
+    new URL('../../web/styles/battle-hud.css', import.meta.url),
+    'utf8',
+  );
 
   it('imports the scene language after generic progression styles', () => {
     const entry = readFileSync(new URL('../../web/styles.css', import.meta.url), 'utf8');
@@ -79,6 +83,20 @@ describe('living station styles', () => {
     );
     expect(guidebookCss).toMatch(
       /\.captain-guidebook::(?:before|after)\s*\{[^}]*pointer-events:\s*none;/,
+    );
+  });
+
+  it('gives evolution offers a premium crest with a static reduced-motion fallback', () => {
+    expect(battleHudCss).toContain('.battle-dialog--evolution');
+    expect(battleHudCss).toContain('.evolution-crest');
+    expect(battleHudCss).toMatch(
+      /\.evolution-crest b\s*\{[^}]*background:\s*#352356;/,
+    );
+    expect(battleHudCss).toMatch(
+      /\.battle-upgrade-card\s*\{[^}]*min-height:\s*(?:4[4-9]|[5-9]\d|\d{3,})px;/,
+    );
+    expect(battleHudCss).toMatch(
+      /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.evolution-crest[\s\S]*?animation:\s*none;/,
     );
   });
 });

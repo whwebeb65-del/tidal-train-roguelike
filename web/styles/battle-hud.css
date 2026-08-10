@@ -47,7 +47,33 @@
 .battle-settlement-progression [data-settlement-account] { color: #b64d42; }
 .battle-settlement-progression [data-settlement-mastery] { color: #174858; }
 @keyframes battle-interaction-in { from { opacity: 0; transform: translateX(12px) scale(.96); } to { opacity: 1; transform: translateX(0) scale(1); } } @keyframes battle-countdown { 0% { opacity: 0; transform: scale(.82); } 35% { opacity: 1; transform: scale(1.05); } 100% { opacity: .7; transform: scale(1); } } @keyframes battle-ready-pulse { 0% { opacity: .66; transform: scale(.9); } 100% { opacity: 0; transform: scale(1.08); } } @keyframes battle-rank-five-breathe { 50% { transform: translateY(-2px) rotate(1deg); } }
-@media (max-width: 430px) { .battle-hud__tide-log { grid-template-columns: minmax(70px, .8fr) minmax(120px, 1.2fr) 38px 38px; gap: 3px; height: 98px; max-height: 98px; padding: 6px; }.battle-hud__progress { display: none; }.battle-hud__speed, .battle-hud__pause { width: 38px; min-width: 38px; min-height: 38px; }.battle-interaction { top: 116px; right: 8px; }.battle-upgrade-grid { grid-template-columns: 1fr; }.battle-upgrade-card { min-height: 118px; } }
-@media (max-width: 370px) { .battle-hud__tide-log { grid-template-columns: 76px 1fr 34px 34px; height: 92px; max-height: 92px; padding-block: 5px; }.battle-hud__run strong { font-size: 10px; }.battle-vital > span { font-size: 7px; }.battle-vital > small { display: none; }.battle-hud__skills { gap: 8px; bottom: calc(28px + env(safe-area-inset-bottom)); padding-bottom: 28px; }.battle-skill { width: 64px; height: 64px; }.battle-skill:nth-child(2) { width: 70px; height: 70px; }.battle-skill:nth-child(3) { width: 76px; height: 76px; }.battle-skill__copy { display: grid; width: 84px; }.battle-hud__refresh { top: -68px; right: 8px; }.battle-dialog { padding: 18px; }.battle-dialog--settlement { padding: 14px; }.battle-settlement-progression { padding: 6px 7px; }.battle-settlement-progression p { font-size: 9px; } }
+@media (max-width: 430px) { .battle-hud__tide-log { grid-template-columns: minmax(64px, .72fr) minmax(112px, 1.15fr) 44px 44px; gap: 3px; height: 92px; max-height: 92px; padding: 5px 6px; }.battle-hud__progress { display: none; }.battle-hud__speed, .battle-hud__pause { width: 44px; min-width: 44px; min-height: 44px; }.battle-interaction { top: 116px; right: 8px; }.battle-upgrade-grid { grid-template-columns: 1fr; }.battle-upgrade-card { min-height: 118px; } }
+@media (max-width: 370px) { .battle-hud__tide-log { grid-template-columns: 70px 1fr 44px 44px; height: 92px; max-height: 92px; padding-block: 5px; }.battle-hud__run strong { font-size: 10px; }.battle-vital > span { font-size: 7px; }.battle-vital > small { display: none; }.battle-hud__skills { gap: 8px; bottom: calc(28px + env(safe-area-inset-bottom)); padding-bottom: 28px; }.battle-skill { width: 64px; height: 64px; }.battle-skill:nth-child(2) { width: 70px; height: 70px; }.battle-skill:nth-child(3) { width: 76px; height: 76px; }.battle-skill__copy { display: grid; width: 84px; }.battle-hud__refresh { top: -68px; right: 8px; }.battle-dialog { padding: 18px; }.battle-dialog--settlement { padding: 14px; }.battle-settlement-progression { padding: 6px 7px; }.battle-settlement-progression p { font-size: 9px; } }
 @media (min-width: 768px) { .battle-hud__tide-log { width: min(86%, 760px); }.battle-hud__skills { padding-bottom: 24px; }.battle-skill { width: 78px; height: 78px; }.battle-skill:nth-child(2) { width: 86px; height: 86px; }.battle-skill:nth-child(3) { width: 94px; height: 94px; } }
 @media (prefers-reduced-motion: reduce) { .battle-meter i, .battle-meter b { transition: none; }.battle-interaction button, .battle-upgrade-countdown, .battle-skill.is-ready::after, .battle-skill[data-rank="5"] { animation: none; } }
+
+/* Evolution is a rare peak moment: one luminous crest, then three physical crates. */
+.battle-dialog--evolution {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  border-color: #3c255f;
+  background: radial-gradient(circle at 50% 13%, rgb(255 240 154 / 70%), transparent 24%), linear-gradient(145deg, #fff2c2 0 38%, #e8d5ff 68%, #bdeee7 100%);
+  box-shadow: 7px 9px 0 #2c214d, 0 0 42px rgb(217 93 190 / 48%);
+}
+.battle-dialog--evolution::before, .battle-dialog--evolution::after { position: absolute; z-index: -1; width: 190px; height: 190px; border: 2px dashed rgb(117 61 160 / 34%); border-radius: 43% 57% 48% 52%; content: ""; pointer-events: none; }
+.battle-dialog--evolution::before { top: -86px; left: -62px; transform: rotate(16deg); }
+.battle-dialog--evolution::after { right: -72px; bottom: -105px; transform: rotate(-22deg); }
+.evolution-crest { position: relative; display: grid; width: 74px; height: 74px; margin: 2px auto 8px; place-items: center; border: 3px solid #352356; border-radius: 45% 55% 47% 53%; color: #fff9cf; background: conic-gradient(from 25deg, #ff8f68, #ffe68f, #61e4d1, #8f6fe8, #ff8f68); box-shadow: inset 0 0 0 5px rgb(255 250 210 / 46%), 0 0 22px rgb(159 78 152 / 54%); animation: evolution-crest-arrive 520ms cubic-bezier(.2, .9, .2, 1.2) both; }
+.evolution-crest b { position: relative; z-index: 2; padding: 5px 7px; border: 1px solid #fff1aa; border-radius: 999px; color: #fff9cf; background: #352356; font: 900 9px/1 ui-monospace, monospace; letter-spacing: .08em; box-shadow: 0 2px 0 rgb(35 22 61 / 45%); }
+.evolution-crest i { position: absolute; inset: calc(7px + var(--orbit, 0px)); border: 2px solid currentColor; border-radius: 48% 52% 44% 56%; opacity: .78; animation: evolution-orbit 3.4s linear infinite; pointer-events: none; }
+.evolution-crest i:nth-child(1) { --orbit: -11px; color: #ff806d; }
+.evolution-crest i:nth-child(2) { --orbit: 0px; color: #fff0a1; animation-direction: reverse; }
+.evolution-crest i:nth-child(3) { --orbit: 11px; color: #70efdb; animation-duration: 2.6s; }
+.battle-dialog--evolution .battle-upgrade-card { animation: evolution-crate-arrive 440ms cubic-bezier(.2, .8, .25, 1) both; animation-delay: calc(var(--reward-index) * 80ms + 90ms); }
+.battle-dialog--evolution .battle-upgrade-card.is-evolution { transform: translateY(-4px) rotate(-.5deg); border-width: 4px; box-shadow: 4px 6px 0 #6e3a85, 0 0 24px rgb(221 94 180 / 46%); }
+@keyframes evolution-crest-arrive { from { opacity: 0; transform: scale(.55) rotate(-18deg); } to { opacity: 1; transform: scale(1) rotate(0); } }
+@keyframes evolution-orbit { to { transform: rotate(360deg); } }
+@keyframes evolution-crate-arrive { from { opacity: 0; transform: translateY(24px) rotate(2deg); } to { opacity: 1; transform: translateY(0) rotate(0); } }
+@media (max-width: 430px) { .evolution-crest { width: 58px; height: 58px; }.battle-dialog--evolution .battle-upgrade-card.is-evolution { transform: none; } }
+@media (prefers-reduced-motion: reduce) { .evolution-crest, .evolution-crest i, .battle-dialog--evolution .battle-upgrade-card { animation: none; transition: none; } }

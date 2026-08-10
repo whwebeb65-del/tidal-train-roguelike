@@ -347,6 +347,34 @@ describe('BattleHUD', () => {
       .toEqual([true, false, false]);
   });
 
+  it('turns a visible evolution offer into a staged ritual without changing card actions', () => {
+    const hud = new BattleHUD(createCallbacks(), window);
+    const host = document.createElement('div');
+    document.body.append(host);
+    hud.mount(host);
+    hud.update(createBattleHudModel(createFrameFixture({
+      status: 'upgrade',
+      offeredUpgradeIds: [
+        'split-tide-arrow',
+        'rapid-reload',
+        'rank-bubble-barrier',
+      ],
+    }), createHudModelOptionsFixture()));
+
+    const dialog = host.querySelector<HTMLElement>('.battle-dialog--upgrade');
+    const crest = host.querySelector<HTMLElement>('[data-evolution-crest]');
+    const cards = [...host.querySelectorAll<HTMLElement>('[data-upgrade-slot]:not([hidden])')];
+    expect(dialog?.classList.contains('battle-dialog--evolution')).toBe(true);
+    expect(crest?.hidden).toBe(false);
+    expect(crest?.querySelectorAll('i')).toHaveLength(3);
+    expect(cards.map((card) => card.style.getPropertyValue('--reward-index')))
+      .toEqual(['0', '1', '2']);
+    expect(cards[0]?.dataset.upgradeId).toBe('split-tide-arrow');
+
+    hud.dispose();
+    host.remove();
+  });
+
   it('uses catalog metadata for the fourth skill-rank level', () => {
     const model = createBattleHudModel(createFrameFixture({
       status: 'upgrade',

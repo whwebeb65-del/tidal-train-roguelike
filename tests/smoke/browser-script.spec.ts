@@ -94,6 +94,10 @@ describe('browser smoke script', () => {
     expect(source).toContain('full battle should encounter tide beast');
     expect(source).toContain('distinctTideBeastArtSeen');
     expect(source).toContain('evolutionOfferSeen');
+    expect(source).toContain('assertEvolutionRitual');
+    expect(source).toContain("capture('evolution')");
+    expect(source).toContain('battle-dialog--evolution');
+    expect(source).toContain('evolution ritual cards are clipped');
     expect(source).toContain('precisionWeakPointSeen');
     expect(source).toContain('battleMusicIntensitySeen');
     expect(source).toContain('battle hard cap should not be reached');

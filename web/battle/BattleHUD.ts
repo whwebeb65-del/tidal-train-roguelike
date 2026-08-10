@@ -47,8 +47,10 @@ interface HudNodes {
   readonly skillButtons: ReadonlyMap<BattleSkillId, HTMLButtonElement>;
   readonly speedButton: HTMLButtonElement;
   readonly upgradeOverlay: HTMLElement;
+  readonly upgradeDialog: HTMLElement;
   readonly upgradeOptions: HTMLElement;
   readonly evolutionRibbon: HTMLElement;
+  readonly evolutionCrest: HTMLElement;
   readonly upgradeButtons: readonly HTMLButtonElement[];
   readonly upgradeCountdown: HTMLElement;
   readonly rerollButton: HTMLButtonElement;
@@ -144,6 +146,7 @@ export function renderBattleHudShell(): string {
         <h2>打开一只潮汐奖励箱</h2>
         <p>三选一立即装车，最高可叠加至 3 级。</p>
         <span class="battle-evolution-ribbon" data-evolution-ribbon hidden>技能进化 · 改变战斗方式</span>
+        <div class="evolution-crest" data-evolution-crest hidden aria-hidden="true"><i></i><i></i><i></i><b>EVOLVE</b></div>
         <div class="battle-upgrade-grid" data-upgrade-options>
           ${Array.from({ length: 3 }, (_, index) => upgradeSlot(index)).join('')}
         </div>
@@ -372,11 +375,20 @@ export class BattleHUD {
       model.pendingActions.has('skill-refresh');
     nodes.upgradeOverlay.hidden = !model.upgradeVisible;
     nodes.upgradeOptions.hidden = model.upgradeCountdownVisible;
+    const evolutionVisible = model.upgradeVisible
+      && !model.upgradeCountdownVisible
+      && model.upgradeCards.some((card) => card.isEvolution);
+    nodes.upgradeDialog.classList.toggle(
+      'battle-dialog--evolution',
+      evolutionVisible,
+    );
+    nodes.evolutionCrest.hidden = !evolutionVisible;
     nodes.evolutionRibbon.hidden = !model.upgradeCards.some(
       (card) => card.isEvolution,
     ) || model.upgradeCountdownVisible;
     nodes.upgradeCountdown.hidden = !model.upgradeCountdownVisible;
     nodes.upgradeButtons.forEach((button, index) => {
+      button.style.setProperty('--reward-index', String(index));
       const card = model.upgradeCards[index];
       button.hidden = !card;
       if (!card) {
@@ -570,8 +582,10 @@ function collectNodes(host: HTMLElement): HudNodes {
     skillButtons,
     speedButton: requireElement(host, '[data-battle-action="speed"]'),
     upgradeOverlay: requireElement(host, '[data-upgrade-overlay]'),
+    upgradeDialog: requireElement(host, '.battle-dialog--upgrade'),
     upgradeOptions: requireElement(host, '[data-upgrade-options]'),
     evolutionRibbon: requireElement(host, '[data-evolution-ribbon]'),
+    evolutionCrest: requireElement(host, '[data-evolution-crest]'),
     upgradeButtons: [...host.querySelectorAll<HTMLButtonElement>(
       '[data-upgrade-slot]',
     )],

@@ -390,6 +390,44 @@ async function assertBattleHudGeometry(client, label) {
   assert.ok(geometry.scrollWidth <= geometry.innerWidth + 1, `${label} battle overflows horizontally`);
 }
 
+async function assertEvolutionRitual(client, label) {
+  const result = await evaluate(client, `(() => {
+    const dialog = document.querySelector('.battle-dialog--evolution');
+    const crest = dialog?.querySelector('[data-evolution-crest]:not([hidden])');
+    const cards = [...(dialog?.querySelectorAll('[data-upgrade-slot]:not([hidden])') ?? [])];
+    return {
+      dialogCount: document.querySelectorAll('.battle-dialog--evolution').length,
+      crestVisible: crest instanceof HTMLElement && crest.getClientRects().length > 0,
+      cards: cards.map((card) => {
+        const rect = card.getBoundingClientRect();
+        const content = [...card.children].map((child) => {
+          const childRect = child.getBoundingClientRect();
+          return childRect.top >= rect.top - 1
+            && childRect.bottom <= rect.bottom + 1
+            && childRect.left >= rect.left - 1
+            && childRect.right <= rect.right + 1;
+        });
+        return {
+          width: rect.width,
+          height: rect.height,
+          contentClipped: content.some((visible) => !visible),
+        };
+      }),
+      scrollWidth: document.documentElement.scrollWidth,
+      innerWidth,
+    };
+  })()`);
+  assert.equal(result.dialogCount, 1, `${label} must expose one evolution ritual`);
+  assert.equal(result.crestVisible, true, `${label} evolution crest is hidden`);
+  assert.equal(result.cards.length, 3, `${label} must expose three reward crates`);
+  assert.ok(
+    result.cards.every((card) => card.width >= 44 && card.height >= 44 && !card.contentClipped),
+    `${label} evolution ritual cards are clipped: ${JSON.stringify(result.cards)}`,
+  );
+  assert.ok(result.scrollWidth <= result.innerWidth + 1, `${label} evolution ritual overflows`);
+  await assertGlobalInteractiveTargets(client, `${label} evolution ritual`);
+}
+
 async function inspectSafeReadingTarget(client, selector, index) {
   return evaluate(
     client,
@@ -1888,6 +1926,11 @@ async function finishFullBattle(client, { claimSalvage }) {
       break;
     }
     if (battle.status === 'upgrade') {
+      if (battle.offeredUpgradeIds.some((id) => evolutionIds.has(id))) {
+        await assertEvolutionRitual(client, '390x844');
+        await delay(650);
+        await capture('evolution');
+      }
       await capture('upgrade');
       await chooseStrategicUpgrade(client, battle.offeredUpgradeIds);
       upgrades += 1;
