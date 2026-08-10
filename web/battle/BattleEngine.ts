@@ -60,6 +60,10 @@ import {
   getBossWeakPoint,
   segmentHitsCircle,
 } from './BossWeakPointSystem';
+import {
+  getMapCombatProfile,
+  type MapCombatProfile,
+} from './MapCombatProfiles';
 
 type Mutable<T> = {
   -readonly [Property in keyof T]: T[Property];
@@ -142,6 +146,7 @@ export class BattleEngine {
     128,
   );
   private readonly schedule: readonly SpawnInstruction[];
+  private readonly mapProfile: MapCombatProfile;
   private readonly random: SeededRandom;
   private readonly modifiers = createBaseModifiers();
   private readonly upgradeLevels = Object.fromEntries(
@@ -209,7 +214,8 @@ export class BattleEngine {
     if (!Number.isFinite(input.maxTrainHp) || input.maxTrainHp <= 0) {
       throw new Error('Battle train hp must be positive');
     }
-    this.schedule = createWaveSchedule(input.seed);
+    this.mapProfile = getMapCombatProfile(input.mapId);
+    this.schedule = createWaveSchedule(input.seed, input.mapId);
     this.random = new SeededRandom(input.seed);
     this.trainHp = input.maxTrainHp;
     this.energy = Math.max(0, Math.min(100, input.initialEnergy));
@@ -576,7 +582,10 @@ export class BattleEngine {
       1,
       Math.floor(
         (definition.hp + this.input.enemyHpFlatBonus)
-          * this.input.enemyHpMultiplier,
+          * this.input.enemyHpMultiplier
+          * (kind === 'deep-echo-boss'
+            ? this.mapProfile.bossHpMultiplier
+            : 1),
       ),
     );
     const enemy: EnemyState = {
@@ -588,7 +597,8 @@ export class BattleEngine {
       hp: maxHp,
       maxHp,
       shield: 0,
-      speedPerSecond: definition.speedPerSecond,
+      speedPerSecond:
+        definition.speedPerSecond * this.mapProfile.enemySpeedMultiplier,
       defenceBroken: false,
       attackCooldownMs: definition.attackIntervalMs,
       ageMs: 0,
@@ -648,15 +658,25 @@ export class BattleEngine {
   private updateEnemyBehaviours(stepMs: number): void {
     for (const enemy of [...this.enemies].sort((left, right) => left.id - right.id)) {
       if (!enemy.alive || !enemy.behaviour) continue;
+      const behaviourStepMs = enemy.kind === 'deep-echo-boss'
+        && enemy.behaviour.phase === 'boss-tide'
+        ? stepMs / this.mapProfile.tideWarningMultiplier
+        : stepMs;
       const result = advanceEnemyBehaviour({
         kind: enemy.kind,
         enemyId: enemy.id,
         lane: enemy.lane,
         hpRatio: enemy.hp / Math.max(1, enemy.maxHp),
-        stepMs,
+        stepMs: behaviourStepMs,
         state: enemy.behaviour,
       });
-      enemy.behaviour = result.state;
+      enemy.behaviour = result.intent.eliteExposed
+        ? Object.freeze({
+          ...result.state,
+          phaseRemainingMs: result.state.phaseRemainingMs
+            * this.mapProfile.eliteExposureMultiplier,
+        })
+        : result.state;
       this.applyEnemyBehaviourIntent(enemy, result.intent);
       if (this.status !== 'running') return;
     }
@@ -671,7 +691,7 @@ export class BattleEngine {
     }
     if (intent.rangedFire) {
       this.damageTrain(
-        ENEMY_CONFIG[enemy.kind].defenceDamage * this.input.enemyDamageMultiplier,
+        ENEMY_CONFIG[enemy.kind].defenceDamage * this.enemyDamageMultiplier,
         enemy.x < 195 ? 1 : enemy.x > 195 ? -1 : 0,
         enemy.id,
       );
@@ -690,7 +710,11 @@ export class BattleEngine {
       this.events.push({ type: 'elite-charge-started', enemyId: enemy.id });
     }
     if (intent.eliteExposed) {
-      this.events.push({ type: 'elite-exposed', enemyId: enemy.id, durationMs: 1200 });
+      this.events.push({
+        type: 'elite-exposed',
+        enemyId: enemy.id,
+        durationMs: Math.round(enemy.behaviour?.phaseRemainingMs ?? 1200),
+      });
     }
     if (intent.bossPhaseChanged) {
       this.events.push({ type: 'boss-phase-changed', phase: intent.bossPhaseChanged });
@@ -704,7 +728,7 @@ export class BattleEngine {
       this.events.push({
         type: 'boss-tide-warning',
         safeLane: enemy.behaviour?.safeLane ?? 1,
-        durationMs: 1200,
+        durationMs: Math.round(enemy.behaviour?.phaseRemainingMs ?? 1200),
       });
     }
     if (intent.tideImpact) {
@@ -712,7 +736,7 @@ export class BattleEngine {
       const avoided = this.aimLane() === safeLane;
       if (!avoided) {
         this.damageTrain(
-          this.input.maxTrainHp * 0.12 * this.input.enemyDamageMultiplier,
+          this.input.maxTrainHp * 0.12 * this.enemyDamageMultiplier,
           0,
           enemy.id,
         );
@@ -746,6 +770,11 @@ export class BattleEngine {
     if (this.mainCannonAim.x < (LANE_X[0] + LANE_X[1]) / 2) return 0;
     if (this.mainCannonAim.x > (LANE_X[1] + LANE_X[2]) / 2) return 2;
     return 1;
+  }
+
+  private get enemyDamageMultiplier(): number {
+    return this.input.enemyDamageMultiplier
+      * this.mapProfile.enemyDamageMultiplier;
   }
 
   private maybeStartBossIntro(): void {
@@ -788,7 +817,7 @@ export class BattleEngine {
 
     while (this.elapsedMs >= this.bossPressureAtMs) {
       this.damageTrain(
-        this.input.maxTrainHp * 0.09 * this.input.enemyDamageMultiplier,
+        this.input.maxTrainHp * 0.09 * this.enemyDamageMultiplier,
         0,
       );
       if (this.status !== 'running') return;
@@ -832,7 +861,7 @@ export class BattleEngine {
     ) {
       this.pendingBossChargeAtMs = null;
       this.damageTrain(
-        this.input.maxTrainHp * 0.18 * this.input.enemyDamageMultiplier,
+        this.input.maxTrainHp * 0.18 * this.enemyDamageMultiplier,
         0,
       );
       if (this.status !== 'running') return;
@@ -858,7 +887,7 @@ export class BattleEngine {
       if (enemy.attackCooldownMs > 0) continue;
       const definition = ENEMY_CONFIG[enemy.kind];
       this.damageTrain(
-        definition.defenceDamage * this.input.enemyDamageMultiplier,
+        definition.defenceDamage * this.enemyDamageMultiplier,
         enemy.x < 195 ? 1 : enemy.x > 195 ? -1 : 0,
         enemy.id,
       );
@@ -1168,7 +1197,9 @@ export class BattleEngine {
     this.energy = Math.min(
       100,
       this.energy + Math.floor(
-        (precisionHit ? 4 : 2) * this.modifiers.energyGainMultiplier,
+        (precisionHit
+          ? 4 * this.mapProfile.weakPointRewardMultiplier
+          : 2) * this.modifiers.energyGainMultiplier,
       ),
     );
     this.combo += 1;
@@ -1248,7 +1279,12 @@ export class BattleEngine {
       Math.floor(rawDamage * (enemy.behaviour?.damageTakenMultiplier ?? 1)),
     );
     if (enemy.kind === 'deep-echo-boss' && precisionHit) {
-      const bonusDamage = Math.max(1, Math.floor(damage * 0.75));
+      const bonusDamage = Math.max(
+        1,
+        Math.floor(
+          damage * 0.75 * this.mapProfile.weakPointRewardMultiplier,
+        ),
+      );
       damage += bonusDamage;
       this.events.push({ type: 'boss-weakpoint-hit', enemyId: enemy.id, bonusDamage });
     }

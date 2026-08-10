@@ -39,6 +39,25 @@ function equipmentState(save: PlayerSave): EquipmentState {
 }
 
 describe('dynamic battle integration', () => {
+  it('applies route speed and boss health profiles when enemies spawn', () => {
+    const baseInput = {
+      battleId: 'route-profile', seed: 7, mode: 'normal' as const,
+      maxTrainHp: 100, mainCannonDamage: 25, initialEnergy: 0,
+      repairBonus: 0, enemyHpFlatBonus: 0, enemyHpMultiplier: 1,
+      enemyDamageMultiplier: 1,
+      skillMasteryPower: { 'tidal-volley': 1, 'bubble-barrier': 1, 'extreme-tide': 1 },
+      unlockedSkillVariants: [],
+    };
+    const oldPort = new BattleEngine({ ...baseInput, mapId: 'old-port' });
+    const deepTunnel = new BattleEngine({ ...baseInput, battleId: 'deep-profile', mapId: 'deep-tunnel' });
+    const spawn = (engine: BattleEngine, kind: 'bubble-fin' | 'deep-echo-boss') => (
+      engine as unknown as { spawnEnemy: (enemyKind: typeof kind, lane: 1) => { maxHp: number; speedPerSecond: number } }
+    ).spawnEnemy(kind, 1);
+
+    expect(spawn(oldPort, 'bubble-fin').speedPerSecond).toBeCloseTo(56.16);
+    expect(spawn(deepTunnel, 'deep-echo-boss').maxHp).toBe(4956);
+  });
+
   it('keeps paid progression, squad and map bonuses in an auto-fire run', () => {
     const purchased = settlePurchase(defaultSave(), {
       productId: 'aurora-whale-song-skin',

@@ -10,7 +10,7 @@
 
 ## Global Constraints
 
-- 单局逻辑硬上限保持 600000ms，1×/1.5×/2×/3× 结果确定性等价。
+- 单局逻辑硬上限保持 480000ms，1×/1.5×/2×/3× 结果确定性等价。
 - 不新增货币、不升级存档版本、不接入真实支付或服务端。
 - 三张新增运行时怪物资源合计目标不超过 360KB。
 - 所有生产行为先观察对应测试 RED，再写最小实现至 GREEN。
@@ -147,7 +147,7 @@ Expected: FAIL because profiles and segments are absent.
 
 - [ ] **Step 3: Implement profiles and deterministic segments**
 
-Define four frozen profiles and nine fixed time segments. `createWaveSchedule(seed, mapId)` applies map weights without wall-clock randomness. Spawn-time enemy stats receive profile multipliers once; Boss intro remains 360000ms and hard cap remains 600000ms.
+Define four frozen profiles and nine fixed time segments. `createWaveSchedule(seed, mapId)` applies map weights without wall-clock randomness. Spawn-time enemy stats receive profile multipliers once; Boss intro remains 360000ms and hard cap remains 480000ms.
 
 - [ ] **Step 4: Run GREEN and deterministic suites**
 
