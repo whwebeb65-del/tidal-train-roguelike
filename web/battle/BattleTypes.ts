@@ -30,6 +30,27 @@ export type EnemyKind =
   | 'storm-ray-elite'
   | 'deep-echo-boss';
 
+export type EnemyBehaviourPhase =
+  | 'advance'
+  | 'lantern-charge'
+  | 'elite-telegraph'
+  | 'elite-charge'
+  | 'elite-exposed'
+  | 'boss-summon'
+  | 'boss-tide'
+  | 'boss-enraged';
+
+export interface EnemyBehaviourState {
+  readonly phase: EnemyBehaviourPhase;
+  readonly phaseRemainingMs: number;
+  readonly cycle: number;
+  readonly targetLane: 0 | 1 | 2;
+  readonly safeLane: 0 | 1 | 2;
+  readonly invulnerable: boolean;
+  readonly damageTakenMultiplier: number;
+  readonly weakPointOpen: boolean;
+}
+
 export type BattleGeneralUpgradeId =
   | 'multi-barrel'
   | 'rapid-reload'
@@ -89,7 +110,7 @@ export interface BattleRunInput {
 export interface EnemyState {
   readonly id: number;
   readonly kind: EnemyKind;
-  readonly lane: 0 | 1 | 2;
+  lane: 0 | 1 | 2;
   x: number;
   y: number;
   hp: number;
@@ -100,6 +121,7 @@ export interface EnemyState {
   attackCooldownMs: number;
   ageMs: number;
   alive: boolean;
+  behaviour?: EnemyBehaviourState;
 }
 
 export interface BattleAimPoint {
@@ -275,6 +297,41 @@ export type BattleEvent =
       readonly skillVariants: Readonly<SkillVariantLoadout>;
     }
   | { readonly type: 'elite-entered'; readonly enemyId: number }
+  | {
+      readonly type: 'enemy-lane-shifted';
+      readonly enemyId: number;
+      readonly lane: 0 | 1 | 2;
+    }
+  | { readonly type: 'enemy-ranged-warning'; readonly enemyId: number }
+  | { readonly type: 'enemy-ranged-fired'; readonly enemyId: number }
+  | {
+      readonly type: 'enemy-support-pulse';
+      readonly enemyId: number;
+      readonly targetIds: readonly number[];
+    }
+  | {
+      readonly type: 'elite-charge-telegraph';
+      readonly enemyId: number;
+      readonly lane: 0 | 1 | 2;
+      readonly durationMs: number;
+    }
+  | { readonly type: 'elite-charge-started'; readonly enemyId: number }
+  | { readonly type: 'elite-exposed'; readonly enemyId: number; readonly durationMs: number }
+  | {
+      readonly type: 'boss-phase-changed';
+      readonly phase: 'boss-summon' | 'boss-tide' | 'boss-enraged';
+    }
+  | {
+      readonly type: 'boss-tide-warning';
+      readonly safeLane: 0 | 1 | 2;
+      readonly durationMs: number;
+    }
+  | {
+      readonly type: 'boss-tide-impact';
+      readonly safeLane: 0 | 1 | 2;
+      readonly avoided: boolean;
+    }
+  | { readonly type: 'boss-weakpoint-hit'; readonly enemyId: number; readonly bonusDamage: number }
   | { readonly type: 'boss-intro-started' }
   | { readonly type: 'boss-intro-ended'; readonly enemyId: number }
   | { readonly type: 'boss-charge-started'; readonly durationMs: number }

@@ -47,6 +47,11 @@ import {
 } from './WaveScheduler';
 import { ENEMY_GEOMETRY, HUD_SAFE_BOTTOM_Y, enemySpawnY } from './EnemyGeometry';
 import {
+  advanceEnemyBehaviour,
+  createEnemyBehaviour,
+  type EnemyBehaviourIntent,
+} from './EnemyBehaviourSystem';
+import {
   EntityPool,
   type EntityPoolStats,
 } from './EntityPool';
@@ -501,6 +506,7 @@ export class BattleEngine {
       this.spawnScheduledEnemies();
       this.maybeSpawnElite();
       this.updateExtremeEffects(stepMs);
+      this.updateEnemyBehaviours(stepMs);
       this.moveEnemies(stepMs);
       this.updateEliteMechanics();
       this.updateBossMechanics(stepMs);
@@ -583,6 +589,7 @@ export class BattleEngine {
       attackCooldownMs: definition.attackIntervalMs,
       ageMs: 0,
       alive: true,
+      behaviour: createEnemyBehaviour(kind, this.nextEntityId - 1, lane),
     };
     this.enemies.push(enemy);
     this.events.push({
@@ -632,6 +639,109 @@ export class BattleEngine {
       elite.attackCooldownMs *= 0.7;
     }
 
+  }
+
+  private updateEnemyBehaviours(stepMs: number): void {
+    for (const enemy of [...this.enemies].sort((left, right) => left.id - right.id)) {
+      if (!enemy.alive || !enemy.behaviour) continue;
+      const result = advanceEnemyBehaviour({
+        kind: enemy.kind,
+        enemyId: enemy.id,
+        lane: enemy.lane,
+        hpRatio: enemy.hp / Math.max(1, enemy.maxHp),
+        stepMs,
+        state: enemy.behaviour,
+      });
+      enemy.behaviour = result.state;
+      this.applyEnemyBehaviourIntent(enemy, result.intent);
+      if (this.status !== 'running') return;
+    }
+  }
+
+  private applyEnemyBehaviourIntent(
+    enemy: EnemyState,
+    intent: EnemyBehaviourIntent,
+  ): void {
+    if (intent.rangedWarning) {
+      this.events.push({ type: 'enemy-ranged-warning', enemyId: enemy.id });
+    }
+    if (intent.rangedFire) {
+      this.damageTrain(
+        ENEMY_CONFIG[enemy.kind].defenceDamage * this.input.enemyDamageMultiplier,
+        enemy.x < 195 ? 1 : enemy.x > 195 ? -1 : 0,
+        enemy.id,
+      );
+      this.events.push({ type: 'enemy-ranged-fired', enemyId: enemy.id });
+    }
+    if (intent.supportPulse) this.applySupportPulse(enemy);
+    if (intent.eliteWarning) {
+      this.events.push({
+        type: 'elite-charge-telegraph',
+        enemyId: enemy.id,
+        lane: enemy.behaviour?.targetLane ?? enemy.lane,
+        durationMs: 800,
+      });
+    }
+    if (intent.eliteCharge) {
+      this.events.push({ type: 'elite-charge-started', enemyId: enemy.id });
+    }
+    if (intent.eliteExposed) {
+      this.events.push({ type: 'elite-exposed', enemyId: enemy.id, durationMs: 1200 });
+    }
+    if (intent.bossPhaseChanged) {
+      this.events.push({ type: 'boss-phase-changed', phase: intent.bossPhaseChanged });
+    }
+    if (intent.bossSummon) {
+      for (let index = 0; index < 3; index += 1) {
+        this.spawnEnemy(index === 1 ? 'lantern-ray' : 'tide-shell-hatchling', index as 0 | 1 | 2);
+      }
+    }
+    if (intent.tideWarning) {
+      this.events.push({
+        type: 'boss-tide-warning',
+        safeLane: enemy.behaviour?.safeLane ?? 1,
+        durationMs: 1200,
+      });
+    }
+    if (intent.tideImpact) {
+      const safeLane = enemy.behaviour?.safeLane ?? 1;
+      const avoided = this.aimLane() === safeLane;
+      if (!avoided) {
+        this.damageTrain(
+          this.input.maxTrainHp * 0.12 * this.input.enemyDamageMultiplier,
+          0,
+          enemy.id,
+        );
+      }
+      this.events.push({ type: 'boss-tide-impact', safeLane, avoided });
+    }
+  }
+
+  private applySupportPulse(source: EnemyState): void {
+    const targets = this.enemies
+      .filter((candidate) => (
+        candidate.alive
+        && candidate.id !== source.id
+        && candidate.kind !== 'deep-echo-boss'
+        && candidate.lane === source.lane
+      ))
+      .sort((left, right) => right.y - left.y || left.id - right.id)
+      .slice(0, 3);
+    for (const target of targets) {
+      target.shield = Math.max(target.shield, Math.floor(target.maxHp * 0.18));
+    }
+    this.events.push({
+      type: 'enemy-support-pulse',
+      enemyId: source.id,
+      targetIds: targets.map((target) => target.id),
+    });
+  }
+
+  private aimLane(): 0 | 1 | 2 | null {
+    if (!this.mainCannonAim) return null;
+    if (this.mainCannonAim.x < (LANE_X[0] + LANE_X[1]) / 2) return 0;
+    if (this.mainCannonAim.x > (LANE_X[1] + LANE_X[2]) / 2) return 2;
+    return 1;
   }
 
   private maybeStartBossIntro(): void {
@@ -730,6 +840,8 @@ export class BattleEngine {
     for (const enemy of this.enemies) {
       if (!enemy.alive || enemy.kind === 'deep-echo-boss') continue;
       enemy.ageMs += stepMs;
+      this.moveEnemyTowardBehaviourLane(enemy, stepMs);
+      if (enemy.kind === 'lantern-ray' && enemy.y >= 300) continue;
       if (enemy.y < DEFENCE_LINE_Y) {
         enemy.y = Math.min(
           DEFENCE_LINE_Y,
@@ -755,6 +867,22 @@ export class BattleEngine {
       );
       if (this.status !== 'running') return;
     }
+  }
+
+  private moveEnemyTowardBehaviourLane(enemy: EnemyState, stepMs: number): void {
+    const targetLane = enemy.behaviour?.targetLane ?? enemy.lane;
+    const targetX = LANE_X[targetLane];
+    const distance = targetX - enemy.x;
+    if (Math.abs(distance) < 0.01) {
+      enemy.x = targetX;
+      if (enemy.lane !== targetLane) {
+        enemy.lane = targetLane;
+        this.events.push({ type: 'enemy-lane-shifted', enemyId: enemy.id, lane: targetLane });
+      }
+      return;
+    }
+    const speed = enemy.behaviour?.phase === 'elite-charge' ? 360 : 120;
+    enemy.x += Math.sign(distance) * Math.min(Math.abs(distance), speed * stepMs / 1000);
   }
 
   private updateMainCannon(stepMs: number): void {
@@ -1095,7 +1223,17 @@ export class BattleEngine {
     source: ProjectileState['source'] | 'extreme-tide' | 'splash',
   ): void {
     if (!enemy.alive || rawDamage <= 0) return;
-    let damage = Math.max(0, Math.floor(rawDamage));
+    if (enemy.behaviour?.invulnerable) return;
+    let damage = Math.max(
+      0,
+      Math.floor(rawDamage * (enemy.behaviour?.damageTakenMultiplier ?? 1)),
+    );
+    if (enemy.kind === 'deep-echo-boss' && enemy.behaviour?.weakPointOpen) {
+      const bonusDamage = Math.max(1, Math.floor(damage * 0.5));
+      damage += bonusDamage;
+      this.energy = Math.min(100, this.energy + 2);
+      this.events.push({ type: 'boss-weakpoint-hit', enemyId: enemy.id, bonusDamage });
+    }
     if (enemy.kind === 'reef-crab' && !enemy.defenceBroken) {
       enemy.defenceBroken = true;
       damage = Math.max(1, Math.floor(damage * 0.35));
