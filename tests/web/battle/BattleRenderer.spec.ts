@@ -126,6 +126,30 @@ function trainSignatureFeature(commands: readonly BattleDrawCommand[]) {
 }
 
 describe('BattleRenderer', () => {
+  it('layers atmosphere and one grounded shadow below every living enemy', () => {
+    const commands = renderCommands({ reducedMotion: true });
+    expect(commands.map((command) => command.kind)).toEqual(expect.arrayContaining([
+      'atmosphere-wash',
+      'horizon-glow',
+      'danger-vignette',
+    ]));
+    const shadows = commands.filter((command) => command.kind === 'enemy-contact-shadow');
+    expect(shadows).toHaveLength(createFrameFixture().enemies.filter((enemy) => enemy.alive).length);
+    for (const enemy of createFrameFixture().enemies.filter((item) => item.alive)) {
+      const shadowIndex = commands.findIndex((command) => (
+        command.kind === 'enemy-contact-shadow'
+        && 'x' in command
+        && command.x === enemy.x
+      ));
+      const spriteIndex = commands.findIndex((command) => (
+        command.kind === 'enemy'
+        && command.enemyKind === enemy.kind
+      ));
+      expect(shadowIndex).toBeGreaterThan(-1);
+      expect(shadowIndex).toBeLessThan(spriteIndex);
+    }
+  });
+
   it.each([
     ['tide-shell-hatchling', 'tideShellHatchling'],
     ['lantern-ray', 'lanternRay'],

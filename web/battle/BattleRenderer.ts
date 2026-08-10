@@ -25,6 +25,7 @@ import type { RenderBudget } from './QualityMonitor';
 import type { TrainMotionFrameView } from './TrainMotionTypes';
 import { ENEMY_GEOMETRY, ENEMY_LABELS } from './EnemyGeometry';
 import { getBossWeakPoint } from './BossWeakPointSystem';
+import { getBattleAtmosphere } from './BattleAtmosphere';
 
 export interface BattleRenderInput {
   readonly frame: BattleFrameView;
@@ -73,6 +74,7 @@ export class BattleRenderer {
     try {
       this.painter.clear('#d98a62');
       this.drawBackground(input);
+      this.drawAtmosphere(input);
       this.drawBackgroundParticles(input);
       this.drawWaterLanes(input, trainMotion);
       this.drawLoot(input);
@@ -90,6 +92,47 @@ export class BattleRenderer {
     } finally {
       this.painter.end();
     }
+  }
+
+  private drawAtmosphere(input: BattleRenderInput): void {
+    const atmosphere = getBattleAtmosphere(input.frame);
+    const pulse = input.reducedMotion
+      ? 0
+      : Math.sin(input.timeMs / 620) * atmosphere.danger * 0.025;
+    this.painter.ellipse({
+      kind: 'atmosphere-wash',
+      layer: 'background',
+      x: 195,
+      y: 422,
+      radiusX: 290,
+      radiusY: 560,
+      fill: atmosphere.wash,
+      alpha: 0.08 + atmosphere.danger * 0.12,
+      blendMode: 'multiply',
+    });
+    this.painter.ellipse({
+      kind: 'horizon-glow',
+      layer: 'background',
+      x: 195,
+      y: 176,
+      radiusX: 176 + atmosphere.boss * 24,
+      radiusY: 62 + atmosphere.boss * 12,
+      fill: atmosphere.horizonGlow,
+      alpha: 0.14 + atmosphere.boss * 0.16,
+      blendMode: 'screen',
+    });
+    this.painter.ellipse({
+      kind: 'danger-vignette',
+      layer: 'background',
+      x: 195,
+      y: 422,
+      radiusX: 214,
+      radiusY: 438,
+      stroke: atmosphere.boss ? '#211d51' : '#17344c',
+      lineWidth: 54,
+      alpha: atmosphere.vignette + pulse,
+      blendMode: 'multiply',
+    });
   }
 
   private drawBackgroundParticles(input: BattleRenderInput): void {
@@ -285,14 +328,18 @@ export class BattleRenderer {
       ? 0
       : Math.sin((input.timeMs + enemy.id * 97) / 260) * 2.5;
     const y = enemy.y + bob;
+    const atmosphere = getBattleAtmosphere(input.frame);
     this.painter.ellipse({
-      kind: 'enemy-shadow',
+      kind: 'enemy-contact-shadow',
       layer: 'enemies',
       x: enemy.x,
       y: y + size.height * 0.38,
       radiusX: size.width * 0.32,
       radiusY: Math.max(3, size.height * 0.08),
-      fill: 'rgba(18, 90, 126, 0.22)',
+      fill: atmosphere.boss
+        ? 'rgba(26, 26, 70, 0.42)'
+        : 'rgba(18, 65, 86, 0.3)',
+      alpha: 0.72 + atmosphere.danger * 0.2,
     });
 
     if (source) {
