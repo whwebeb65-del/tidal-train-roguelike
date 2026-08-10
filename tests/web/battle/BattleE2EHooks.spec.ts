@@ -28,6 +28,7 @@ function createController(): BattleE2EController {
         lastUncaughtError: null,
       },
       settlementCount: 0,
+      verification: { precisionWeakPointHits: 0, musicIntensity: 0 },
       progression: {
         runLevel: 1,
         ranks: { 'tidal-volley': 1 },
@@ -49,6 +50,7 @@ function createController(): BattleE2EController {
     e2eRequestResume: vi.fn(async () => undefined),
     e2eReturnToStation: vi.fn(async () => undefined),
     e2eSetBattleSpeed: vi.fn(() => true),
+    e2eSetMainCannonAim: vi.fn(() => true),
   };
 }
 
@@ -81,6 +83,8 @@ describe('BattleE2EHooks', () => {
     expect(controller.e2eNavigate).toHaveBeenCalledWith('captain');
     expect(target.__TIDAL_TRAIN_E2E__?.setBattleSpeed(1.5)).toBe(true);
     expect(controller.e2eSetBattleSpeed).toHaveBeenCalledWith(1.5);
+    expect(target.__TIDAL_TRAIN_E2E__?.setMainCannonAim(195, 320)).toBe(true);
+    expect(controller.e2eSetMainCannonAim).toHaveBeenCalledWith(195, 320);
     expect(target.__TIDAL_TRAIN_E2E__?.snapshot().trainMotion).toBeNull();
     expect(target.__TIDAL_TRAIN_E2E__?.snapshot().progression).toEqual({
       runLevel: 1,

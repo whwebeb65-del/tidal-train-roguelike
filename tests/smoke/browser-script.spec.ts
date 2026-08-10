@@ -90,6 +90,10 @@ describe('browser smoke script', () => {
     expect(source).toContain('tideBeastKindsSeen');
     expect(source).toContain('roleBehaviourSeen');
     expect(source).toContain('full battle should encounter tide beast');
+    expect(source).toContain('distinctTideBeastArtSeen');
+    expect(source).toContain('evolutionOfferSeen');
+    expect(source).toContain('precisionWeakPointSeen');
+    expect(source).toContain('battleMusicIntensitySeen');
     expect(source).toContain('battle hard cap should not be reached');
     expect(source).toContain('chooseStrategicUpgrade');
     expect(source).toContain("[data-upgrade-id=");

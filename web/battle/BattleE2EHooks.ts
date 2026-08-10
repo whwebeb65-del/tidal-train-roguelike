@@ -9,6 +9,7 @@ import type {
 import type { TrainMotionFrameView } from './TrainMotionTypes';
 import type { EffectParticleKind } from './EffectSystem';
 import type { BattleSpeed } from '../../src/domain/progression/AccountProgressionSystem';
+import type { BattleMusicIntensity } from '../audio/BattleMusicDirector';
 
 export interface BattleE2EEffectGeometry {
   readonly particles: readonly {
@@ -44,6 +45,10 @@ export interface BattleE2ESnapshot {
   readonly effects: BattleE2EEffectGeometry | null;
   readonly diagnostics: BattleDiagnosticsSnapshot;
   readonly settlementCount: number;
+  readonly verification: {
+    readonly precisionWeakPointHits: number;
+    readonly musicIntensity: BattleMusicIntensity;
+  };
   readonly progression: {
     readonly runLevel: number;
     readonly ranks: Readonly<Record<string, number>>;
@@ -64,6 +69,7 @@ export interface BattleE2EController {
   e2eAdvanceBattle(durationMs: number): void;
   e2eChooseFirstUpgrade(): boolean;
   e2eSetBattleSpeed(speed: BattleSpeed): boolean;
+  e2eSetMainCannonAim(x: number, y: number): boolean;
   e2eUseSkill(skillId: BattleSkillId): boolean;
   e2eRequestPause(): void;
   e2eRequestResume(): Promise<void>;
@@ -78,6 +84,7 @@ export interface TidalTrainE2EHooks {
   advanceBattle(durationMs: number): void;
   chooseFirstUpgrade(): boolean;
   setBattleSpeed(speed: BattleSpeed): boolean;
+  setMainCannonAim(x: number, y: number): boolean;
   useSkill(skillId: BattleSkillId): boolean;
   requestPause(): void;
   requestResume(): Promise<void>;
@@ -114,6 +121,7 @@ export function installBattleE2EHooks(
     ),
     chooseFirstUpgrade: () => controller.e2eChooseFirstUpgrade(),
     setBattleSpeed: (speed) => controller.e2eSetBattleSpeed(speed),
+    setMainCannonAim: (x, y) => controller.e2eSetMainCannonAim(x, y),
     useSkill: (skillId) => controller.e2eUseSkill(skillId),
     requestPause: () => controller.e2eRequestPause(),
     requestResume: () => controller.e2eRequestResume(),

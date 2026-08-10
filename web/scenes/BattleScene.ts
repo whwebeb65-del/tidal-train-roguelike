@@ -611,12 +611,12 @@ export class BattleScene implements GameScene {
     this.dependencies.engine.update(stepMs);
     const events = this.dependencies.engine.drainEvents();
     this.motion.update(stepMs, this.dependencies.engine.frame, events);
+    this.sound.consume(events, this.dependencies.engine.frame);
     if (events.length > 0) {
       this.dependencies.effects.consume(
         events,
         this.dependencies.engine.frame,
       );
-      this.sound.consume(events, this.dependencies.engine.frame);
       this.dependencies.onBattleEvents(
         Object.freeze(events.map((event) => deepFreeze(structuredClone(event)))),
       );

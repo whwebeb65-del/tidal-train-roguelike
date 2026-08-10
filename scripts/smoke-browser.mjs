@@ -1766,6 +1766,14 @@ async function finishFullBattle(client, { claimSalvage }) {
     'tide-parasite-snail',
   ];
   const tideBeastKindsSeen = new Set();
+  const evolutionIds = new Set([
+    'split-tide-arrow', 'reef-piercer', 'returning-volley', 'rainstorm-school',
+    'bursting-bubble', 'reflective-spines', 'overflow-membrane', 'emergency-trigger',
+    'undertow-eye', 'lingering-vortex', 'energy-return', 'double-crest',
+  ]);
+  let evolutionOfferSeen = false;
+  let precisionWeakPointSeen = false;
+  let battleMusicIntensitySeen = false;
   let roleBehaviourSeen = false;
   const captured = new Set();
 
@@ -1777,6 +1785,9 @@ async function finishFullBattle(client, { claimSalvage }) {
     maxTrainSpeed = Math.max(maxTrainSpeed, trainMotion.speed);
     bossMotionSeen ||= trainMotion.phase === 'boss';
     normalKillSeen ||= battle.kills > 0;
+    evolutionOfferSeen ||= battle.offeredUpgradeIds.some((id) => evolutionIds.has(id));
+    precisionWeakPointSeen ||= state.verification.precisionWeakPointHits > 0;
+    battleMusicIntensitySeen ||= state.verification.musicIntensity >= 2;
     for (const enemy of battle.enemies) {
       if (requiredTideBeastKinds.includes(enemy.kind)) {
         tideBeastKindsSeen.add(enemy.kind);
@@ -1802,6 +1813,18 @@ async function finishFullBattle(client, { claimSalvage }) {
     if (battle.cooldowns['tidal-volley'] <= 0) await capture('ready');
     if (bossIntroSeen) await capture('boss');
     if (roleBehaviourSeen) await capture('tide-beast-role');
+
+    const openBoss = battle.enemies.find((enemy) => (
+      enemy.kind === 'deep-echo-boss'
+      && enemy.alive
+      && enemy.behaviour?.weakPointOpen
+    ));
+    if (openBoss && !precisionWeakPointSeen) {
+      await callHook(
+        client,
+        `return hook.setMainCannonAim(${openBoss.x}, ${openBoss.y + 9});`,
+      );
+    }
 
     if (
       battle.status === 'defeat'
@@ -1893,6 +1916,35 @@ async function finishFullBattle(client, { claimSalvage }) {
       `full battle should encounter tide beast ${kind}`,
     );
   }
+  const distinctTideBeastArtSeen = await evaluate(client, `(() => {
+    const resources = performance.getEntriesByType('resource')
+      .map((entry) => entry.name);
+    return [
+      'tide-shell-hatchling-',
+      'lantern-ray-',
+      'tide-parasite-snail-',
+    ].every((asset) => resources.some((url) => url.includes(asset)));
+  })()`);
+  assert.equal(
+    distinctTideBeastArtSeen,
+    true,
+    'full battle should load all three dedicated tide beast artworks',
+  );
+  assert.equal(
+    evolutionOfferSeen,
+    true,
+    'full battle should offer a qualitative skill evolution at a milestone',
+  );
+  assert.equal(
+    precisionWeakPointSeen,
+    true,
+    'manual boss aim should land at least one precise weak-point hit',
+  );
+  assert.equal(
+    battleMusicIntensitySeen,
+    true,
+    'battle score should rise above the calm arrangement',
+  );
   assert.equal(
     roleBehaviourSeen,
     true,

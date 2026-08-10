@@ -338,6 +338,7 @@ let captainSelectionTracked = false;
 let wardrobeViewTracked = false;
 let equipmentViewTracked = false;
 let runMode: 'normal' | 'daily-trial' = 'normal';
+let e2ePrecisionWeakPointHits = 0;
 let currentMapId: MapId = initialState.selectedMapId;
 let runId = '';
 let seed = 0;
@@ -827,6 +828,7 @@ function trackBattleEvents(events: readonly BattleEvent[]): void {
         elapsedMs: activeBattleEngine.outcome.elapsedMs,
       });
     }
+    if (event.type === 'boss-weakpoint-hit') e2ePrecisionWeakPointHits += 1;
   }
 }
 
@@ -2312,6 +2314,10 @@ function e2eSnapshot(): BattleE2ESnapshot {
       : null,
     diagnostics: snapshot,
     settlementCount: snapshot.settledBattleCount,
+    verification: {
+      precisionWeakPointHits: e2ePrecisionWeakPointHits,
+      musicIntensity: audio.debugState?.score?.intensity ?? 0,
+    },
     progression: {
       runLevel: activeBattleEngine?.frame.runLevel ?? 1,
       ranks: { ...(activeBattleEngine?.frame.skillRanks ?? {}) },
@@ -2348,6 +2354,7 @@ async function e2eStartBattle(
   mode: 'normal' | 'daily-trial',
 ): Promise<void> {
   if (!e2eEnabled) return;
+  e2ePrecisionWeakPointHits = 0;
   await startRun(mode);
   await renderQueue;
 }
@@ -2391,6 +2398,9 @@ return {
   },
   e2eSetBattleSpeed(speed: BattleSpeed): boolean {
     return activeBattleScene?.setBattleSpeed(speed) ?? false;
+  },
+  e2eSetMainCannonAim(x: number, y: number): boolean {
+    return activeBattleEngine?.setMainCannonAim({ x, y }) ?? false;
   },
   e2eUseSkill(skillId: BattleSkillId): boolean {
     return activeBattleScene?.useSkillForE2E(skillId) ?? false;

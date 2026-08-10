@@ -48,7 +48,11 @@ describe('createBattleRunInput', () => {
       'bubble-barrier': 1,
       'extreme-tide': 1,
     });
-    expect(result.unlockedSkillVariants).toEqual([]);
+    expect(result.unlockedSkillVariants).toEqual([
+      'split-tide-arrow',
+      'bursting-bubble',
+      'undertow-eye',
+    ]);
   });
 
   it('freezes mastery powers and unlocked variants from the save snapshot', () => {
