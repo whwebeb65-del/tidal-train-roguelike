@@ -14,6 +14,10 @@ describe('living station home composition', () => {
     expect(source).toContain('data-action="upgrade-station"');
     expect(source).toContain('data-action="select-map"');
     expect(source).toContain('data-action="unlock-map"');
+    expect(source).toContain('renderCaptainGuidebook');
+    expect(source.indexOf('renderCaptainGuidebook({')).toBeLessThan(
+      source.indexOf('<div class="station-route-yard living-zone">'),
+    );
   });
 
   it('keeps the route yard shellless and supplies mobile layout rules', () => {

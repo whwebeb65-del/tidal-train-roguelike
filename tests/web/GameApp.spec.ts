@@ -75,6 +75,7 @@ describe('LegacyGameRuntime departure transaction', () => {
     staminaUpdatedAtMs?: number;
     stationLevel?: number;
     accountLevel?: number;
+    firstClearMapIds?: string[];
     preferredBattleSpeed?: 1 | 1.5 | 2 | 3;
     preparation?: 'ready' | 'local-abort' | 'failure';
     scene?: () => never;
@@ -90,6 +91,7 @@ describe('LegacyGameRuntime departure transaction', () => {
       staminaUpdatedAtMs: options.staminaUpdatedAtMs ?? 0,
       stationLevel: options.stationLevel ?? 1,
       accountLevel: options.accountLevel ?? 1,
+      firstClearMapIds: options.firstClearMapIds ?? [],
     };
     storage.setItem(APP_STORAGE_KEYS.player, JSON.stringify(save));
     const snapshots: Array<{ phase: string; stamina: number; staminaUpdatedAtMs: number; accountXp: number; activeRunStaminaSpent: number }> = [];
@@ -214,5 +216,34 @@ describe('LegacyGameRuntime departure transaction', () => {
     expect(creates).toBe(2);
     expect(saved.stamina).toBe(5);
     expect(saved.accountXp).toBe(50);
+  });
+
+  it('renders and claims the current guidebook objective exactly once', async () => {
+    const { app, storage, runtime } = setup({
+      firstClearMapIds: ['drift-suburb'],
+    });
+    await runtime.start();
+    const claim = app.querySelector<HTMLButtonElement>(
+      '[data-action="claim-guidebook"][data-guidebook-objective="first-clear"]',
+    );
+    expect(claim).not.toBeNull();
+
+    claim?.click();
+    const firstSave = JSON.parse(storage.getItem(APP_STORAGE_KEYS.player) ?? '{}');
+    const firstGuidebook = JSON.parse(
+      storage.getItem(APP_STORAGE_KEYS.guidebook) ?? '{}',
+    );
+    expect(firstSave.gears).toBe(60);
+    expect(firstGuidebook.claimedObjectiveIds).toEqual(['first-clear']);
+
+    const forgedRepeat = document.createElement('button');
+    forgedRepeat.dataset.action = 'claim-guidebook';
+    forgedRepeat.dataset.guidebookObjective = 'first-clear';
+    app.append(forgedRepeat);
+    forgedRepeat.click();
+    expect(JSON.parse(
+      storage.getItem(APP_STORAGE_KEYS.player) ?? '{}',
+    ).gears).toBe(60);
+    runtime.destroy();
   });
 });

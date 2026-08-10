@@ -268,6 +268,39 @@ async function assertLivingZoneAccessibility(client, label) {
   );
 }
 
+async function assertCaptainGuidebook(client, label) {
+  const result = await evaluate(client, `(() => {
+    const root = document.querySelector('.captain-guidebook');
+    const current = root?.querySelectorAll('.guidebook-current-ticket') ?? [];
+    const previews = root?.querySelectorAll('.guidebook-preview-ticket') ?? [];
+    const buttons = [...(root?.querySelectorAll('button:not([disabled])') ?? [])];
+    const rect = root?.getBoundingClientRect() ?? null;
+    return {
+      exists: root instanceof HTMLElement,
+      currentCount: current.length,
+      previewCount: previews.length,
+      rootLeft: rect?.left ?? -1,
+      rootRight: rect?.right ?? innerWidth + 1,
+      innerWidth,
+      controls: buttons.map((button) => {
+        const box = button.getBoundingClientRect();
+        return { width: box.width, height: box.height };
+      }),
+    };
+  })()`);
+  assert.equal(result.exists, true, `${label} guidebook root is missing`);
+  assert.equal(result.currentCount, 1, `${label} guidebook must show one current ticket`);
+  assert.ok(result.previewCount <= 2, `${label} guidebook shows too many previews`);
+  assert.ok(
+    result.rootLeft >= 0 && result.rootRight <= result.innerWidth + 1,
+    `${label} guidebook overflows horizontally`,
+  );
+  assert.ok(
+    result.controls.every(({ width, height }) => width >= 44 && height >= 44),
+    `${label} guidebook has an undersized control`,
+  );
+}
+
 async function assertBattleHudGeometry(client, label) {
   const geometry = await evaluate(client, `(() => {
     const hud = document.querySelector('.battle-hud__tide-log');
@@ -1997,6 +2030,24 @@ async function finishFullBattle(client, { claimSalvage }) {
 
   const station = await returnToStation(client, listenerBaseline);
   assert.equal(station.settlementCount, settlementBaseline + 1);
+  if (claimSalvage) {
+    assert.equal(
+      await clickBattleButton(
+        client,
+        '[data-action="claim-guidebook"]'
+          + '[data-guidebook-objective="first-clear"]',
+      ),
+      true,
+      'first real clear should unlock the guidebook claim stamp',
+    );
+    await waitForEvaluation(
+      client,
+      `!document.querySelector(
+        '[data-guidebook-objective="first-clear"]'
+      )`,
+      { label: 'guidebook advancing after first clear' },
+    );
+  }
   return {
     terminalStatus,
     upgrades,
@@ -2098,6 +2149,7 @@ async function runViewport(client, viewport, smokeId, browserErrors) {
   await assertNoHorizontalOverflow(client, `${label} launch`);
   await exerciseScenes(client, label);
   await assertMobileReadingSafety(client, label);
+  await assertCaptainGuidebook(client, label);
   await inspectHandDrawnStation(client, label);
   await captureQaScreenshot(client, `station-${label}`);
   if (viewport.full) {

@@ -62,7 +62,9 @@ export type PrototypeEventName =
   | 'skill_mastery_settled'
   | 'account_xp_settled'
   | 'battle_speed_changed'
-  | 'battle_hard_cap_reached';
+  | 'battle_hard_cap_reached'
+  | 'guidebook_objective_viewed'
+  | 'guidebook_reward_claimed';
 
 export interface PrototypeEvent {
   readonly name: PrototypeEventName;

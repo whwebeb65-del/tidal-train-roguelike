@@ -97,6 +97,12 @@ import {
   type DailyCheckInState,
 } from '../src/domain/retention/DailyCheckInSystem';
 import {
+  claimCaptainGuidebookReward,
+  getCaptainGuidebookSnapshot,
+  type CaptainGuidebookObjectiveId,
+  type CaptainGuidebookProgressSource,
+} from '../src/domain/retention/CaptainGuidebookSystem';
+import {
   getProductDefinition,
   PRODUCT_CATALOG,
   type ProductReward,
@@ -176,6 +182,7 @@ import type {
 import type { AudioManager } from './audio/AudioManager';
 import { renderLaunchCampaignView } from './views/LaunchCampaignView';
 import { renderSocialHubView } from './views/SocialHubView';
+import { renderCaptainGuidebook } from './views/CaptainGuidebookView';
 import { mountAppShell } from './app/AppShell';
 import { StationDepartureController } from './app/StationDepartureController';
 import { StationRunCoordinator } from './app/StationRunCoordinator';
@@ -331,6 +338,7 @@ let socialState = initialState.social;
 let campaignState = initialState.campaign;
 let dailyTrialState = initialState.dailyTrial;
 let dailyCheckInState = initialState.dailyCheckIn;
+let guidebookState = initialState.guidebook;
 let phase: 'station' | 'combat' = 'station';
 type HubView = Exclude<SceneId, 'battle'>;
 let hubView: HubView = 'station';
@@ -352,6 +360,7 @@ let lastDailySubmission: DailyTrialSubmissionResult | null = null;
 let dailyTrialSharePending = false;
 let pendingProductId: string | null = null;
 let storeViewTracked = false;
+let viewedGuidebookObjectiveId: CaptainGuidebookObjectiveId | null = null;
 let settlementDoubleClaimed = false;
 const battleAssetLoader = new BattleAssetLoader(BATTLE_ART_URLS);
 const diagnostics = new BattleDiagnostics();
@@ -705,6 +714,23 @@ function getProgressionSnapshot(): ProgressionSnapshot {
   });
 }
 
+function getGuidebookProgress(): CaptainGuidebookProgressSource {
+  return {
+    firstClearCount: save.firstClearMapIds.length,
+    stationLevel: save.stationLevel,
+    highestEquipmentLevel: Math.max(
+      0,
+      ...save.equipmentInventory.map((item) => item.level),
+    ),
+    highestSkillMasteryLevel: Math.max(
+      1,
+      ...Object.values(save.skillMasteryXp).map(skillMasteryLevelFromXp),
+    ),
+    legionId: socialState.legionId,
+    accountLevel: save.accountLevel,
+  };
+}
+
 function getBattleSpeed(accountLevel: number) {
   const speeds = availableBattleSpeeds(accountLevel);
   const preferred = settingsBridge.getSettings().preferredBattleSpeed;
@@ -905,6 +931,20 @@ function renderStationScene(): string {
   const currentDayId = getChinaDayId(Date.now());
   const dailyDefinition = syncDailyTrialDay();
   const progression = getProgressionSnapshot();
+  const guidebookObjectives = getCaptainGuidebookSnapshot(
+    guidebookState,
+    getGuidebookProgress(),
+  );
+  const currentGuidebookObjective = guidebookObjectives[0];
+  if (
+    currentGuidebookObjective
+    && viewedGuidebookObjectiveId !== currentGuidebookObjective.id
+  ) {
+    viewedGuidebookObjectiveId = currentGuidebookObjective.id;
+    track('guidebook_objective_viewed', {
+      objectiveId: currentGuidebookObjective.id,
+    });
+  }
   const mapCards = MAP_PROGRESSION.map((map) => {
     const unlocked = isMapUnlocked(save, map.id);
     const canUnlock = canUnlockMap(save, map.id);
@@ -936,6 +976,7 @@ function renderStationScene(): string {
       maxStamina: MAX_STAMINA,
       nextSpeedUnlock: accountTicketSnapshot().nextSpeedUnlock,
     })}
+    ${renderCaptainGuidebook({ objectives: guidebookObjectives })}
     <div class="station-route-yard living-zone">
       <div class="station-route-yard__heading"><h2>航线发车牌</h2><span>已开放 ${save.unlockedMapIds.length}/${MAP_PROGRESSION.length}</span></div>
       <div class="map-grid">${mapCards}</div>
@@ -948,6 +989,40 @@ function renderStationScene(): string {
     ${renderDailyTrialHub({ stationLevel: save.stationLevel, state: dailyTrialState, definition: dailyDefinition })}
     ${renderLaunchCampaignCenter()}
   </section>`;
+}
+
+function handleGuidebookClaim(
+  objectiveId: CaptainGuidebookObjectiveId,
+): void {
+  const result = claimCaptainGuidebookReward(
+    guidebookState,
+    getGuidebookProgress(),
+    objectiveId,
+    save,
+  );
+  if (!result.accepted) {
+    notice = result.reason === 'incomplete'
+      ? '这程值班任务还没有完成。'
+      : '这枚成长印章已经处理过了。';
+    render();
+    return;
+  }
+  guidebookState = result.state;
+  appStateRepository.saveGuidebook(guidebookState);
+  commit(result.save);
+  track('guidebook_reward_claimed', {
+    objectiveId,
+    gears: result.reward.gears,
+    routeMarks: result.reward.routeMarks,
+  });
+  const rewards = [
+    result.reward.gears > 0 ? `${result.reward.gears} 齿轮` : '',
+    result.reward.routeMarks > 0
+      ? `${result.reward.routeMarks} 航线徽记`
+      : '',
+  ].filter(Boolean).join(' · ');
+  notice = `成长手册已盖章：${rewards}。下一程已经公开。`;
+  render();
 }
 
 function renderWardrobeScreen(): string {
@@ -2181,6 +2256,36 @@ const onClick = async (event: Event): Promise<void> => {
   }
   if (action === 'captain-greeting') {
     activeStationScene?.requestCaptainGreeting();
+    return;
+  }
+  if (
+    action === 'claim-guidebook'
+    && button.dataset.guidebookObjective
+  ) {
+    handleGuidebookClaim(
+      button.dataset.guidebookObjective as CaptainGuidebookObjectiveId,
+    );
+    return;
+  }
+  if (
+    action === 'guidebook-destination'
+    && button.dataset.guidebookDestination
+  ) {
+    const destination = button.dataset.guidebookDestination;
+    if (destination === 'battle') {
+      await startRun('normal');
+      return;
+    }
+    if (destination === 'station') {
+      app.querySelector('.station-work-order')?.scrollIntoView?.({
+        block: 'center',
+      });
+      return;
+    }
+    if (['captain', 'equipment', 'legion'].includes(destination)) {
+      hubView = destination as HubView;
+      render();
+    }
     return;
   }
   if (action === 'select-captain' && button.dataset.captainId) {

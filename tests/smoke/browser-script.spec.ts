@@ -57,6 +57,8 @@ describe('browser smoke script', () => {
     expect(source).toContain('background-foreground');
     expect(source).toContain('data-ambient-event');
     expect(source).toContain('assertMobileReadingSafety');
+    expect(source).toContain('assertCaptainGuidebook');
+    expect(source).toContain('guidebook-current-ticket');
     expect(source).toContain('visibleRouteContent');
     expect(source).toContain('brandTextFullyVisible');
     expect(source).toContain('captainProminence');
