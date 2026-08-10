@@ -24,6 +24,9 @@ export type EnemyKind =
   | 'bubble-fin'
   | 'needle-jelly'
   | 'reef-crab'
+  | 'tide-shell-hatchling'
+  | 'lantern-ray'
+  | 'tide-parasite-snail'
   | 'storm-ray-elite'
   | 'deep-echo-boss';
 

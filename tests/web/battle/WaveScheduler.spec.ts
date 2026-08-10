@@ -11,9 +11,12 @@ describe('WaveScheduler', () => {
     const second = createWaveSchedule(99);
 
     expect(first).toEqual(second);
-    expect(first.filter((item) => item.kind === 'bubble-fin')).toHaveLength(152);
-    expect(first.filter((item) => item.kind === 'needle-jelly')).toHaveLength(103);
-    expect(first.filter((item) => item.kind === 'reef-crab')).toHaveLength(63);
+    expect(first.filter((item) => item.kind === 'bubble-fin')).toHaveLength(110);
+    expect(first.filter((item) => item.kind === 'needle-jelly')).toHaveLength(79);
+    expect(first.filter((item) => item.kind === 'reef-crab')).toHaveLength(49);
+    expect(first.filter((item) => item.kind === 'tide-shell-hatchling')).toHaveLength(47);
+    expect(first.filter((item) => item.kind === 'lantern-ray')).toHaveLength(24);
+    expect(first.filter((item) => item.kind === 'tide-parasite-snail')).toHaveLength(10);
     expect(
       first.every(
         (item) => item.spawnAtMs >= 0 && item.spawnAtMs < 345_000,
@@ -29,6 +32,12 @@ describe('WaveScheduler', () => {
       0,
     ) * 0.85 * 0.9 + ENEMY_CONFIG['storm-ray-elite'].experience;
     expect(normalPlayExperience).toBeGreaterThanOrEqual(3120);
+    expect(first.filter((item) => item.kind === 'tide-shell-hatchling')
+      .every((item) => item.spawnAtMs < 345_000)).toBe(true);
+    expect(first.filter((item) => item.kind === 'lantern-ray')
+      .every((item) => item.spawnAtMs >= 116_000)).toBe(true);
+    expect(first.filter((item) => item.kind === 'tide-parasite-snail')
+      .every((item) => item.spawnAtMs >= 232_000)).toBe(true);
     expect(getWaveAtTime(0)).toBe(1);
     expect(getWaveAtTime(61_000)).toBe(2);
     expect(getWaveAtTime(181_000)).toBe(4);

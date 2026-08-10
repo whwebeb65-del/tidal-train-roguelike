@@ -12,6 +12,9 @@ export const ENEMY_GEOMETRY: Readonly<Record<EnemyKind, {
   'bubble-fin': { width: 78, height: 78, fallback: '#7bd4de' },
   'needle-jelly': { width: 72, height: 84, fallback: '#77cbe9' },
   'reef-crab': { width: 84, height: 72, fallback: '#77cbd2' },
+  'tide-shell-hatchling': { width: 68, height: 58, fallback: '#f0a56f' },
+  'lantern-ray': { width: 92, height: 66, fallback: '#ffd46f' },
+  'tide-parasite-snail': { width: 76, height: 88, fallback: '#9bd58f' },
   'storm-ray-elite': { width: 158, height: 114, fallback: '#516ec7' },
   'deep-echo-boss': { width: 238, height: 178, fallback: '#304f9a' },
 };
@@ -20,6 +23,9 @@ export const ENEMY_LABELS: Readonly<Record<EnemyKind, string>> = {
   'bubble-fin': '泡鳍怪',
   'needle-jelly': '针水母',
   'reef-crab': '礁蟹',
+  'tide-shell-hatchling': '潮壳幼蟹',
+  'lantern-ray': '灯笼鳐',
+  'tide-parasite-snail': '寄潮螺',
   'storm-ray-elite': '雷鳐督军',
   'deep-echo-boss': '深海回响',
 };

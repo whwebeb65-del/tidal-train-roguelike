@@ -17,37 +17,37 @@ const WAVES = [
     wave: 1,
     startMs: 0,
     endMs: 55_000,
-    counts: { 'bubble-fin': 25, 'needle-jelly': 0, 'reef-crab': 0 },
+    counts: { 'bubble-fin': 18, 'needle-jelly': 0, 'reef-crab': 0, 'tide-shell-hatchling': 7, 'lantern-ray': 0, 'tide-parasite-snail': 0 },
   },
   {
     wave: 2,
     startMs: 58_000,
     endMs: 113_000,
-    counts: { 'bubble-fin': 25, 'needle-jelly': 15, 'reef-crab': 0 },
+    counts: { 'bubble-fin': 20, 'needle-jelly': 12, 'reef-crab': 0, 'tide-shell-hatchling': 8, 'lantern-ray': 0, 'tide-parasite-snail': 0 },
   },
   {
     wave: 3,
     startMs: 116_000,
     endMs: 171_000,
-    counts: { 'bubble-fin': 20, 'needle-jelly': 20, 'reef-crab': 10 },
+    counts: { 'bubble-fin': 16, 'needle-jelly': 16, 'reef-crab': 6, 'tide-shell-hatchling': 8, 'lantern-ray': 5, 'tide-parasite-snail': 0 },
   },
   {
     wave: 4,
     startMs: 174_000,
     endMs: 229_000,
-    counts: { 'bubble-fin': 24, 'needle-jelly': 20, 'reef-crab': 15 },
+    counts: { 'bubble-fin': 18, 'needle-jelly': 15, 'reef-crab': 12, 'tide-shell-hatchling': 8, 'lantern-ray': 6, 'tide-parasite-snail': 0 },
   },
   {
     wave: 5,
     startMs: 232_000,
     endMs: 287_000,
-    counts: { 'bubble-fin': 28, 'needle-jelly': 24, 'reef-crab': 18 },
+    counts: { 'bubble-fin': 18, 'needle-jelly': 18, 'reef-crab': 15, 'tide-shell-hatchling': 8, 'lantern-ray': 6, 'tide-parasite-snail': 5 },
   },
   {
     wave: 6,
     startMs: 290_000,
     endMs: 344_999,
-    counts: { 'bubble-fin': 30, 'needle-jelly': 24, 'reef-crab': 20 },
+    counts: { 'bubble-fin': 20, 'needle-jelly': 18, 'reef-crab': 16, 'tide-shell-hatchling': 8, 'lantern-ray': 7, 'tide-parasite-snail': 5 },
   },
 ] as const;
 

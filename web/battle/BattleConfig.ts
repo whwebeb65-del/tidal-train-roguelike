@@ -48,6 +48,27 @@ export const ENEMY_CONFIG: Readonly<Record<EnemyKind, {
     attackIntervalMs: 1500,
     experience: 20,
   },
+  'tide-shell-hatchling': {
+    hp: 72,
+    speedPerSecond: 66,
+    defenceDamage: 5,
+    attackIntervalMs: 950,
+    experience: 11,
+  },
+  'lantern-ray': {
+    hp: 82,
+    speedPerSecond: 38,
+    defenceDamage: 9,
+    attackIntervalMs: 2500,
+    experience: 18,
+  },
+  'tide-parasite-snail': {
+    hp: 168,
+    speedPerSecond: 28,
+    defenceDamage: 7,
+    attackIntervalMs: 2000,
+    experience: 24,
+  },
   'storm-ray-elite': {
     hp: 1200,
     speedPerSecond: 26,
