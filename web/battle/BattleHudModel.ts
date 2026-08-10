@@ -27,6 +27,7 @@ export interface BattleUpgradeCardModel {
   readonly nextLevel: number;
   readonly effect: string;
   readonly synergy: string;
+  readonly isEvolution: boolean;
 }
 
 export interface BattleSkillModel {
@@ -178,17 +179,19 @@ export function createBattleHudModel(
   const nextThreshold = frame.nextExperienceThreshold;
   const upgradeCards = frame.offeredUpgradeIds.map((id) => {
     const copy = UPGRADE_COPY[id];
+    const definition = getBattleUpgradeDefinition(id);
     const currentLevel = frame.upgradeLevels[id] ?? 0;
     return {
       id,
       name: copy.name,
       currentLevel,
       nextLevel: Math.min(
-        getBattleUpgradeDefinition(id).maxLevel,
+        definition.maxLevel,
         currentLevel + 1,
       ),
       effect: copy.effect,
       synergy: copy.synergy,
+      isEvolution: definition.kind === 'skill-variant',
     };
   });
   const interaction = getAvailableBattleInteractions(

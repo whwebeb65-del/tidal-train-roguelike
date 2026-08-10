@@ -21,6 +21,12 @@ export interface UpgradeApplyResult {
   readonly levels: Record<BattleUpgradeId, number>;
 }
 
+const EVOLUTION_MILESTONES = new Set([5, 10, 15, 20]);
+
+export function isEvolutionMilestone(runLevel: number): boolean {
+  return EVOLUTION_MILESTONES.has(Math.floor(runLevel));
+}
+
 export function createEmptyBattleBuild(
   overrides: Partial<BattleBuildState> = {},
 ): BattleBuildState {
@@ -140,9 +146,20 @@ export function createUpgradeOffer(
     (id) => getBattleUpgradeDefinition(id).kind === 'general',
   );
   const offer: BattleUpgradeId[] = [];
+  if (isEvolutionMilestone(runLevel)) {
+    const variantCandidates = allCandidates.filter(
+      (id) => getBattleUpgradeDefinition(id).kind === 'skill-variant',
+    );
+    const evolution = takeRandom(random, variantCandidates);
+    if (evolution !== undefined) offer.push(evolution);
+  }
   for (const candidates of [skillCandidates, generalCandidates]) {
-    const upgradeId = takeRandom(random, candidates);
+    const upgradeId = takeRandom(
+      random,
+      candidates.filter((id) => !offer.includes(id)),
+    );
     if (upgradeId !== undefined) offer.push(upgradeId);
+    if (offer.length >= 3) break;
   }
   const remaining = allCandidates.filter((id) => !offer.includes(id));
   while (offer.length < 3) {

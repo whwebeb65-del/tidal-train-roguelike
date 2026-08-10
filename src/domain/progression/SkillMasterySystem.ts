@@ -16,7 +16,7 @@ const CAST_XP: Readonly<Record<BattleSkillId, number>> = {
 };
 const CAST_XP_CAP = 60;
 const FIRST_CLEAR_XP = 40;
-const MILESTONES = [5, 10, 15, 20] as const;
+const MILESTONES = [1, 5, 10, 15] as const;
 
 export function createSkillMasteryXp(): SkillMasteryXp {
   return Object.fromEntries(

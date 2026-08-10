@@ -49,6 +49,7 @@ describe('BattleHUD', () => {
     expect(html.match(/data-battle-skill=/g)).toHaveLength(3);
     expect(html).toContain('data-battle-action="pause"');
     expect(html).toContain('data-upgrade-options');
+    expect(html).toContain('data-evolution-ribbon');
     expect(html).toContain('data-failure-overlay');
     expect(html).toContain('data-settlement-overlay');
     expect(html).toContain('data-hud-run-level');
@@ -326,6 +327,24 @@ describe('BattleHUD', () => {
     expect(model.shieldLabel).toContain('3.5');
     expect(model.upgradeCards).toHaveLength(3);
     expect(model.upgradeRerollVisible).toBe(true);
+  });
+
+  it('marks skill variants as evolution cards for the upgrade ribbon', () => {
+    const model = createBattleHudModel(createFrameFixture({
+      status: 'upgrade',
+      offeredUpgradeIds: [
+        'split-tide-arrow',
+        'rapid-reload',
+        'rank-bubble-barrier',
+      ],
+    }), {
+      mode: 'normal',
+      upgradeRerollAvailable: false,
+      skillRefreshAvailable: false,
+    });
+
+    expect(model.upgradeCards.map((card) => card.isEvolution))
+      .toEqual([true, false, false]);
   });
 
   it('uses catalog metadata for the fourth skill-rank level', () => {

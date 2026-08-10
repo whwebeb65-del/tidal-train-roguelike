@@ -34,12 +34,15 @@ describe('SkillMasterySystem', () => {
     expect(result.nextXp).toEqual(result.gainedXp);
   });
 
-  it('unlocks one ordered variant at mastery 5, 10, 15 and 20', () => {
-    expect(unlockedSkillVariants('tidal-volley', 4)).toEqual([]);
+  it('starts with one evolution and expands the permanent pool at 5, 10 and 15', () => {
+    expect(unlockedSkillVariants('tidal-volley', 1)).toEqual([
+      'split-tide-arrow',
+    ]);
     expect(unlockedSkillVariants('tidal-volley', 10)).toEqual([
       'split-tide-arrow',
       'reef-piercer',
+      'returning-volley',
     ]);
-    expect(unlockedSkillVariants('tidal-volley', 20)).toHaveLength(4);
+    expect(unlockedSkillVariants('tidal-volley', 15)).toHaveLength(4);
   });
 });

@@ -48,6 +48,7 @@ interface HudNodes {
   readonly speedButton: HTMLButtonElement;
   readonly upgradeOverlay: HTMLElement;
   readonly upgradeOptions: HTMLElement;
+  readonly evolutionRibbon: HTMLElement;
   readonly upgradeButtons: readonly HTMLButtonElement[];
   readonly upgradeCountdown: HTMLElement;
   readonly rerollButton: HTMLButtonElement;
@@ -142,6 +143,7 @@ export function renderBattleHudShell(): string {
         <span class="battle-dialog__eyebrow">CARGO UNLOADING / ROGUELITE UPGRADE</span>
         <h2>打开一只潮汐奖励箱</h2>
         <p>三选一立即装车，最高可叠加至 3 级。</p>
+        <span class="battle-evolution-ribbon" data-evolution-ribbon hidden>技能进化 · 改变战斗方式</span>
         <div class="battle-upgrade-grid" data-upgrade-options>
           ${Array.from({ length: 3 }, (_, index) => upgradeSlot(index)).join('')}
         </div>
@@ -370,16 +372,21 @@ export class BattleHUD {
       model.pendingActions.has('skill-refresh');
     nodes.upgradeOverlay.hidden = !model.upgradeVisible;
     nodes.upgradeOptions.hidden = model.upgradeCountdownVisible;
+    nodes.evolutionRibbon.hidden = !model.upgradeCards.some(
+      (card) => card.isEvolution,
+    ) || model.upgradeCountdownVisible;
     nodes.upgradeCountdown.hidden = !model.upgradeCountdownVisible;
     nodes.upgradeButtons.forEach((button, index) => {
       const card = model.upgradeCards[index];
       button.hidden = !card;
       if (!card) {
         delete button.dataset.upgradeId;
+        button.classList.remove('is-evolution');
         return;
       }
       button.dataset.upgradeId = card.id;
       button.disabled = model.pendingActions.has('upgrade-choice');
+      button.classList.toggle('is-evolution', card.isEvolution);
       setText(requireElement(button, '[data-upgrade-name]'), card.name);
       setText(
         requireElement(button, '[data-upgrade-level]'),
@@ -564,6 +571,7 @@ function collectNodes(host: HTMLElement): HudNodes {
     speedButton: requireElement(host, '[data-battle-action="speed"]'),
     upgradeOverlay: requireElement(host, '[data-upgrade-overlay]'),
     upgradeOptions: requireElement(host, '[data-upgrade-options]'),
+    evolutionRibbon: requireElement(host, '[data-evolution-ribbon]'),
     upgradeButtons: [...host.querySelectorAll<HTMLButtonElement>(
       '[data-upgrade-slot]',
     )],

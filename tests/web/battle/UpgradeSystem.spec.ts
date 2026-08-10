@@ -7,10 +7,49 @@ import {
   applyBattleUpgrade,
   createEmptyBattleBuild,
   createUpgradeOffer,
+  isEvolutionMilestone,
 } from '../../../web/battle/UpgradeSystem';
 import type { BattleGeneralUpgradeId } from '../../../web/battle/BattleTypes';
 
 describe('UpgradeSystem', () => {
+  it('guarantees one legal evolution at run levels 5, 10, 15 and 20', () => {
+    const build = createEmptyBattleBuild({
+      skillRanks: {
+        'tidal-volley': 2,
+        'bubble-barrier': 2,
+        'extreme-tide': 2,
+      },
+    });
+    const unlocked = [
+      'split-tide-arrow',
+      'bursting-bubble',
+      'undertow-eye',
+    ] as const;
+
+    for (const level of [5, 10, 15, 20]) {
+      expect(isEvolutionMilestone(level)).toBe(true);
+      const offer = createUpgradeOffer(71, level, build, unlocked, 0);
+      expect(offer.some((id) => (
+        getBattleUpgradeDefinition(id).kind === 'skill-variant'
+      ))).toBe(true);
+    }
+    expect(isEvolutionMilestone(6)).toBe(false);
+  });
+
+  it('makes the three starter evolutions legal before any skill rank upgrade', () => {
+    const offer = createUpgradeOffer(
+      91,
+      5,
+      createEmptyBattleBuild(),
+      ['split-tide-arrow', 'bursting-bubble', 'undertow-eye'],
+      0,
+    );
+
+    expect(offer.some((id) => (
+      getBattleUpgradeDefinition(id).kind === 'skill-variant'
+    ))).toBe(true);
+  });
+
   it('always offers one skill card, one general card and no duplicates', () => {
     const build = createEmptyBattleBuild();
     const offer = createUpgradeOffer(
@@ -143,7 +182,7 @@ describe('UpgradeSystem', () => {
           applyBattleUpgrade(createEmptyBattleBuild({
             skillRanks: { 'tidal-volley': 1, 'bubble-barrier': 1, 'extreme-tide': 1 },
           }), definition.id).skillVariants[skillId!],
-        ).toHaveLength(0);
+        ).toHaveLength(definition.requiredRank === 1 ? 1 : 0);
       }
     }
   });
