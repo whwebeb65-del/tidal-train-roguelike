@@ -10,6 +10,10 @@ describe('living station styles', () => {
     new URL('../../web/styles/living-station-workshop.css', import.meta.url),
     'utf8',
   );
+  const guidebookCss = readFileSync(
+    new URL('../../web/styles/captain-guidebook.css', import.meta.url),
+    'utf8',
+  );
 
   it('imports the scene language after generic progression styles', () => {
     const entry = readFileSync(new URL('../../web/styles.css', import.meta.url), 'utf8');
@@ -62,6 +66,19 @@ describe('living station styles', () => {
   it('keeps workshop equipment controls at the 44px touch-target minimum', () => {
     expect(workshopCss).toMatch(
       /\.workbench-item button\s*\{[^}]*min-height:\s*(?:4[4-9]|[5-9]\d|\d{3,})px;/,
+    );
+  });
+
+  it('keeps guidebook controls touch-safe and removes decorative motion', () => {
+    expect(guidebookCss).toMatch(
+      /\.guidebook-action\s*\{[^}]*min-width:\s*44px;[^}]*min-height:\s*44px;/,
+    );
+    expect(guidebookCss).toContain('@media (prefers-reduced-motion: reduce)');
+    expect(guidebookCss).toMatch(
+      /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.captain-guidebook[\s\S]*?animation:\s*none;/,
+    );
+    expect(guidebookCss).toMatch(
+      /\.captain-guidebook::(?:before|after)\s*\{[^}]*pointer-events:\s*none;/,
     );
   });
 });

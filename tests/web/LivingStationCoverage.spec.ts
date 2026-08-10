@@ -18,6 +18,7 @@ import { renderLaunchCampaignView } from '../../web/views/LaunchCampaignView';
 import { renderSettingsPanel } from '../../web/views/SettingsPanelView';
 import { renderSocialHubView } from '../../web/views/SocialHubView';
 import { renderWardrobe } from '../../web/views/WardrobeView';
+import { renderCaptainGuidebook } from '../../web/views/CaptainGuidebookView';
 
 interface ParsedHtmlDocument {
   readonly window: { readonly document: Document };
@@ -86,6 +87,7 @@ describe('living station non-battle coverage', () => {
       productBySkinId: { 'skin-aurora-whale-song': auroraProduct },
     }), 'wardrobe-carriage');
     expectLivingRoot(renderEquipment({ state: createStarterEquipmentState() }), 'otter-workshop');
+    expectLivingRoot(renderCaptainGuidebook({ objectives: [] }), 'captain-guidebook');
   });
 
   it('keeps settings as an accessible cabinet dialog instead of a generic card', () => {
