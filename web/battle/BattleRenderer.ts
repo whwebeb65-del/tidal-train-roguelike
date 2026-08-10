@@ -6,6 +6,7 @@ import type {
   ImageDrawCommand,
 } from './BattleDrawTypes';
 import type { CanvasViewport } from './CanvasViewport';
+import { LANE_X } from './BattleConfig';
 import type {
   EffectFrameView,
   EffectParticleView,
@@ -51,6 +52,10 @@ const ENEMY_ART: Readonly<Record<EnemyKind, BattleArtId>> = {
 };
 
 const captainRig = createCaptainRig();
+
+function laneX(lane: 0 | 1 | 2): number {
+  return LANE_X[lane];
+}
 
 export class BattleRenderer {
   public constructor(private readonly painter: BattlePainter) {}
@@ -319,6 +324,8 @@ export class BattleRenderer {
       this.drawFallbackEyes(enemy.x, y, size.width);
     }
 
+    this.drawEnemyBehaviour(enemy, y, size.width, size.height);
+
     const barWidth = size.width * 0.72;
     const hpRatio = enemy.maxHp > 0 ? enemy.hp / enemy.maxHp : 0;
     const infoY = y - size.height * 0.52;
@@ -384,6 +391,142 @@ export class BattleRenderer {
         ],
         stroke: '#fff4df',
         lineWidth: 2.5,
+      });
+    }
+  }
+
+  private drawEnemyBehaviour(
+    enemy: EnemyState,
+    y: number,
+    width: number,
+    height: number,
+  ): void {
+    if (enemy.kind === 'tide-shell-hatchling') {
+      for (const direction of [-1, 1] as const) {
+        this.painter.line({
+          kind: 'hatchling-claw',
+          layer: 'enemies',
+          points: [
+            { x: enemy.x + direction * width * 0.22, y: y + 2 },
+            { x: enemy.x + direction * width * 0.5, y: y - 8 },
+            { x: enemy.x + direction * width * 0.42, y: y + 8 },
+          ],
+          stroke: '#ffcf8a',
+          lineWidth: 4,
+          alpha: 0.96,
+        });
+      }
+    }
+    if (enemy.kind === 'lantern-ray') {
+      this.painter.ellipse({
+        kind: 'lantern-core',
+        layer: 'enemies',
+        x: enemy.x,
+        y: y + height * 0.05,
+        radiusX: width * 0.16,
+        radiusY: height * 0.18,
+        fill: '#ffe184',
+        stroke: '#fff7cc',
+        lineWidth: 2,
+        alpha: 0.95,
+      });
+      if (enemy.behaviour?.phase === 'lantern-charge') {
+        this.painter.ellipse({
+          kind: 'lantern-warning',
+          layer: 'front-effects',
+          x: enemy.x,
+          y,
+          radiusX: width * 0.58,
+          radiusY: height * 0.58,
+          stroke: '#ff725f',
+          lineWidth: 4,
+          alpha: 0.9,
+        });
+      }
+    }
+    if (enemy.kind === 'tide-parasite-snail') {
+      this.painter.ellipse({
+        kind: 'snail-spiral',
+        layer: 'enemies',
+        x: enemy.x,
+        y: y - height * 0.02,
+        radiusX: width * 0.24,
+        radiusY: width * 0.24,
+        stroke: '#d9ffb0',
+        lineWidth: 4,
+        alpha: 0.95,
+      });
+      this.painter.ellipse({
+        kind: 'snail-spiral-core',
+        layer: 'enemies',
+        x: enemy.x + 3,
+        y: y - 2,
+        radiusX: width * 0.1,
+        radiusY: width * 0.1,
+        stroke: '#5b9b72',
+        lineWidth: 3,
+      });
+    }
+    if (
+      enemy.kind === 'storm-ray-elite'
+      && enemy.behaviour?.phase === 'elite-telegraph'
+    ) {
+      this.painter.line({
+        kind: 'elite-lane-telegraph',
+        layer: 'front-effects',
+        points: [
+          { x: laneX(enemy.behaviour.targetLane), y: 124 },
+          { x: laneX(enemy.behaviour.targetLane), y: 686 },
+        ],
+        stroke: 'rgba(255, 111, 91, 0.72)',
+        lineWidth: 22,
+        alpha: 0.82,
+      });
+    }
+    if (enemy.kind === 'storm-ray-elite' && enemy.behaviour?.phase === 'elite-exposed') {
+      this.painter.ellipse({
+        kind: 'elite-exposed-mark',
+        layer: 'front-effects',
+        x: enemy.x,
+        y,
+        radiusX: width * 0.58,
+        radiusY: height * 0.58,
+        stroke: '#ffe28a',
+        lineWidth: 5,
+      });
+    }
+    if (
+      enemy.kind === 'deep-echo-boss'
+      && (enemy.behaviour?.phase === 'boss-tide' || enemy.behaviour?.phase === 'boss-enraged')
+    ) {
+      const safeLane = enemy.behaviour.safeLane;
+      for (const lane of [0, 1, 2] as const) {
+        this.painter.line({
+          kind: lane === safeLane ? 'boss-safe-lane' : 'boss-danger-lane',
+          layer: 'front-effects',
+          points: [
+            { x: laneX(lane), y: 124 },
+            { x: laneX(lane), y: 686 },
+          ],
+          stroke: lane === safeLane
+            ? 'rgba(111, 255, 212, 0.72)'
+            : 'rgba(255, 93, 78, 0.64)',
+          lineWidth: lane === safeLane ? 9 : 18,
+          alpha: 0.78,
+        });
+      }
+    }
+    if (enemy.kind === 'deep-echo-boss' && enemy.behaviour?.weakPointOpen) {
+      this.painter.ellipse({
+        kind: 'boss-weakpoint',
+        layer: 'front-effects',
+        x: enemy.x,
+        y: y + height * 0.05,
+        radiusX: width * 0.14,
+        radiusY: width * 0.14,
+        fill: 'rgba(255, 247, 185, 0.34)',
+        stroke: '#fff2a2',
+        lineWidth: 5,
       });
     }
   }

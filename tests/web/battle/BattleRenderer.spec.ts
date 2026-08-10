@@ -126,6 +126,73 @@ function trainSignatureFeature(commands: readonly BattleDrawCommand[]) {
 }
 
 describe('BattleRenderer', () => {
+  it('draws distinct role silhouettes and semantic combat warnings', () => {
+    const base = createFrameFixture().enemies[0]!;
+    const commands = renderCommands({
+      reducedMotion: true,
+      frame: {
+        enemies: [
+          {
+            ...base, id: 11, kind: 'tide-shell-hatchling', x: 92, y: 250,
+            behaviour: {
+              phase: 'advance', phaseRemainingMs: 900, cycle: 1,
+              targetLane: 1, safeLane: 0, invulnerable: false,
+              damageTakenMultiplier: 1, weakPointOpen: false,
+            },
+          },
+          {
+            ...base, id: 12, kind: 'lantern-ray', x: 195, y: 270,
+            behaviour: {
+              phase: 'lantern-charge', phaseRemainingMs: 500, cycle: 1,
+              targetLane: 1, safeLane: 0, invulnerable: false,
+              damageTakenMultiplier: 1, weakPointOpen: false,
+            },
+          },
+          {
+            ...base, id: 13, kind: 'tide-parasite-snail', x: 298, y: 310,
+            shield: 20,
+            behaviour: {
+              phase: 'advance', phaseRemainingMs: 700, cycle: 2,
+              targetLane: 2, safeLane: 0, invulnerable: false,
+              damageTakenMultiplier: 1, weakPointOpen: false,
+            },
+          },
+          {
+            ...base, id: 14, kind: 'storm-ray-elite', x: 195, y: 360,
+            behaviour: {
+              phase: 'elite-telegraph', phaseRemainingMs: 600, cycle: 2,
+              targetLane: 0, safeLane: 0, invulnerable: false,
+              damageTakenMultiplier: 1, weakPointOpen: false,
+            },
+          },
+          {
+            ...base, id: 15, kind: 'deep-echo-boss', x: 195, y: 250,
+            behaviour: {
+              phase: 'boss-enraged', phaseRemainingMs: 800, cycle: 3,
+              targetLane: 1, safeLane: 2, invulnerable: false,
+              damageTakenMultiplier: 1.1, weakPointOpen: true,
+            },
+          },
+        ],
+      },
+    });
+
+    expect(commands.map((item) => item.kind)).toEqual(expect.arrayContaining([
+      'hatchling-claw',
+      'lantern-core',
+      'lantern-warning',
+      'snail-spiral',
+      'enemy-shield',
+      'elite-lane-telegraph',
+      'boss-danger-lane',
+      'boss-safe-lane',
+      'boss-weakpoint',
+    ]));
+    const laneWarnings = commands.filter((item) => item.kind === 'boss-danger-lane');
+    expect(laneWarnings).toHaveLength(2);
+    expect(commands.filter((item) => item.kind === 'boss-safe-lane')).toHaveLength(1);
+  });
+
   it('draws rank and variant effect semantics as distinct bounded commands', () => {
     const effects: EffectFrameView = {
       particles: [{
