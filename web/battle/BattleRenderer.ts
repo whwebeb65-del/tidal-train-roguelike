@@ -44,9 +44,9 @@ const ENEMY_ART: Readonly<Record<EnemyKind, BattleArtId>> = {
   'bubble-fin': 'bubbleFin',
   'needle-jelly': 'needleJelly',
   'reef-crab': 'reefCrab',
-  'tide-shell-hatchling': 'reefCrab',
-  'lantern-ray': 'stormRayElite',
-  'tide-parasite-snail': 'reefCrab',
+  'tide-shell-hatchling': 'tideShellHatchling',
+  'lantern-ray': 'lanternRay',
+  'tide-parasite-snail': 'tideParasiteSnail',
   'storm-ray-elite': 'stormRayElite',
   'deep-echo-boss': 'deepEchoBoss',
 };

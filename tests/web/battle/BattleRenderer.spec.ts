@@ -126,6 +126,29 @@ function trainSignatureFeature(commands: readonly BattleDrawCommand[]) {
 }
 
 describe('BattleRenderer', () => {
+  it.each([
+    ['tide-shell-hatchling', 'tideShellHatchling'],
+    ['lantern-ray', 'lanternRay'],
+    ['tide-parasite-snail', 'tideParasiteSnail'],
+  ] as const)('uses dedicated %s art with a playable fallback', (enemyKind, failedArtId) => {
+    const base = createFrameFixture().enemies[0]!;
+    const commands = renderCommands({
+      failedArtIds: [failedArtId],
+      frame: {
+        enemies: [{ ...base, id: 91, kind: enemyKind }],
+      },
+    });
+
+    expect(commands).toContainEqual(expect.objectContaining({
+      kind: 'fallback-silhouette',
+      enemyKind,
+    }));
+    expect(commands).not.toContainEqual(expect.objectContaining({
+      kind: 'enemy',
+      enemyKind,
+    }));
+  });
+
   it('draws distinct role silhouettes and semantic combat warnings', () => {
     const base = createFrameFixture().enemies[0]!;
     const commands = renderCommands({

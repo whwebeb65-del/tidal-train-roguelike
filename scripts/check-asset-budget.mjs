@@ -16,7 +16,16 @@ const limits = {
   'needle-jelly-enemy.webp': 450 * 1024,
   'storm-ray-elite.webp': 550 * 1024,
   'tidal-boss.webp': 450 * 1024,
+  'tide-shell-hatchling.webp': 150 * 1024,
+  'lantern-ray.webp': 150 * 1024,
+  'tide-parasite-snail.webp': 150 * 1024,
 };
+
+const tideBeastAssets = [
+  'tide-shell-hatchling.webp',
+  'lantern-ray.webp',
+  'tide-parasite-snail.webp',
+];
 
 const requiredSkillAssets = [
   'tidal-volley-badge.webp',
@@ -71,6 +80,7 @@ export async function validateAssetBudget(root) {
     'battle-track-dusk.webp', 'battle-foreground-dusk.webp', 'bubble-train.webp',
     'captain-female-aurora.webp', 'otter-mechanic.webp', 'jellyfish-medic.webp',
     'puffer-dragon.webp', 'needle-jelly-enemy.webp', 'crystal-crab.webp',
+    ...tideBeastAssets,
     'skills/tidal-volley-badge.webp', 'skills/bubble-barrier-badge.webp',
     'skills/extreme-tide-badge.webp',
   ];
@@ -79,6 +89,7 @@ export async function validateAssetBudget(root) {
   const totalSkillAssetBytes = sumFiles(
     requiredSkillAssets.map((name) => `skills/${name}`), sizes, failures,
   );
+  const totalTideBeastAssetBytes = sumFiles(tideBeastAssets, sizes, failures);
   const allChibiBytes = [...sizes.values()].reduce((total, size) => total + size, 0);
 
   const actualSkillAssets = [...sizes.keys()]
@@ -107,6 +118,9 @@ export async function validateAssetBudget(root) {
   if (totalSkillAssetBytes > 650 * 1024) {
     failures.push(`skill-assets: ${totalSkillAssetBytes} bytes exceeds 650 KiB`);
   }
+  if (totalTideBeastAssetBytes > 360 * 1024) {
+    failures.push(`tide-beast-assets: ${totalTideBeastAssetBytes} bytes exceeds 360 KiB`);
+  }
 
   const audioExtensions = new Set(['.mp3', '.wav', '.ogg']);
   for (const name of sizes.keys()) {
@@ -115,7 +129,7 @@ export async function validateAssetBudget(root) {
     }
   }
 
-  return { failures, firstScreenBytes, battleScreenBytes, totalSkillAssetBytes, allChibiBytes };
+  return { failures, firstScreenBytes, battleScreenBytes, totalSkillAssetBytes, totalTideBeastAssetBytes, allChibiBytes };
 }
 
 if (path.resolve(process.argv[1] ?? '') === fileURLToPath(import.meta.url)) {
@@ -123,6 +137,7 @@ if (path.resolve(process.argv[1] ?? '') === fileURLToPath(import.meta.url)) {
   console.log(`first-screen bytes: ${result.firstScreenBytes}`);
   console.log(`battle-screen bytes: ${result.battleScreenBytes}`);
   console.log(`total skill asset bytes: ${result.totalSkillAssetBytes}`);
+  console.log(`total tide beast asset bytes: ${result.totalTideBeastAssetBytes}`);
   console.log(`all chibi bytes: ${result.allChibiBytes}`);
   if (result.failures.length > 0) {
     console.error(result.failures.join('\n'));

@@ -33,6 +33,12 @@ export const BATTLE_ART_URLS = {
   needleJelly:
     new URL('./chibi/needle-jelly-enemy.webp', import.meta.url).href,
   reefCrab: CHIBI_ART.crystalCrab,
+  tideShellHatchling:
+    new URL('./chibi/tide-shell-hatchling.webp', import.meta.url).href,
+  lanternRay:
+    new URL('./chibi/lantern-ray.webp', import.meta.url).href,
+  tideParasiteSnail:
+    new URL('./chibi/tide-parasite-snail.webp', import.meta.url).href,
   stormRayElite:
     new URL('./chibi/storm-ray-elite.webp', import.meta.url).href,
   deepEchoBoss: CHIBI_ART.tidalBoss,
@@ -119,6 +125,9 @@ export function getCriticalBattleArtIds(
     'bubbleFin',
     'needleJelly',
     'reefCrab',
+    'tideShellHatchling',
+    'lanternRay',
+    'tideParasiteSnail',
     'skillTidalVolley',
     'skillBubbleBarrier',
     'skillExtremeTide',

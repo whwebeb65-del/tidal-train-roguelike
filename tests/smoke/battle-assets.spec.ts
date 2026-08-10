@@ -63,6 +63,12 @@ function parseWebpMetadata(buffer: Buffer): {
 }
 
 describe('battle art catalog', () => {
+  it('registers dedicated source art for every tide beast role', () => {
+    expect(BATTLE_ART_URLS.tideShellHatchling).toContain('tide-shell-hatchling');
+    expect(BATTLE_ART_URLS.lanternRay).toContain('lantern-ray');
+    expect(BATTLE_ART_URLS.tideParasiteSnail).toContain('tide-parasite-snail');
+  });
+
   it('registers the three base skill badges and every variant glyph', () => {
     expect(BATTLE_ART_URLS.skillTidalVolley).toContain('tidal-volley-badge');
     expect(BATTLE_ART_URLS.skillBubbleBarrier).toContain('bubble-barrier-badge');
@@ -103,6 +109,9 @@ describe('battle art catalog', () => {
       'bubbleFin',
       'needleJelly',
       'reefCrab',
+      'tideShellHatchling',
+      'lanternRay',
+      'tideParasiteSnail',
       'skillTidalVolley',
       'skillBubbleBarrier',
       'skillExtremeTide',
