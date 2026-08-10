@@ -56,6 +56,10 @@ import {
   type EntityPoolStats,
 } from './EntityPool';
 import { barrierProfile, extremeProfile, reflectBarrierDamage, shouldEmergencyTrigger, volleyProfile } from './SkillVariantSystem';
+import {
+  getBossWeakPoint,
+  segmentHitsCircle,
+} from './BossWeakPointSystem';
 
 type Mutable<T> = {
   -readonly [Property in keyof T]: T[Property];
@@ -1143,15 +1147,29 @@ export class BattleEngine {
     projectile: MutableProjectileState,
     enemy: EnemyState,
   ): void {
+    const weakPoint = getBossWeakPoint(enemy);
+    const precisionHit = projectile.trajectory === 'manual'
+      && weakPoint !== null
+      && segmentHitsCircle(
+        { x: projectile.x, y: projectile.y },
+        {
+          x: projectile.x + projectile.velocityX * 2,
+          y: projectile.y + projectile.velocityY * 2,
+        },
+        weakPoint,
+      );
     this.applyDamage(
       enemy,
       projectile.damage,
       projectile.critical,
       projectile.source,
+      precisionHit,
     );
     this.energy = Math.min(
       100,
-      this.energy + Math.floor(2 * this.modifiers.energyGainMultiplier),
+      this.energy + Math.floor(
+        (precisionHit ? 4 : 2) * this.modifiers.energyGainMultiplier,
+      ),
     );
     this.combo += 1;
 
@@ -1221,6 +1239,7 @@ export class BattleEngine {
     rawDamage: number,
     critical: boolean,
     source: ProjectileState['source'] | 'extreme-tide' | 'splash',
+    precisionHit = false,
   ): void {
     if (!enemy.alive || rawDamage <= 0) return;
     if (enemy.behaviour?.invulnerable) return;
@@ -1228,10 +1247,9 @@ export class BattleEngine {
       0,
       Math.floor(rawDamage * (enemy.behaviour?.damageTakenMultiplier ?? 1)),
     );
-    if (enemy.kind === 'deep-echo-boss' && enemy.behaviour?.weakPointOpen) {
-      const bonusDamage = Math.max(1, Math.floor(damage * 0.5));
+    if (enemy.kind === 'deep-echo-boss' && precisionHit) {
+      const bonusDamage = Math.max(1, Math.floor(damage * 0.75));
       damage += bonusDamage;
-      this.energy = Math.min(100, this.energy + 2);
       this.events.push({ type: 'boss-weakpoint-hit', enemyId: enemy.id, bonusDamage });
     }
     if (enemy.kind === 'reef-crab' && !enemy.defenceBroken) {

@@ -3,6 +3,8 @@ import { FIXED_STEP_MS, MAIN_CANNON_INTERVAL_MS } from '../../../web/battle/Batt
 import { BattleEngine } from '../../../web/battle/BattleEngine';
 import { SimulationRateController } from '../../../web/battle/SimulationRateController';
 import type { BattleSpeed } from '../../../src/domain/progression/AccountProgressionSystem';
+import { getBossWeakPoint } from '../../../web/battle/BossWeakPointSystem';
+import type { EnemyState } from '../../../web/battle/BattleTypes';
 
 const input = {
   battleId: 'manual-aim',
@@ -25,14 +27,10 @@ type EngineInternals = {
   nextSpawnIndex: number;
   fireCooldownMs: number;
   modifiers: { mainProjectileCount: number };
-  spawnEnemy: (kind: 'bubble-fin', lane: 0 | 1 | 2) => {
-    x: number;
-    y: number;
-    hp: number;
-    maxHp: number;
-    speedPerSecond: number;
-    alive: boolean;
-  };
+  spawnEnemy: (
+    kind: 'bubble-fin' | 'deep-echo-boss',
+    lane: 0 | 1 | 2,
+  ) => EnemyState;
 };
 
 function internals(engine: BattleEngine): EngineInternals {
@@ -218,6 +216,47 @@ describe('BattleEngine manual main-cannon aim', () => {
     expect(projectile.targetId).toBeGreaterThan(0);
     runFor(engine, 1000);
     expect(target.hp).toBeLessThan(target.maxHp);
+  });
+
+  it('rewards only a manual trajectory that crosses the open boss weak point', () => {
+    const prepareBoss = (battleId: string) => {
+      const engine = new BattleEngine({ ...input, battleId, initialEnergy: 0 });
+      const state = internals(engine);
+      state.nextSpawnIndex = Number.MAX_SAFE_INTEGER;
+      state.fireCooldownMs = 0;
+      const target = state.spawnEnemy('deep-echo-boss', 1);
+      target.x = 195;
+      target.y = 400;
+      target.hp = 10_000;
+      target.maxHp = 10_000;
+      target.speedPerSecond = 0;
+      target.behaviour = {
+        phase: 'boss-enraged', phaseRemainingMs: 5000, cycle: 1,
+        targetLane: 1, safeLane: 0, invulnerable: false,
+        damageTakenMultiplier: 1, weakPointOpen: true,
+      };
+      return { engine, target };
+    };
+
+    const manual = prepareBoss('manual-precision');
+    manual.engine.setMainCannonAim(getBossWeakPoint(manual.target)!);
+    runFor(manual.engine, 540);
+    const manualEvents = manual.engine.drainEvents();
+    expect(manualEvents).toContainEqual({
+      type: 'boss-weakpoint-hit',
+      enemyId: expect.any(Number),
+      bonusDamage: 18,
+    });
+    expect(manual.target.hp).toBe(9957);
+    expect(manual.engine.frame.energy).toBe(4);
+
+    const automatic = prepareBoss('automatic-no-precision');
+    runFor(automatic.engine, 700);
+    expect(automatic.engine.drainEvents().some(
+      (event) => event.type === 'boss-weakpoint-hit',
+    )).toBe(false);
+    expect(automatic.target.hp).toBe(9975);
+    expect(automatic.engine.frame.energy).toBe(2);
   });
 
   it('does not change the main cannon firing interval and leaves volley homing', () => {

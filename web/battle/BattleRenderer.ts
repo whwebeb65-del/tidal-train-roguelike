@@ -24,6 +24,7 @@ import type {
 import type { RenderBudget } from './QualityMonitor';
 import type { TrainMotionFrameView } from './TrainMotionTypes';
 import { ENEMY_GEOMETRY, ENEMY_LABELS } from './EnemyGeometry';
+import { getBossWeakPoint } from './BossWeakPointSystem';
 
 export interface BattleRenderInput {
   readonly frame: BattleFrameView;
@@ -516,14 +517,15 @@ export class BattleRenderer {
         });
       }
     }
-    if (enemy.kind === 'deep-echo-boss' && enemy.behaviour?.weakPointOpen) {
+    const weakPoint = getBossWeakPoint(enemy);
+    if (weakPoint) {
       this.painter.ellipse({
         kind: 'boss-weakpoint',
         layer: 'front-effects',
-        x: enemy.x,
-        y: y + height * 0.05,
-        radiusX: width * 0.14,
-        radiusY: width * 0.14,
+        x: weakPoint.x,
+        y: weakPoint.y + (y - enemy.y),
+        radiusX: weakPoint.radius,
+        radiusY: weakPoint.radius,
         fill: 'rgba(255, 247, 185, 0.34)',
         stroke: '#fff2a2',
         lineWidth: 5,

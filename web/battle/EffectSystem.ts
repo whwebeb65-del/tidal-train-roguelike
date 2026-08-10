@@ -454,6 +454,8 @@ export class EffectSystem {
         this.spawnBurst(x, y, this.majorCount(10), '#fff09a', 'weakpoint-burst', 620, 10, 'front-effects');
         this.addRing(x, y, 8, 62, '#fff4a8', 10, '#ff765e');
         this.addDamageNumber(x, y, event.bonusDamage, true);
+        this.title = '精准破潮';
+        this.titleRemainingMs = 720;
         this.shake(3.5, 120);
       }
       if (event.type === 'enemy-killed') {
