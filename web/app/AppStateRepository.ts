@@ -26,6 +26,10 @@ import {
   type PlayerSave,
 } from '../../src/save/SaveRepository';
 import type { PersistentAppState } from './AppTypes';
+import {
+  normalizeCaptainGuidebookState,
+  type CaptainGuidebookState,
+} from '../../src/domain/retention/CaptainGuidebookSystem';
 
 export const APP_STORAGE_KEYS = {
   player: 'tidal-train-prototype-save-v1',
@@ -34,6 +38,7 @@ export const APP_STORAGE_KEYS = {
   dailyTrial: 'tidal-train-daily-trial-v1',
   dailyCheckIn: 'tidal-train-daily-checkin-v1',
   selectedMap: 'tidal-train-selected-map-v1',
+  guidebook: 'tidal-train-captain-guidebook-v1',
 } as const;
 
 export interface AppStateRepository {
@@ -44,6 +49,7 @@ export interface AppStateRepository {
   saveDailyTrial(next: DailyTrialState): void;
   saveDailyCheckIn(next: DailyCheckInState): void;
   saveSelectedMap(next: MapId): void;
+  saveGuidebook(next: CaptainGuidebookState): void;
   clear(): void;
 }
 
@@ -103,6 +109,9 @@ export function createBrowserAppStateRepository(
           readJson(storage, APP_STORAGE_KEYS.dailyCheckIn),
         ),
         selectedMapId: readSelectedMap(storage, save),
+        guidebook: normalizeCaptainGuidebookState(
+          readJson(storage, APP_STORAGE_KEYS.guidebook),
+        ),
       };
     },
 
@@ -131,6 +140,13 @@ export function createBrowserAppStateRepository(
 
     saveSelectedMap(next: MapId): void {
       storage.setItem(APP_STORAGE_KEYS.selectedMap, next);
+    },
+
+    saveGuidebook(next: CaptainGuidebookState): void {
+      storage.setItem(
+        APP_STORAGE_KEYS.guidebook,
+        JSON.stringify(normalizeCaptainGuidebookState(next)),
+      );
     },
 
     clear(): void {

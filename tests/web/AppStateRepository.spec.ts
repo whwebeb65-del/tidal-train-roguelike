@@ -45,9 +45,16 @@ describe('AppStateRepository', () => {
     const initial = repository.load();
     expect(initial.save).toEqual(defaultSave());
     expect(initial.selectedMapId).toBe('drift-suburb');
+    expect(initial.guidebook).toEqual({ version: 1, claimedObjectiveIds: [] });
 
     repository.savePlayer({ ...initial.save, gears: 77 });
     expect(repository.load().save.gears).toBe(77);
+    repository.saveGuidebook({
+      version: 1,
+      claimedObjectiveIds: ['first-clear'],
+    });
+    expect(repository.load().guidebook.claimedObjectiveIds)
+      .toEqual(['first-clear']);
 
     repository.clear();
     expect(storage.getItem('unrelated')).toBe('keep');
@@ -64,6 +71,21 @@ describe('AppStateRepository', () => {
       () => new Date('2026-07-16T08:00:00Z'),
     );
 
+    expect(repository.load().save).toEqual(defaultSave());
+  });
+
+  it('normalizes malformed guidebook claims without affecting the player save', () => {
+    const storage = new MemoryStorage();
+    storage.setItem(APP_STORAGE_KEYS.guidebook, JSON.stringify({
+      version: 99,
+      claimedObjectiveIds: ['station-level-2', 'bad', 'station-level-2'],
+    }));
+    const repository = createBrowserAppStateRepository(storage);
+
+    expect(repository.load().guidebook).toEqual({
+      version: 1,
+      claimedObjectiveIds: ['station-level-2'],
+    });
     expect(repository.load().save).toEqual(defaultSave());
   });
 });
