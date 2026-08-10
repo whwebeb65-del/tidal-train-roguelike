@@ -1760,6 +1760,13 @@ async function finishFullBattle(client, { claimSalvage }) {
   let reviveUsed = false;
   let terminalStatus = null;
   let terminalBattle = null;
+  const requiredTideBeastKinds = [
+    'tide-shell-hatchling',
+    'lantern-ray',
+    'tide-parasite-snail',
+  ];
+  const tideBeastKindsSeen = new Set();
+  let roleBehaviourSeen = false;
   const captured = new Set();
 
   for (let iteration = 0; iteration < 2_500; iteration += 1) {
@@ -1770,6 +1777,12 @@ async function finishFullBattle(client, { claimSalvage }) {
     maxTrainSpeed = Math.max(maxTrainSpeed, trainMotion.speed);
     bossMotionSeen ||= trainMotion.phase === 'boss';
     normalKillSeen ||= battle.kills > 0;
+    for (const enemy of battle.enemies) {
+      if (requiredTideBeastKinds.includes(enemy.kind)) {
+        tideBeastKindsSeen.add(enemy.kind);
+        roleBehaviourSeen ||= enemy.behaviour?.phase !== 'advance';
+      }
+    }
     // The elite can be defeated within a single E2E advance window. Use the
     // engine's authoritative encounter latch rather than a timing-sensitive
     // visual-frame sample.
@@ -1788,6 +1801,7 @@ async function finishFullBattle(client, { claimSalvage }) {
     if (battle.cooldowns['tidal-volley'] > 0) await capture('cooldown');
     if (battle.cooldowns['tidal-volley'] <= 0) await capture('ready');
     if (bossIntroSeen) await capture('boss');
+    if (roleBehaviourSeen) await capture('tide-beast-role');
 
     if (
       battle.status === 'defeat'
@@ -1873,6 +1887,17 @@ async function finishFullBattle(client, { claimSalvage }) {
     `full battle should reach victory or defeat (${terminalDetail})`,
   );
   assert.ok(normalKillSeen, 'full battle should defeat a normal enemy');
+  for (const kind of requiredTideBeastKinds) {
+    assert.ok(
+      tideBeastKindsSeen.has(kind),
+      `full battle should encounter tide beast ${kind}`,
+    );
+  }
+  assert.equal(
+    roleBehaviourSeen,
+    true,
+    'full battle should observe a non-idle tide beast role behaviour',
+  );
   assert.ok(eliteEncountered, 'full battle should encounter the elite');
   assert.equal(
     (await snapshot(client)).progression.hardCap,

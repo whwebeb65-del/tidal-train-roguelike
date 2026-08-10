@@ -86,6 +86,10 @@ describe('browser smoke script', () => {
     expect(source).toContain('1000ms displacement-sample window');
     expect(source).toContain('1200ms full choreography');
     expect(source).toContain('eliteEncountered');
+    expect(source).toContain('requiredTideBeastKinds');
+    expect(source).toContain('tideBeastKindsSeen');
+    expect(source).toContain('roleBehaviourSeen');
+    expect(source).toContain('full battle should encounter tide beast');
     expect(source).toContain('battle hard cap should not be reached');
     expect(source).toContain('chooseStrategicUpgrade');
     expect(source).toContain("[data-upgrade-id=");
