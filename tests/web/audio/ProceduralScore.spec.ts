@@ -3,7 +3,7 @@ import { ProceduralScore } from '../../../web/audio/ProceduralScore';
 import { RecordingAudioBackend } from './helpers/RecordingAudioBackend';
 
 describe('ProceduralScore', () => {
-  it('uses 92 BPM at station, 122 BPM in battle and layers boss without restarting battle bars', () => {
+  it('uses 92 BPM at station, starts battle calmly and layers boss without restarting battle bars', () => {
     const backend = new RecordingAudioBackend();
     const score = new ProceduralScore(backend);
 
@@ -17,7 +17,7 @@ describe('ProceduralScore', () => {
 
     score.setCue('boss', 6);
     score.update(8);
-    expect(score.debugState.bpm).toBe(122);
+    expect(score.debugState.bpm).toBe(112);
     expect(score.debugState.barIndex).toBeGreaterThanOrEqual(battleBar);
     expect(backend.instructions.some((tone) => tone.frequencyHz < 90))
       .toBe(true);
@@ -59,5 +59,22 @@ describe('ProceduralScore', () => {
     expect(backend.instructions.length).toBeGreaterThan(pausedCount);
     expect(backend.instructions.at(-1)?.startSeconds)
       .toBeLessThanOrEqual(20.2);
+  });
+
+  it('changes battle intensity without restarting the musical clock', () => {
+    const backend = new RecordingAudioBackend();
+    const score = new ProceduralScore(backend);
+    score.setCue('battle', 0);
+    score.update(2);
+    const before = score.debugState.stepIndex;
+
+    score.setIntensity(3);
+
+    expect(score.debugState.intensity).toBe(3);
+    expect(score.debugState.bpm).toBe(142);
+    expect(score.debugState.stepIndex).toBe(before);
+    for (let now = 2.1; now <= 4; now += 0.1) score.update(now);
+    expect(backend.instructions.some((tone) => tone.waveform === 'sawtooth'))
+      .toBe(true);
   });
 });

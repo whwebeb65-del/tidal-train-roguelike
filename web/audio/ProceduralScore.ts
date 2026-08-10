@@ -3,6 +3,7 @@ import type {
   MusicCue,
   ToneInstruction,
 } from './AudioTypes';
+import type { BattleMusicIntensity } from './BattleMusicDirector';
 
 const STATION_MELODY = [
   293.66,
@@ -55,6 +56,7 @@ export interface ProceduralScoreDebugState {
   readonly stepIndex: number;
   readonly barIndex: number;
   readonly paused: boolean;
+  readonly intensity: BattleMusicIntensity;
 }
 
 export class ProceduralScore {
@@ -65,6 +67,7 @@ export class ProceduralScore {
   private paused = false;
   private phraseEndSeconds = Number.POSITIVE_INFINITY;
   private transitionEndSeconds = 0;
+  private intensity: BattleMusicIntensity = 0;
 
   public constructor(private readonly backend: AudioBackend) {}
 
@@ -75,7 +78,13 @@ export class ProceduralScore {
       stepIndex: this.stepIndex,
       barIndex: Math.floor(this.stepIndex / 8),
       paused: this.paused,
+      intensity: this.intensity,
     };
+  }
+
+  public setIntensity(intensity: BattleMusicIntensity): void {
+    this.intensity = intensity;
+    this.updateTempo();
   }
 
   public setCue(cue: MusicCue, nowSeconds: number): void {
@@ -85,7 +94,7 @@ export class ProceduralScore {
       && (this.cue === 'battle' || this.cue === 'boss')
     );
     this.cue = cue;
-    this.bpm = cue === 'station' ? 92 : 122;
+    this.updateTempo();
     this.phraseEndSeconds = cue === 'victory' || cue === 'defeat'
       ? nowSeconds + 3
       : Number.POSITIVE_INFINITY;
@@ -162,6 +171,20 @@ export class ProceduralScore {
     this.paused = false;
     this.phraseEndSeconds = Number.POSITIVE_INFINITY;
     this.transitionEndSeconds = 0;
+    this.intensity = 0;
+  }
+
+  private updateTempo(): void {
+    if (this.cue === 'station' || this.cue === 'silent') {
+      this.bpm = 92;
+      return;
+    }
+    if (this.cue === 'victory' || this.cue === 'defeat') {
+      this.bpm = 122;
+      return;
+    }
+    const battleTempo = [112, 122, 132, 142] as const;
+    this.bpm = battleTempo[this.intensity];
   }
 
   private scheduleStep(
@@ -276,7 +299,7 @@ export class ProceduralScore {
         pan: 0,
         filterHz: 480,
       });
-      this.tone({
+      if (this.intensity >= 2) this.tone({
         waveform: 'square',
         frequencyHz: 118,
         startSeconds,
@@ -286,6 +309,19 @@ export class ProceduralScore {
         releaseSeconds: 0.035,
         pan: 0,
         filterHz: 620,
+      });
+    }
+    if (this.intensity >= 3 && step % 4 === 1) {
+      this.tone({
+        waveform: 'sawtooth',
+        frequencyHz: frequency * 2,
+        startSeconds,
+        durationSeconds: 0.1,
+        gain: 0.035 * scale,
+        attackSeconds: 0.004,
+        releaseSeconds: 0.07,
+        pan: step % 8 < 4 ? -0.28 : 0.28,
+        filterHz: 1900,
       });
     }
     if (!boss) return;

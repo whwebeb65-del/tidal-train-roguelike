@@ -215,4 +215,22 @@ describe('AudioManager', () => {
     expect(backend.continuousTones).toHaveLength(2);
     expect(backend.continuousTones.at(-1)?.instruction?.frequencyHz).toBe(68);
   });
+
+  it('directs the score from calm surf to boss pressure without restarting it', () => {
+    const backend = new RecordingAudioBackend();
+    const audio = new AudioManager(backend);
+    audio.setMusicCue('battle');
+    audio.consume([], createFrameFixture({ wave: 1, enemies: [] }));
+    expect(audio.debugState.score.intensity).toBe(0);
+
+    audio.consume([], createFrameFixture({
+      wave: 7,
+      enemies: [{
+        ...createFrameFixture().enemies[0]!,
+        kind: 'deep-echo-boss',
+      }],
+    }));
+    expect(audio.debugState.score.intensity).toBe(3);
+    expect(audio.debugState.score.bpm).toBe(142);
+  });
 });

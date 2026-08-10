@@ -2,6 +2,7 @@ import type {
   BattleEvent,
   BattleFrameView,
 } from './BattleTypes';
+import type { BattleMusicIntensity } from '../audio/BattleMusicDirector';
 
 export type BattleSoundPhase =
   | 'battle'
@@ -23,6 +24,7 @@ export interface BattleSoundPort {
   ): void;
   setTrainMotion(state: TrainMotionSoundState): void;
   setBattlePhase(phase: BattleSoundPhase): void;
+  setBattleIntensity?(intensity: BattleMusicIntensity): void;
   pause(): void;
   resume(): Promise<void>;
   dispose(): void;
@@ -33,6 +35,7 @@ export const SILENT_BATTLE_SOUND: BattleSoundPort = {
   consume() {},
   setTrainMotion() {},
   setBattlePhase() {},
+  setBattleIntensity() {},
   pause() {},
   resume: async () => undefined,
   dispose() {},

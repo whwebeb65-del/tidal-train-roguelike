@@ -18,6 +18,10 @@ import type {
   MusicCue,
   SoundCue,
 } from './AudioTypes';
+import {
+  selectBattleMusicIntensity,
+  type BattleMusicIntensity,
+} from './BattleMusicDirector';
 
 const MUSIC_GAIN = 0.34;
 const SFX_GAIN = 0.55;
@@ -113,8 +117,9 @@ export class AudioManager implements BattleSoundPort {
 
   public consume(
     events: readonly BattleEvent[],
-    _frame: BattleFrameView,
+    frame: BattleFrameView,
   ): void {
+    this.setBattleIntensity(selectBattleMusicIntensity(frame));
     for (const event of events) {
       if (event.type === 'weapon-fired') {
         this.playSound(
@@ -184,6 +189,10 @@ export class AudioManager implements BattleSoundPort {
         this.playSound('defeat');
       }
     }
+  }
+
+  public setBattleIntensity(intensity: BattleMusicIntensity): void {
+    this.score.setIntensity(intensity);
   }
 
   public setBattlePhase(phase: BattleSoundPhase): void {
