@@ -306,7 +306,10 @@ async function assertTidalArchiveCarriage(client, label, { full = false } = {}) 
 
   const openAndInspectArchive = async (phase) => {
     const opened = await evaluate(client, `(() => {
-      const button = document.querySelector('[data-action="show-tidal-archive"]');
+      const workshop = document.querySelector('.otter-workshop');
+      const button = workshop?.querySelector(
+        '[data-action="show-tidal-archive"]'
+      );
       if (!(button instanceof HTMLButtonElement) || button.disabled) return false;
       button.click();
       return true;
@@ -314,18 +317,24 @@ async function assertTidalArchiveCarriage(client, label, { full = false } = {}) 
     assert.equal(opened, true, `${label} ${phase} archive tab must be clickable`);
     await waitForEvaluation(
       client,
-      `Boolean(document.querySelector('.tidal-archive-carriage'))
-        && document.querySelector('[data-action="show-tidal-archive"]')
-          ?.getAttribute('aria-pressed') === 'true'`,
+      `(() => {
+        const workshop = document.querySelector('.otter-workshop');
+        return Boolean(document.querySelector('.tidal-archive-carriage'))
+          && workshop?.querySelector('[data-action="show-tidal-archive"]')
+            ?.getAttribute('aria-pressed') === 'true';
+      })()`,
       { label: `${label} ${phase} tidal archive carriage` },
     );
 
     const overview = await evaluate(client, `(() => {
       const root = document.querySelector('.tidal-archive-carriage');
-      const active = document.querySelector('[data-action="show-tidal-archive"]');
-      const tabs = [...document.querySelectorAll(
-        '.otter-workshop .workshop-tabs button:not([disabled])'
-      )].filter((button) => {
+      const workshop = document.querySelector('.otter-workshop');
+      const active = workshop?.querySelector(
+        '[data-action="show-tidal-archive"]'
+      );
+      const tabs = [...(workshop?.querySelectorAll(
+        '.workshop-tabs button:not([disabled])'
+      ) ?? [])].filter((button) => {
         const style = getComputedStyle(button);
         return button.getClientRects().length > 0
           && style.display !== 'none'
@@ -366,7 +375,9 @@ async function assertTidalArchiveCarriage(client, label, { full = false } = {}) 
     );
 
     await evaluate(client, `(async () => {
-      const cards = [...document.querySelectorAll('.archive-card')];
+      const cards = [...document.querySelectorAll(
+        '.tidal-archive-carriage .archive-card'
+      )];
       for (const card of cards) {
         card.scrollIntoView({ block: 'center', inline: 'nearest' });
         await new Promise((resolve) => requestAnimationFrame(resolve));
@@ -462,7 +473,10 @@ async function assertTidalArchiveCarriage(client, label, { full = false } = {}) 
   }
 
   const switchedBack = await evaluate(client, `(() => {
-    const button = document.querySelector('[data-action="show-equipment-workshop"]');
+    const workshop = document.querySelector('.otter-workshop');
+    const button = workshop?.querySelector(
+      '[data-action="show-equipment-workshop"]'
+    );
     if (!(button instanceof HTMLButtonElement) || button.disabled) return false;
     button.click();
     return true;
@@ -470,21 +484,40 @@ async function assertTidalArchiveCarriage(client, label, { full = false } = {}) 
   assert.equal(switchedBack, true, `${label} workshop tab must remain clickable`);
   await waitForEvaluation(
     client,
-    `document.querySelector('[data-action="show-equipment-workshop"]')
-      ?.getAttribute('aria-pressed') === 'true'
-      && !document.querySelector('.tidal-archive-carriage')`,
+    `(() => {
+      const workshop = document.querySelector('.otter-workshop');
+      return workshop?.querySelector('[data-action="show-equipment-workshop"]')
+        ?.getAttribute('aria-pressed') === 'true'
+        && !document.querySelector('.tidal-archive-carriage');
+    })()`,
     { label: `${label} restored equipment workshop` },
   );
-  const mutationControls = await evaluate(client, `({
-    upgrade: document.querySelectorAll('[data-action="upgrade-equipment"]').length,
-    star: document.querySelectorAll('[data-action="star-equipment"]').length,
-    reroll: document.querySelectorAll('[data-action="reroll-equipment"]').length,
-  })`);
+  const mutationControls = await evaluate(client, `(() => {
+    const workshop = document.querySelector('.otter-workshop');
+    if (!(workshop instanceof HTMLElement)) return null;
+    const groups = {
+      upgrade: workshop.querySelectorAll('[data-action="upgrade-equipment"]'),
+      star: workshop.querySelectorAll('[data-action="star-equipment"]'),
+      reroll: workshop.querySelectorAll('[data-action="reroll-equipment"]'),
+    };
+    return Object.fromEntries(Object.entries(groups).map(([key, controls]) => [
+      key,
+      [...controls].filter((button) => {
+        if (!(button instanceof HTMLButtonElement) || button.disabled) return false;
+        const style = getComputedStyle(button);
+        return !button.hidden
+          && button.getClientRects().length > 0
+          && style.display !== 'none'
+          && style.visibility !== 'hidden';
+      }).length,
+    ]));
+  })()`);
   assert.ok(
-    mutationControls.upgrade > 0
+    mutationControls
+      && mutationControls.upgrade > 0
       && mutationControls.star > 0
       && mutationControls.reroll > 0,
-    `${label} switch-back workshop mutation controls are missing: `
+    `${label} visible enabled switch-back workshop mutation controls are missing: `
       + JSON.stringify(mutationControls),
   );
   await navigateScene(client, 'station');
@@ -1847,6 +1880,91 @@ async function assertLowQualityResilience(client, label) {
   );
 }
 
+async function assertReducedMotionArchive(client, label) {
+  await client.send('Emulation.setEmulatedMedia', {
+    media: 'screen',
+    features: [{ name: 'prefers-reduced-motion', value: 'reduce' }],
+  });
+  await navigateScene(client, 'equipment');
+  const opened = await evaluate(client, `(() => {
+    const workshop = document.querySelector('.otter-workshop');
+    const button = workshop?.querySelector(
+      '[data-action="show-tidal-archive"]'
+    );
+    if (!(button instanceof HTMLButtonElement) || button.disabled) return false;
+    button.click();
+    return true;
+  })()`);
+  assert.equal(opened, true, `${label} reduced-motion archive must open`);
+  await waitForEvaluation(
+    client,
+    `Boolean(document.querySelector('.tidal-archive-carriage'))`,
+    { label: `${label} reduced-motion archive root` },
+  );
+
+  const archiveMotion = await evaluate(client, `(() => {
+    const workshop = document.querySelector('.otter-workshop');
+    const root = document.querySelector('.tidal-archive-carriage');
+    if (!(workshop instanceof HTMLElement) || !(root instanceof HTMLElement)) {
+      return { checked: 0, failures: [{ key: 'archive-root', missing: true }] };
+    }
+    const nodes = [
+      ...workshop.querySelectorAll('.workshop-tabs button'),
+      root,
+      ...root.querySelectorAll('*'),
+    ];
+    const inspected = nodes.flatMap((node) => [null, '::before', '::after']
+      .map((pseudo) => {
+        const style = getComputedStyle(node, pseudo);
+        return {
+          key: (node.className || node.tagName) + (pseudo ?? ''),
+          pseudo,
+          content: style.content,
+          animationName: style.animationName,
+          transform: style.transform,
+          pointerEvents: style.pointerEvents,
+        };
+      }))
+      .filter((entry) => entry.pseudo === null || entry.content !== 'none');
+    return {
+      checked: inspected.length,
+      failures: inspected.filter((entry) => (
+        entry.animationName !== 'none'
+        || entry.transform !== 'none'
+        || (entry.pseudo !== null && entry.pointerEvents !== 'none')
+      )),
+    };
+  })()`);
+  assert.ok(archiveMotion.checked > 0, `${label} archive motion audit is empty`);
+  assert.deepEqual(
+    archiveMotion.failures,
+    [],
+    `${label} archive reduced-motion decorations must be static and non-interactive: `
+      + JSON.stringify(archiveMotion.failures),
+  );
+
+  const closed = await evaluate(client, `(() => {
+    const workshop = document.querySelector('.otter-workshop');
+    const button = workshop?.querySelector(
+      '[data-action="show-equipment-workshop"]'
+    );
+    if (!(button instanceof HTMLButtonElement) || button.disabled) return false;
+    button.click();
+    return true;
+  })()`);
+  assert.equal(closed, true, `${label} reduced-motion archive must close`);
+  await waitForEvaluation(
+    client,
+    `!document.querySelector('.tidal-archive-carriage')`,
+    { label: `${label} closed reduced-motion archive` },
+  );
+  await navigateScene(client, 'station');
+  await client.send('Emulation.setEmulatedMedia', {
+    media: 'screen',
+    features: [{ name: 'prefers-reduced-motion', value: 'no-preference' }],
+  });
+}
+
 async function assertReducedMotionResilience(client, label) {
   await setDisplaySettings(
     client,
@@ -1910,6 +2028,8 @@ async function assertReducedMotionResilience(client, label) {
     )`,
     { label: `${label} reduced greeting completion`, timeoutMs: 2_000 },
   );
+
+  await assertReducedMotionArchive(client, label);
 
   const baseline = await snapshot(client);
   await startNormalBattle(client);
@@ -2567,6 +2687,11 @@ async function runViewport(client, viewport, smokeId, browserErrors) {
   if (viewport.full) {
     const first = await finishFullBattle(client, { claimSalvage: true });
     const second = await finishFullBattle(client, { claimSalvage: false });
+    assert.deepEqual(
+      [first.terminalStatus, second.terminalStatus],
+      ['victory', 'victory'],
+      `${label} later full battles must both finish in victory`,
+    );
     detail = `two runs ${first.terminalStatus}/${second.terminalStatus}`;
   } else {
     const brief = await runBriefBattle(client, label);

@@ -25,6 +25,16 @@
   opacity: .65;
 }
 
+.otter-workshop .workshop-tabs::before,
+.tidal-archive-carriage .archive-manifest::before,
+.tidal-archive-carriage .archive-manifest::after,
+.tidal-archive-carriage .archive-ledger::before,
+.tidal-archive-carriage .archive-ledger > header::after,
+.tidal-archive-carriage .archive-card::before,
+.tidal-archive-carriage .archive-card::after {
+  pointer-events: none;
+}
+
 .otter-workshop .workshop-tabs button {
   min-width: 44px;
   min-height: 44px;
@@ -264,11 +274,6 @@
   transform: translateY(-2px) rotate(.25deg);
 }
 
-.tidal-archive-carriage .archive-card::before,
-.tidal-archive-carriage .archive-card::after {
-  pointer-events: none;
-}
-
 .tidal-archive-carriage .archive-card::before {
   position: absolute;
   top: -5px;
@@ -399,11 +404,24 @@
 @media (prefers-reduced-motion: reduce) {
   .otter-workshop .workshop-tabs button,
   .tidal-archive-carriage .archive-manifest,
+  .tidal-archive-carriage .archive-manifest::before,
+  .tidal-archive-carriage .archive-manifest::after,
+  .tidal-archive-carriage .archive-ledger::before,
+  .tidal-archive-carriage .archive-ledger > header::after,
   .tidal-archive-carriage .archive-card,
   .tidal-archive-carriage .archive-card::before,
   .tidal-archive-carriage .archive-card::after {
     animation: none;
     transition: none;
+    transform: none;
+  }
+
+  .otter-workshop .workshop-tabs button[aria-pressed] {
+    transform: none;
+  }
+
+  .tidal-archive-carriage .archive-card:nth-child(even),
+  .tidal-archive-carriage .archive-card:nth-child(3n) {
     transform: none;
   }
 }

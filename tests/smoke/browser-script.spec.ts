@@ -137,6 +137,29 @@ describe('browser smoke script', () => {
     expect(releaseCapture).toContain('required desktop evidence is missing');
   });
 
+  it('scopes archive controls and requires static reduced motion plus two victories', () => {
+    const source = readFileSync('scripts/smoke-browser.mjs', 'utf8');
+
+    expect(source).toContain('assertReducedMotionArchive');
+    expect(source).toContain('archive reduced-motion decorations');
+    expect(source).toContain("document.querySelector('.tidal-archive-carriage')");
+    expect(source).toContain("document.querySelector('.otter-workshop')");
+    expect(source).toContain("workshop.querySelectorAll('[data-action=\"upgrade-equipment\"]')");
+    expect(source).toContain('button.disabled');
+    expect(source).toContain('getComputedStyle(node, pseudo)');
+    expect(source).toContain("name: 'prefers-reduced-motion', value: 'reduce'");
+    expect(source).toContain("name: 'prefers-reduced-motion', value: 'no-preference'");
+    expect(source).not.toContain(
+      "document.querySelector('[data-action=\"show-tidal-archive\"]')",
+    );
+    expect(source).not.toContain(
+      "document.querySelectorAll('.archive-card')",
+    );
+    expect(source).toMatch(
+      /const first = await finishFullBattle[\s\S]*?const second = await finishFullBattle[\s\S]*?assert\.deepEqual\(\s*\[first\.terminalStatus, second\.terminalStatus\],\s*\['victory', 'victory'\]/,
+    );
+  });
+
   it('rejects an already occupied preview port before startup', async () => {
     expect(previewLifecycle.assertLoopbackPortAvailable).toBeTypeOf('function');
     const staleServer = createServer((_request, response) => response.end('stale'));

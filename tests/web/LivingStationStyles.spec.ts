@@ -107,6 +107,24 @@ describe('living station styles', () => {
     );
   });
 
+  it('makes every decorative archive pseudo-element non-interactive', () => {
+    expect(archiveCss).toMatch(
+      /\.otter-workshop \.workshop-tabs::before,\s*\.tidal-archive-carriage \.archive-manifest::before,\s*\.tidal-archive-carriage \.archive-manifest::after,\s*\.tidal-archive-carriage \.archive-ledger::before,\s*\.tidal-archive-carriage \.archive-ledger > header::after,\s*\.tidal-archive-carriage \.archive-card::before,\s*\.tidal-archive-carriage \.archive-card::after\s*\{[^}]*pointer-events:\s*none;/s,
+    );
+  });
+
+  it('removes every archive transform and animation when reduced motion is requested', () => {
+    expect(archiveCss).toMatch(
+      /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.otter-workshop \.workshop-tabs button,\s*\.tidal-archive-carriage \.archive-manifest,\s*\.tidal-archive-carriage \.archive-manifest::before,\s*\.tidal-archive-carriage \.archive-manifest::after,\s*\.tidal-archive-carriage \.archive-ledger::before,\s*\.tidal-archive-carriage \.archive-ledger > header::after,\s*\.tidal-archive-carriage \.archive-card,\s*\.tidal-archive-carriage \.archive-card::before,\s*\.tidal-archive-carriage \.archive-card::after\s*\{[^}]*animation:\s*none;[^}]*transition:\s*none;[^}]*transform:\s*none;/s,
+    );
+    expect(archiveCss).toMatch(
+      /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.otter-workshop \.workshop-tabs button\[aria-pressed\]\s*\{[^}]*transform:\s*none;/s,
+    );
+    expect(archiveCss).toMatch(
+      /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.tidal-archive-carriage \.archive-card:nth-child\(even\),\s*\.tidal-archive-carriage \.archive-card:nth-child\(3n\)\s*\{[^}]*transform:\s*none;/s,
+    );
+  });
+
   it('keeps guidebook controls touch-safe and removes decorative motion', () => {
     expect(guidebookCss).toMatch(
       /\.guidebook-action\s*\{[^}]*min-width:\s*44px;[^}]*min-height:\s*44px;/,
