@@ -1,4 +1,5 @@
 import type { MapId } from '../../src/domain/station/MapProgression';
+import type { TideBeastArchiveId } from '../../src/domain/collection/TidalArchiveSystem';
 import type {
   BattleSkillId,
   SkillVariantId,
@@ -20,15 +21,7 @@ export type BattleStatus =
 
 export type UpgradeSelectionSource = 'manual' | 'timeout';
 
-export type EnemyKind =
-  | 'bubble-fin'
-  | 'needle-jelly'
-  | 'reef-crab'
-  | 'tide-shell-hatchling'
-  | 'lantern-ray'
-  | 'tide-parasite-snail'
-  | 'storm-ray-elite'
-  | 'deep-echo-boss';
+export type EnemyKind = TideBeastArchiveId;
 
 export type EnemyBehaviourPhase =
   | 'advance'
