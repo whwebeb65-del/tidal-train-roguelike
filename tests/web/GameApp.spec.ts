@@ -5,6 +5,37 @@ import { createLegacyGameRuntime, progressionTelemetryForUpgrade } from '../../w
 import { APP_STORAGE_KEYS } from '../../web/app/AppStateRepository';
 import { defaultSave } from '../../src/save/SaveRepository';
 
+function installCanvas2DStub(): () => void {
+  const original = HTMLCanvasElement.prototype.getContext;
+  HTMLCanvasElement.prototype.getContext = function getContext(
+    this: HTMLCanvasElement,
+    contextId: string,
+  ): RenderingContext | null {
+    if (contextId !== '2d') return null;
+    const gradient = { addColorStop: vi.fn() };
+    const target = { canvas: this } as unknown as CanvasRenderingContext2D;
+    return new Proxy(target, {
+      get(current, property) {
+        if (property === 'measureText') return () => ({ width: 80 });
+        if (
+          property === 'createLinearGradient'
+          || property === 'createRadialGradient'
+        ) {
+          return () => gradient;
+        }
+        const value = Reflect.get(current, property);
+        return value ?? (() => undefined);
+      },
+      set(current, property, value) {
+        return Reflect.set(current, property, value);
+      },
+    }) as CanvasRenderingContext2D;
+  } as typeof HTMLCanvasElement.prototype.getContext;
+  return () => {
+    HTMLCanvasElement.prototype.getContext = original;
+  };
+}
+
 describe('GameApp navigation', () => {
   it('maps every bottom action to a real scene and reserves battle for departure', () => {
     expect(appSceneForAction('station')).toBe('station');
@@ -43,6 +74,153 @@ describe('LegacyGameRuntime E2E snapshots', () => {
     expect(second.battle?.skillVariants['tidal-volley']).not.toContain('corrupt');
     expect(second.battle?.skillVariants['tidal-volley']).not.toContain('corrupt-battle');
     runtime.destroy();
+  });
+
+  it('persists the three real first-run battle actions and emits each tutorial event once', async () => {
+    const restoreCanvas = installCanvas2DStub();
+    window.history.replaceState({}, '', '/?e2e=1&e2eSeed=17');
+    const app = document.createElement('div');
+    document.body.append(app);
+    const storage = window.localStorage;
+    storage.clear();
+    storage.setItem(APP_STORAGE_KEYS.player, JSON.stringify({
+      ...defaultSave(),
+      selectedCaptainId: 'captain-tide-female',
+    }));
+    const telemetryEvents: Array<{
+      readonly name: string;
+      readonly payload: Readonly<Record<string, string | number | boolean>>;
+    }> = [];
+    const audio = new Proxy({}, { get: () => () => undefined }) as never;
+    const runtime = createLegacyGameRuntime(app, storage, true, audio, {
+      getSettings: () => ({ version: 2, musicEnabled: false, sfxEnabled: false, reducedMotion: true, qualityPreference: 'auto', preferredBattleSpeed: 1 }),
+      updateSettings: () => ({ version: 2, musicEnabled: false, sfxEnabled: false, reducedMotion: true, qualityPreference: 'auto', preferredBattleSpeed: 1 }),
+    }, {
+      prepareStationRun: async () => ({ status: 'ready', assets: { failedIds: [], get: () => null } }),
+      onTelemetryEvent: (event) => telemetryEvents.push(event),
+    });
+    await runtime.start();
+    await runtime.e2eStartNormalBattle();
+
+    expect(runtime.e2eSnapshot().verification.firstRunTutorialStep).toBe('aim');
+    const firstTicket = app.querySelector<HTMLElement>(
+      '[data-battle-tutorial="battle"]',
+    );
+    expect(firstTicket).not.toBeNull();
+    if (!firstTicket) return;
+    expect(firstTicket.hidden).toBe(false);
+
+    expect(runtime.e2eSetMainCannonAim(195, 320)).toBe(true);
+    expect(runtime.e2eSnapshot().verification.firstRunTutorialStep).toBe('skill');
+    runtime.e2eAdvanceBattle(1_000);
+    expect(runtime.e2eUseSkill('tidal-volley')).toBe(true);
+    runtime.e2eAdvanceBattle(17);
+    expect(runtime.e2eSnapshot().verification.firstRunTutorialStep).toBe('upgrade');
+
+    for (let index = 0; index < 80; index += 1) {
+      if (runtime.e2eSnapshot().battle?.status === 'upgrade') break;
+      runtime.e2eAdvanceBattle(1_000);
+    }
+    expect(runtime.e2eSnapshot().battle?.status).toBe('upgrade');
+    expect(runtime.e2eChooseFirstUpgrade()).toBe(true);
+    await new Promise((resolve) => setTimeout(resolve, 450));
+    runtime.e2eAdvanceBattle(17);
+
+    expect(runtime.e2eSnapshot().verification.firstRunTutorialStep).toBeNull();
+    expect(JSON.parse(
+      storage.getItem(APP_STORAGE_KEYS.firstRunBattleTutorial) ?? '{}',
+    )).toEqual({
+      version: 1,
+      completedStepIds: ['aim', 'skill', 'upgrade'],
+      skipped: false,
+    });
+    expect(telemetryEvents.filter((event) => (
+      event.name === 'first_run_tutorial_step_completed'
+    )).map((event) => event.payload.stepId)).toEqual([
+      'aim',
+      'skill',
+      'upgrade',
+    ]);
+    expect(telemetryEvents.filter((event) => (
+      event.name === 'first_run_tutorial_completed'
+    ))).toHaveLength(1);
+
+    await runtime.e2eReturnToStation();
+    await runtime.e2eStartNormalBattle();
+    expect(runtime.e2eSnapshot().verification.firstRunTutorialStep).toBeNull();
+    expect(app.querySelectorAll(
+      '[data-battle-tutorial]:not([hidden])',
+    )).toHaveLength(0);
+    runtime.destroy();
+    app.remove();
+    restoreCanvas();
+  });
+
+  it('persists skip immediately and keeps incomplete direction out of daily trials', async () => {
+    const restoreCanvas = installCanvas2DStub();
+    window.history.replaceState({}, '', '/?e2e=1&e2eSeed=17');
+    const storage = window.localStorage;
+    storage.clear();
+    storage.setItem(APP_STORAGE_KEYS.player, JSON.stringify({
+      ...defaultSave(),
+      selectedCaptainId: 'captain-tide-female',
+    }));
+    const audio = new Proxy({}, { get: () => () => undefined }) as never;
+    const settings = {
+      getSettings: () => ({ version: 2 as const, musicEnabled: false, sfxEnabled: false, reducedMotion: true, qualityPreference: 'auto' as const, preferredBattleSpeed: 1 as const }),
+      updateSettings: () => ({ version: 2 as const, musicEnabled: false, sfxEnabled: false, reducedMotion: true, qualityPreference: 'auto' as const, preferredBattleSpeed: 1 as const }),
+    };
+    const dependencies = {
+      prepareStationRun: async () => ({ status: 'ready' as const, assets: { failedIds: [], get: () => null } }),
+    };
+
+    const app = document.createElement('div');
+    document.body.append(app);
+    const runtime = createLegacyGameRuntime(
+      app,
+      storage,
+      true,
+      audio,
+      settings,
+      dependencies,
+    );
+    await runtime.start();
+    await runtime.e2eStartNormalBattle();
+    app.querySelector<HTMLButtonElement>(
+      '[data-battle-tutorial="battle"] [data-battle-action="skip-tutorial"]',
+    )?.click();
+    expect(runtime.e2eSnapshot().verification.firstRunTutorialStep).toBeNull();
+    expect(JSON.parse(
+      storage.getItem(APP_STORAGE_KEYS.firstRunBattleTutorial) ?? '{}',
+    )).toEqual({ version: 1, completedStepIds: [], skipped: true });
+    runtime.destroy();
+    app.remove();
+
+    storage.clear();
+    storage.setItem(APP_STORAGE_KEYS.player, JSON.stringify({
+      ...defaultSave(),
+      stationLevel: 2,
+      selectedCaptainId: 'captain-tide-female',
+    }));
+    const trialApp = document.createElement('div');
+    document.body.append(trialApp);
+    const trialRuntime = createLegacyGameRuntime(
+      trialApp,
+      storage,
+      true,
+      audio,
+      settings,
+      dependencies,
+    );
+    await trialRuntime.start();
+    await trialRuntime.e2eStartDailyTrial();
+    expect(trialRuntime.e2eSnapshot().verification.firstRunTutorialStep).toBeNull();
+    expect(trialApp.querySelectorAll(
+      '[data-battle-tutorial]:not([hidden])',
+    )).toHaveLength(0);
+    trialRuntime.destroy();
+    trialApp.remove();
+    restoreCanvas();
   });
 });
 

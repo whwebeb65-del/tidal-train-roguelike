@@ -10,6 +10,7 @@ import type { TrainMotionFrameView } from './TrainMotionTypes';
 import type { EffectParticleKind } from './EffectSystem';
 import type { BattleSpeed } from '../../src/domain/progression/AccountProgressionSystem';
 import type { BattleMusicIntensity } from '../audio/BattleMusicDirector';
+import type { FirstRunBattleTutorialStepId } from '../../src/domain/onboarding/FirstRunBattleTutorial';
 
 export interface BattleE2EEffectGeometry {
   readonly particles: readonly {
@@ -48,6 +49,7 @@ export interface BattleE2ESnapshot {
   readonly verification: {
     readonly precisionWeakPointHits: number;
     readonly musicIntensity: BattleMusicIntensity;
+    readonly firstRunTutorialStep: FirstRunBattleTutorialStepId | null;
   };
   readonly progression: {
     readonly runLevel: number;

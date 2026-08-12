@@ -28,7 +28,11 @@ function createController(): BattleE2EController {
         lastUncaughtError: null,
       },
       settlementCount: 0,
-      verification: { precisionWeakPointHits: 0, musicIntensity: 0 },
+      verification: {
+        precisionWeakPointHits: 0,
+        musicIntensity: 0,
+        firstRunTutorialStep: 'aim',
+      },
       progression: {
         runLevel: 1,
         ranks: { 'tidal-volley': 1 },

@@ -64,7 +64,10 @@ export type PrototypeEventName =
   | 'battle_speed_changed'
   | 'battle_hard_cap_reached'
   | 'guidebook_objective_viewed'
-  | 'guidebook_reward_claimed';
+  | 'guidebook_reward_claimed'
+  | 'first_run_tutorial_step_completed'
+  | 'first_run_tutorial_skipped'
+  | 'first_run_tutorial_completed';
 
 export interface PrototypeEvent {
   readonly name: PrototypeEventName;

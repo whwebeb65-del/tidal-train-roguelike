@@ -103,6 +103,12 @@ import {
   type CaptainGuidebookProgressSource,
 } from '../src/domain/retention/CaptainGuidebookSystem';
 import {
+  completeFirstRunBattleTutorialStep,
+  getFirstRunBattleTutorialPrompt,
+  skipFirstRunBattleTutorial,
+  type FirstRunBattleTutorialStepId,
+} from '../src/domain/onboarding/FirstRunBattleTutorial';
+import {
   getProductDefinition,
   PRODUCT_CATALOG,
   type ProductReward,
@@ -128,7 +134,10 @@ import {
   type PlayerSave,
 } from '../src/save/SaveRepository';
 import { createMemoryTelemetry } from '../src/telemetry/TelemetryClient';
-import type { PrototypeEventName } from '../src/telemetry/TelemetryEvents';
+import type {
+  PrototypeEvent,
+  PrototypeEventName,
+} from '../src/telemetry/TelemetryEvents';
 import { renderDailyTrialHub } from './views/DailyTrialView';
 import { renderDailyCheckIn } from './views/DailyCheckInView';
 import { renderCommerceStore } from './views/CommerceView';
@@ -276,6 +285,7 @@ export interface LegacyRuntimeDependencies {
     initial: number,
     available: readonly number[],
   ) => void;
+  readonly onTelemetryEvent?: (event: PrototypeEvent) => void;
 }
 
 export interface RuntimeE2EConfig {
@@ -339,6 +349,7 @@ let campaignState = initialState.campaign;
 let dailyTrialState = initialState.dailyTrial;
 let dailyCheckInState = initialState.dailyCheckIn;
 let guidebookState = initialState.guidebook;
+let firstRunBattleTutorialState = initialState.firstRunBattleTutorial;
 let phase: 'station' | 'combat' = 'station';
 type HubView = Exclude<SceneId, 'battle'>;
 let hubView: HubView = 'station';
@@ -524,6 +535,11 @@ function createBattleScene(
       track('battle_speed_changed', { speed });
     },
     onBattleEvents: trackBattleEvents,
+    getFirstRunTutorialPrompt: () => runMode === 'normal'
+      ? getFirstRunBattleTutorialPrompt(firstRunBattleTutorialState)
+      : null,
+    onFirstRunTutorialStep: commitFirstRunTutorialStep,
+    onSkipFirstRunTutorial: skipCurrentFirstRunTutorial,
     qualityPreference,
     diagnostics,
     manualStepMode: e2eEnabled,
@@ -823,7 +839,48 @@ function applyCampaignReward(reward: CampaignReward): void {
 }
 
 function track(name: PrototypeEventName, payload: Record<string, string | number | boolean> = {}): void {
-  telemetry.track({ name, runId: runId || 'station', timestampMs: Date.now(), payload });
+  const event: PrototypeEvent = {
+    name,
+    runId: runId || 'station',
+    timestampMs: Date.now(),
+    payload,
+  };
+  telemetry.track(event);
+  dependencies.onTelemetryEvent?.(event);
+}
+
+function commitFirstRunTutorialStep(
+  stepId: FirstRunBattleTutorialStepId,
+): void {
+  const previousPrompt = getFirstRunBattleTutorialPrompt(
+    firstRunBattleTutorialState,
+  );
+  const next = completeFirstRunBattleTutorialStep(
+    firstRunBattleTutorialState,
+    stepId,
+  );
+  if (next === firstRunBattleTutorialState) return;
+  firstRunBattleTutorialState = next;
+  appStateRepository.saveFirstRunBattleTutorial(next);
+  track('first_run_tutorial_step_completed', { stepId });
+  if (
+    previousPrompt?.stepId === 'upgrade'
+    && getFirstRunBattleTutorialPrompt(next) === null
+  ) {
+    track('first_run_tutorial_completed');
+  }
+}
+
+function skipCurrentFirstRunTutorial(): void {
+  const prompt = getFirstRunBattleTutorialPrompt(
+    firstRunBattleTutorialState,
+  );
+  if (!prompt) return;
+  const next = skipFirstRunBattleTutorial(firstRunBattleTutorialState);
+  if (next === firstRunBattleTutorialState) return;
+  firstRunBattleTutorialState = next;
+  appStateRepository.saveFirstRunBattleTutorial(next);
+  track('first_run_tutorial_skipped', { stepId: prompt.stepId });
 }
 
 function trackBattleEvents(events: readonly BattleEvent[]): void {
@@ -2422,6 +2479,12 @@ function e2eSnapshot(): BattleE2ESnapshot {
     verification: {
       precisionWeakPointHits: e2ePrecisionWeakPointHits,
       musicIntensity: audio.debugState?.score?.intensity ?? 0,
+      firstRunTutorialStep:
+        phase === 'combat' && runMode === 'normal'
+          ? getFirstRunBattleTutorialPrompt(
+            firstRunBattleTutorialState,
+          )?.stepId ?? null
+          : null,
     },
     progression: {
       runLevel: activeBattleEngine?.frame.runLevel ?? 1,
@@ -2505,7 +2568,7 @@ return {
     return activeBattleScene?.setBattleSpeed(speed) ?? false;
   },
   e2eSetMainCannonAim(x: number, y: number): boolean {
-    return activeBattleEngine?.setMainCannonAim({ x, y }) ?? false;
+    return activeBattleScene?.setMainCannonAimForE2E({ x, y }) ?? false;
   },
   e2eUseSkill(skillId: BattleSkillId): boolean {
     return activeBattleScene?.useSkillForE2E(skillId) ?? false;

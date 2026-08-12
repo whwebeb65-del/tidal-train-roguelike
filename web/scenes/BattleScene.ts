@@ -506,6 +506,14 @@ export class BattleScene implements GameScene {
     return accepted;
   }
 
+  public setMainCannonAimForE2E(aim: BattleAimPoint): boolean {
+    if (!this.dependencies.manualStepMode) return false;
+    const accepted = this.dependencies.engine.setMainCannonAim(aim);
+    if (accepted) this.dependencies.onFirstRunTutorialStep?.('aim');
+    this.renderBattle();
+    return accepted;
+  }
+
   public requestPauseForE2E(): void {
     if (!this.dependencies.manualStepMode) return;
     this.dependencies.engine.pause('manual');
