@@ -219,7 +219,10 @@
 }
 
 .tidal-archive-carriage .archive-ledger--variants > header {
-  background: linear-gradient(105deg, #35696a, #548e81);
+  color: #fff4d0;
+  border-color: #43245f;
+  background: linear-gradient(105deg, #43245f, #684086 68%, #8a6724);
+  box-shadow: 0 5px #2c201a45, inset 0 0 0 2px #e4c45d;
 }
 
 .tidal-archive-carriage .archive-ledger--equipment > header {
@@ -268,6 +271,16 @@
 .tidal-archive-carriage .archive-card:nth-child(even) {
   clip-path: polygon(3% 1%, 99% 4%, 97% 98%, 2% 96%, 0 8%);
   transform: translateY(4px) rotate(.7deg);
+}
+
+.tidal-archive-carriage .archive-card--variant {
+  border-color: #684086;
+  box-shadow: 4px 6px #46312559, inset 0 0 0 2px #b08a3a;
+}
+
+.tidal-archive-carriage .archive-card--variant::after {
+  color: #5b3275;
+  border-color: #b08a3a;
 }
 
 .tidal-archive-carriage .archive-card:nth-child(3n) {
@@ -347,6 +360,10 @@
 .tidal-archive-carriage .archive-card__copy small {
   color: #8a4a3c;
   font: 800 9px/1.35 ui-monospace, monospace;
+}
+
+.tidal-archive-carriage .archive-card--variant .archive-card__copy small {
+  color: #5b3275;
 }
 
 .tidal-archive-carriage .archive-card__copy h3 {

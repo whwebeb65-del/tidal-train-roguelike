@@ -6,6 +6,7 @@ import { APP_STORAGE_KEYS } from '../../web/app/AppStateRepository';
 import { defaultSave } from '../../src/save/SaveRepository';
 import { getBattleUpgradeDefinition } from '../../web/battle/BattleUpgradeCatalog';
 import type { BattleEngine } from '../../web/battle/BattleEngine';
+import { createWaveSchedule } from '../../web/battle/WaveScheduler';
 
 function installCanvas2DStub(): () => void {
   const original = HTMLCanvasElement.prototype.getContext;
@@ -289,6 +290,127 @@ describe('LegacyGameRuntime E2E snapshots', () => {
       .map((event) => `${event.payload.entryType}:${event.payload.entryId}`);
     expect(discoveryKeysAfterRerender).toEqual(discoveryKeys);
 
+  });
+
+  it('records idempotent enemy discoveries from a real daily-trial departure without changing player assets', async () => {
+    const restoreCanvas = installCanvas2DStub();
+    window.history.replaceState({}, '', '/?e2e=1&e2eSeed=17');
+    const app = document.createElement('div');
+    document.body.append(app);
+    const storage = window.localStorage;
+    storage.clear();
+    const seededSave = {
+      ...defaultSave(),
+      stationLevel: 2,
+      gears: 432,
+      routeMarks: 54,
+      starTickets: 7,
+      selectedCaptainId: 'captain-tide-female' as const,
+    };
+    storage.setItem(APP_STORAGE_KEYS.player, JSON.stringify(seededSave));
+    const telemetryEvents: Array<{
+      readonly name: string;
+      readonly payload: Readonly<Record<string, string | number | boolean>>;
+    }> = [];
+    let getBattleInput: () => ReturnType<BattleEngine['inputForTest']> | undefined = (
+      () => undefined
+    );
+    const audio = new Proxy({}, { get: () => () => undefined }) as never;
+    const runtime = createLegacyGameRuntime(app, storage, true, audio, {
+      getSettings: () => ({ version: 2, musicEnabled: false, sfxEnabled: false, reducedMotion: true, qualityPreference: 'auto', preferredBattleSpeed: 1 }),
+      updateSettings: () => ({ version: 2, musicEnabled: false, sfxEnabled: false, reducedMotion: true, qualityPreference: 'auto', preferredBattleSpeed: 1 }),
+    }, {
+      prepareStationRun: async () => ({ status: 'ready', assets: { failedIds: [], get: () => null } }),
+      onTelemetryEvent: (event) => telemetryEvents.push(event),
+      onBattleEngineCreated: (engine) => {
+        getBattleInput = () => engine.inputForTest();
+      },
+    });
+    onTestFinished(() => {
+      runtime.destroy();
+      app.remove();
+      restoreCanvas();
+    });
+
+    await runtime.start();
+    const dailyTrialButton = app.querySelector<HTMLButtonElement>(
+      '[data-action="start-daily-trial"]',
+    );
+    expect(dailyTrialButton).not.toBeNull();
+    dailyTrialButton?.click();
+    await vi.waitFor(() => {
+      expect(runtime.e2eSnapshot().sceneId).toBe('battle');
+    });
+
+    const startingBattleInput = structuredClone(getBattleInput());
+    expect(startingBattleInput).toBeTruthy();
+    if (!startingBattleInput) throw new Error('Daily-trial battle input missing');
+    expect(runtime.e2eSnapshot().battle).toMatchObject({
+      mode: 'daily-trial',
+      enemies: [],
+    });
+    expect(storage.getItem(APP_STORAGE_KEYS.tidalArchive)).toBeNull();
+
+    runtime.e2eAdvanceBattle(17);
+    const firstEnemyKind = runtime.e2eSnapshot().battle?.enemies[0]?.kind;
+    expect(firstEnemyKind).toBeTruthy();
+    const archiveAfterFirstSpawn = JSON.parse(
+      storage.getItem(APP_STORAGE_KEYS.tidalArchive) ?? '{}',
+    );
+    expect(archiveAfterFirstSpawn.discoveredEnemyKinds).toEqual([firstEnemyKind]);
+    const discoveryEventsForFirstKind = () => telemetryEvents.filter((event) => (
+      event.name === 'tidal_archive_entry_discovered'
+      && event.payload.entryType === 'enemy'
+      && event.payload.entryId === firstEnemyKind
+    ));
+    expect(discoveryEventsForFirstKind()).toHaveLength(1);
+
+    const duplicateSpawnAtMs = createWaveSchedule(
+      startingBattleInput.seed,
+      startingBattleInput.mapId,
+    ).filter((spawn) => spawn.kind === firstEnemyKind)[1]?.spawnAtMs;
+    expect(duplicateSpawnAtMs).toBeTypeOf('number');
+    if (duplicateSpawnAtMs === undefined) {
+      throw new Error('Daily-trial schedule lacks a duplicate first enemy');
+    }
+    for (let index = 0; index < 400; index += 1) {
+      const battle = runtime.e2eSnapshot().battle;
+      expect(battle?.status).not.toBe('defeat');
+      expect(battle?.status).not.toBe('victory');
+      if ((battle?.elapsedMs ?? 0) > duplicateSpawnAtMs) break;
+      if (battle?.status === 'upgrade') {
+        expect(runtime.e2eChooseFirstUpgrade()).toBe(true);
+        await runtime.e2eRequestResume();
+        continue;
+      }
+      runtime.e2eAdvanceBattle(250);
+    }
+    expect(runtime.e2eSnapshot().battle?.elapsedMs).toBeGreaterThan(
+      duplicateSpawnAtMs,
+    );
+    expect(discoveryEventsForFirstKind()).toHaveLength(1);
+    const archiveAfterDuplicateSpawn = JSON.parse(
+      storage.getItem(APP_STORAGE_KEYS.tidalArchive) ?? '{}',
+    );
+    expect(archiveAfterDuplicateSpawn.discoveredEnemyKinds.filter(
+      (kind: string) => kind === firstEnemyKind,
+    )).toHaveLength(1);
+    expect(structuredClone(getBattleInput())).toEqual(startingBattleInput);
+
+    const savedAfterDiscoveries = JSON.parse(
+      storage.getItem(APP_STORAGE_KEYS.player) ?? '{}',
+    );
+    expect(savedAfterDiscoveries).toMatchObject({
+      gears: seededSave.gears,
+      routeMarks: seededSave.routeMarks,
+      starTickets: seededSave.starTickets,
+      equipmentInventory: seededSave.equipmentInventory,
+      equippedEquipmentIds: seededSave.equippedEquipmentIds,
+      equipmentFragments: seededSave.equipmentFragments,
+      ownedSkinIds: seededSave.ownedSkinIds,
+      equippedSkinIds: seededSave.equippedSkinIds,
+      skillMasteryXp: seededSave.skillMasteryXp,
+    });
   });
 
   it('deep-copies progression variant arrays so mutations cannot affect the engine or later snapshots', async () => {

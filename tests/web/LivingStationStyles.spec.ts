@@ -1,6 +1,26 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
+function relativeLuminance(hex: string): number {
+  const channels = [1, 3, 5].map((start) => (
+    Number.parseInt(hex.slice(start, start + 2), 16) / 255
+  )).map((channel) => (
+    channel <= 0.03928
+      ? channel / 12.92
+      : ((channel + 0.055) / 1.055) ** 2.4
+  ));
+  return channels[0] * 0.2126
+    + channels[1] * 0.7152
+    + channels[2] * 0.0722;
+}
+
+function contrastRatio(left: string, right: string): number {
+  const leftLuminance = relativeLuminance(left);
+  const rightLuminance = relativeLuminance(right);
+  return (Math.max(leftLuminance, rightLuminance) + 0.05)
+    / (Math.min(leftLuminance, rightLuminance) + 0.05);
+}
+
 describe('living station styles', () => {
   const captainCss = readFileSync(
     new URL('../../web/styles/living-station-captain.css', import.meta.url),
@@ -111,6 +131,21 @@ describe('living station styles', () => {
     expect(archiveCss).toMatch(
       /\.otter-workshop \.workshop-tabs::before,\s*\.tidal-archive-carriage \.archive-manifest::before,\s*\.tidal-archive-carriage \.archive-manifest::after,\s*\.tidal-archive-carriage \.archive-ledger::before,\s*\.tidal-archive-carriage \.archive-ledger > header::after,\s*\.tidal-archive-carriage \.archive-card::before,\s*\.tidal-archive-carriage \.archive-card::after\s*\{[^}]*pointer-events:\s*none;/s,
     );
+  });
+
+  it('distinguishes the skill-evolution ledger with an accessible purple and gold palette', () => {
+    expect(archiveCss).toMatch(
+      /\.archive-ledger--variants > header\s*\{[^}]*color:\s*#fff4d0;[^}]*border-color:\s*#43245f;[^}]*background:\s*linear-gradient\(105deg,\s*#43245f,\s*#684086 68%,\s*#8a6724\);[^}]*box-shadow:[^;]*#e4c45d;/s,
+    );
+    expect(archiveCss).toMatch(
+      /\.archive-card--variant\s*\{[^}]*border-color:\s*#684086;[^}]*box-shadow:[^;]*#b08a3a;/s,
+    );
+    expect(archiveCss).toMatch(
+      /\.archive-card--variant \.archive-card__copy small\s*\{[^}]*color:\s*#5b3275;/s,
+    );
+    expect(contrastRatio('#fff4d0', '#684086')).toBeGreaterThanOrEqual(4.5);
+    expect(contrastRatio('#fff4d0', '#8a6724')).toBeGreaterThanOrEqual(4.5);
+    expect(contrastRatio('#5b3275', '#f5e5b7')).toBeGreaterThanOrEqual(4.5);
   });
 
   it('removes every archive transform and animation when reduced motion is requested', () => {

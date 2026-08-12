@@ -31,4 +31,25 @@ describe('TidalArchiveSystem', () => {
     expect(discoverSkillVariant(variant, 'split-tide-arrow')).toBe(variant);
     expect(Object.isFrozen(variant)).toBe(true);
   });
+
+  it('freezes both nested discovery arrays against mutation', () => {
+    const state = discoverSkillVariant(
+      discoverTideBeast(createTidalArchiveState(), 'bubble-fin'),
+      'split-tide-arrow',
+    );
+
+    expect(Object.isFrozen(state.discoveredEnemyKinds)).toBe(true);
+    expect(Object.isFrozen(state.discoveredSkillVariantIds)).toBe(true);
+    expect(() => {
+      (state.discoveredEnemyKinds as string[]).push('needle-jelly');
+    }).toThrow(TypeError);
+    expect(() => {
+      (state.discoveredSkillVariantIds as string[]).push('double-crest');
+    }).toThrow(TypeError);
+    expect(state).toEqual({
+      version: 1,
+      discoveredEnemyKinds: ['bubble-fin'],
+      discoveredSkillVariantIds: ['split-tide-arrow'],
+    });
+  });
 });
