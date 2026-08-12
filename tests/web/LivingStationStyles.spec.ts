@@ -18,6 +18,10 @@ describe('living station styles', () => {
     new URL('../../web/styles/battle-hud.css', import.meta.url),
     'utf8',
   );
+  const battleTutorialCss = readFileSync(
+    new URL('../../web/styles/battle-tutorial.css', import.meta.url),
+    'utf8',
+  );
 
   it('imports the scene language after generic progression styles', () => {
     const entry = readFileSync(new URL('../../web/styles.css', import.meta.url), 'utf8');
@@ -97,6 +101,26 @@ describe('living station styles', () => {
     );
     expect(battleHudCss).toMatch(
       /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.evolution-crest[\s\S]*?animation:\s*none;/,
+    );
+  });
+
+  it('keeps first-run direction touch-safe, non-blocking and static on request', () => {
+    const entry = readFileSync(
+      new URL('../../web/styles.css', import.meta.url),
+      'utf8',
+    );
+    expect(entry).toContain('@import "./styles/battle-tutorial.css";');
+    expect(battleTutorialCss).toMatch(
+      /\[data-battle-action="skip-tutorial"\]\s*\{[^}]*min-width:\s*44px;[^}]*min-height:\s*44px;/,
+    );
+    expect(battleTutorialCss).toMatch(
+      /\.battle-tutorial-ticket::before,[\s\S]*?\.battle-tutorial-ticket::after\s*\{[^}]*pointer-events:\s*none;/,
+    );
+    expect(battleTutorialCss).toMatch(
+      /@media \(max-width: 370px\)[\s\S]*?\.battle-tutorial-ticket--battle\s*\{[^}]*left:\s*max\(8px,\s*env\(safe-area-inset-left\)\);[^}]*right:\s*max\(8px,\s*env\(safe-area-inset-right\)\);/,
+    );
+    expect(battleTutorialCss).toMatch(
+      /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.battle-tutorial-ticket\s*\{[^}]*animation:\s*none;[^}]*transform:\s*none;/,
     );
   });
 });

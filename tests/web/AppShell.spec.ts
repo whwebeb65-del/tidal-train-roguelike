@@ -69,6 +69,9 @@ describe('AppShell', () => {
     expect(appShellCss).toMatch(
       /\.app-shell--battle:has\(\.battle-overlay:not\(\[hidden\]\)\) \.app-notice\s*\{[^}]*display:\s*none/s,
     );
+    expect(appShellCss).toMatch(
+      /\.app-shell--battle:has\(\[data-battle-tutorial\]:not\(\[hidden\]\)\) \.app-notice\s*\{[^}]*display:\s*none/s,
+    );
   });
 
   it('styles navigation as an accessible station wayfinding rail', () => {

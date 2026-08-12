@@ -21,6 +21,10 @@
   display: none;
 }
 
+.app-shell--battle:has([data-battle-tutorial]:not([hidden])) .app-notice {
+  display: none;
+}
+
 .app-shell--battle .scene-viewport {
   width: 100%;
   padding: 0;

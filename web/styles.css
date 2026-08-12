@@ -8,6 +8,7 @@
 @import "./styles/app-shell-v2.css";
 @import "./styles/scene-transitions.css";
 @import "./styles/battle-hud.css";
+@import "./styles/battle-tutorial.css";
 @import "./styles/battle-canvas.css";
 @import "./styles/settings-panel.css";
 @import "./styles/living-station-foundation.css";

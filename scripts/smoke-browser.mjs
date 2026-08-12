@@ -961,6 +961,178 @@ async function advanceBattle(client, durationMs) {
   );
 }
 
+async function assertFirstRunBattleTutorial(client, label) {
+  const baseline = await snapshot(client);
+  await startNormalBattle(client);
+  await waitForEvaluation(
+    client,
+    `${hookExpression}?.snapshot().verification.firstRunTutorialStep === 'aim'`,
+    { label: `${label} first-run aim direction` },
+  );
+
+  const inspectTicket = async (placement, protectedSelector) => evaluate(
+    client,
+    `(() => {
+      const ticket = document.querySelector(
+        '[data-battle-tutorial=${JSON.stringify(placement)}]:not([hidden])'
+      );
+      if (!(ticket instanceof HTMLElement)) return null;
+      const title = ticket.querySelector('[data-tutorial-title]');
+      const body = ticket.querySelector('[data-tutorial-body]');
+      const skip = ticket.querySelector('[data-battle-action="skip-tutorial"]');
+      if (!(skip instanceof HTMLButtonElement)) return null;
+      const ticketRect = ticket.getBoundingClientRect();
+      const skipRect = skip.getBoundingClientRect();
+      const overlaps = [...document.querySelectorAll(${JSON.stringify(protectedSelector)})]
+        .filter((element) => {
+          if (!(element instanceof HTMLElement) || element.hidden) return false;
+          const style = getComputedStyle(element);
+          return style.display !== 'none' && style.visibility !== 'hidden';
+        })
+        .map((element) => {
+          const rect = element.getBoundingClientRect();
+          return Math.min(ticketRect.right, rect.right) > Math.max(ticketRect.left, rect.left)
+            && Math.min(ticketRect.bottom, rect.bottom) > Math.max(ticketRect.top, rect.top);
+        })
+        .some(Boolean);
+      return {
+        title: title?.textContent?.trim() ?? '',
+        body: body?.textContent?.trim() ?? '',
+        skipWidth: skipRect.width,
+        skipHeight: skipRect.height,
+        clipped: ticketRect.left < 0
+          || ticketRect.right > innerWidth + 1
+          || ticketRect.top < 0
+          || ticketRect.bottom > innerHeight + 1,
+        overlaps,
+        horizontalOverflow: document.documentElement.scrollWidth > innerWidth + 1,
+      };
+    })()`,
+  );
+
+  const aimLayout = await inspectTicket(
+    'battle',
+    '[data-battle-skill], .app-notice.is-visible',
+  );
+  assert.ok(aimLayout, `${label} aim direction ticket must be visible`);
+  assert.ok(aimLayout.title && aimLayout.body, `${label} aim direction copy must be complete`);
+  assert.ok(
+    aimLayout.skipWidth >= 44 && aimLayout.skipHeight >= 44,
+    `${label} tutorial skip target must be at least 44x44`,
+  );
+  assert.equal(aimLayout.clipped, false, `${label} aim direction ticket is clipped`);
+  assert.equal(aimLayout.overlaps, false, `${label} aim direction covers battle skills`);
+  assert.equal(aimLayout.horizontalOverflow, false, `${label} aim direction overflows horizontally`);
+  await captureQaScreenshot(client, `first-run-aim-${label}`);
+
+  const aimPoint = await evaluate(client, `(() => {
+    const canvas = document.querySelector('[data-battle-canvas]');
+    if (!(canvas instanceof HTMLCanvasElement)) return null;
+    const rect = canvas.getBoundingClientRect();
+    return {
+      x: rect.left + rect.width * .72,
+      y: rect.top + rect.height * .34,
+    };
+  })()`);
+  assert.ok(aimPoint, `${label} battle canvas must accept real pointer aim`);
+  await client.send('Input.dispatchMouseEvent', {
+    type: 'mousePressed',
+    x: aimPoint.x,
+    y: aimPoint.y,
+    button: 'left',
+    buttons: 1,
+    clickCount: 1,
+  });
+  await client.send('Input.dispatchMouseEvent', {
+    type: 'mouseReleased',
+    x: aimPoint.x,
+    y: aimPoint.y,
+    button: 'left',
+    buttons: 0,
+    clickCount: 1,
+  });
+  await waitForEvaluation(
+    client,
+    `${hookExpression}?.snapshot().verification.firstRunTutorialStep === 'skill'`,
+    { label: `${label} first-run skill direction` },
+  );
+  await captureQaScreenshot(client, `first-run-skill-${label}`);
+
+  await advanceBattle(client, 1_000);
+  let skillUsed = await callHook(client, `return hook.useSkill('tidal-volley');`);
+  if (!skillUsed) {
+    await advanceBattle(client, 1_000);
+    skillUsed = await callHook(client, `return hook.useSkill('tidal-volley');`);
+  }
+  assert.equal(skillUsed, true, `${label} directed active skill must be usable`);
+  await advanceBattle(client, 17);
+  await waitForEvaluation(
+    client,
+    `${hookExpression}?.snapshot().verification.firstRunTutorialStep === 'upgrade'`,
+    { label: `${label} first-run upgrade direction` },
+  );
+
+  let upgradeReached = false;
+  for (let index = 0; index < 90; index += 1) {
+    const state = await snapshot(client);
+    if (state.battle?.status === 'upgrade') {
+      upgradeReached = true;
+      break;
+    }
+    assert.notEqual(
+      state.battle?.status,
+      'defeat',
+      `${label} first-run battle was defeated before the directed upgrade`,
+    );
+    await advanceBattle(client, 1_000);
+  }
+  assert.equal(upgradeReached, true, `${label} first-run upgrade must arrive within the bounded run`);
+  await delay(420);
+
+  const upgradeLayout = await inspectTicket(
+    'upgrade',
+    '[data-upgrade-slot]:not([hidden]), [data-battle-action="upgrade-reroll"]:not([hidden])',
+  );
+  assert.ok(upgradeLayout, `${label} upgrade direction ticket must be visible`);
+  assert.ok(
+    upgradeLayout.title && upgradeLayout.body,
+    `${label} upgrade direction copy must be complete`,
+  );
+  assert.ok(
+    upgradeLayout.skipWidth >= 44 && upgradeLayout.skipHeight >= 44,
+    `${label} upgrade tutorial skip target must be at least 44x44`,
+  );
+  assert.equal(upgradeLayout.clipped, false, `${label} upgrade direction ticket is clipped`);
+  assert.equal(upgradeLayout.overlaps, false, `${label} upgrade direction covers reward controls`);
+  assert.equal(upgradeLayout.horizontalOverflow, false, `${label} upgrade direction overflows horizontally`);
+  await captureQaScreenshot(client, `first-run-upgrade-${label}`);
+
+  const upgradeChosen = await callHook(client, 'return hook.chooseFirstUpgrade();');
+  assert.equal(upgradeChosen, true, `${label} directed upgrade must remain selectable`);
+  await delay(450);
+  await advanceBattle(client, 17);
+  await waitForEvaluation(
+    client,
+    `${hookExpression}?.snapshot().verification.firstRunTutorialStep === null`,
+    { label: `${label} completed first-run direction` },
+  );
+  await returnToStation(client, baseline.diagnostics.activeListeners);
+
+  await startNormalBattle(client);
+  const repeated = await evaluate(client, `(() => ({
+    step: ${hookExpression}.snapshot().verification.firstRunTutorialStep,
+    visibleTickets: document.querySelectorAll(
+      '[data-battle-tutorial]:not([hidden])'
+    ).length,
+  }))()`);
+  assert.deepEqual(
+    repeated,
+    { step: null, visibleTickets: 0 },
+    `${label} second run must not repeat first-run direction`,
+  );
+  await returnToStation(client, baseline.diagnostics.activeListeners);
+}
+
 async function readBattleCanvasViewport(client) {
   const canvasMetrics = await evaluate(
     client,
@@ -2196,6 +2368,7 @@ async function runViewport(client, viewport, smokeId, browserErrors) {
   await inspectHandDrawnStation(client, label);
   await captureQaScreenshot(client, `station-${label}`);
   if (viewport.full) {
+    await assertFirstRunBattleTutorial(client, label);
     await assertLowQualityResilience(client, label);
     await assertReducedMotionResilience(client, label);
   }
