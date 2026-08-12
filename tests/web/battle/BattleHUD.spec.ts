@@ -39,6 +39,7 @@ describe('BattleHUD', () => {
       onRequestDoubleSettlement: vi.fn(),
       onGiveUp: vi.fn(),
       onReturnStation: vi.fn(),
+      onSkipTutorial: vi.fn(),
       ...overrides,
     };
   }
@@ -63,6 +64,77 @@ describe('BattleHUD', () => {
     expect(html).not.toContain('✦');
     expect(html).not.toContain('data-boss-bar');
     expect(html).not.toContain('data-boss-label');
+  });
+
+  it('moves first-run direction between battle and upgrade tickets and forwards skip', () => {
+    const onSkipTutorial = vi.fn();
+    const hud = new BattleHUD(createCallbacks({ onSkipTutorial }), window);
+    const host = document.createElement('div');
+    document.body.append(host);
+    hud.mount(host);
+
+    hud.update(createBattleHudModel(createFrameFixture(), {
+      ...createHudModelOptionsFixture(),
+      firstRunTutorialPrompt: {
+        stepId: 'aim',
+        stepNumber: 1,
+        totalSteps: 3,
+        placement: 'battle',
+        title: '先盯住一只潮兽',
+        body: '主炮会自动开火；点一下战场。',
+      },
+    }));
+
+    const battleTicket = host.querySelector<HTMLElement>(
+      '[data-battle-tutorial="battle"]',
+    );
+    const upgradeTicket = host.querySelector<HTMLElement>(
+      '[data-battle-tutorial="upgrade"]',
+    );
+    expect(battleTicket?.hidden).toBe(false);
+    expect(battleTicket?.dataset.step).toBe('aim');
+    expect(battleTicket?.getAttribute('aria-live')).toBe('polite');
+    expect(battleTicket?.querySelector('[data-tutorial-progress]')?.textContent)
+      .toBe('首次值班 1 / 3');
+    expect(battleTicket?.querySelector('[data-tutorial-title]')?.textContent)
+      .toBe('先盯住一只潮兽');
+    expect(battleTicket?.querySelector('[data-tutorial-body]')?.textContent)
+      .toContain('主炮会自动开火');
+    expect(upgradeTicket?.hidden).toBe(true);
+
+    battleTicket?.querySelector<HTMLButtonElement>(
+      '[data-battle-action="skip-tutorial"]',
+    )?.click();
+    expect(onSkipTutorial).toHaveBeenCalledTimes(1);
+
+    hud.update(createBattleHudModel(createFrameFixture({ status: 'upgrade' }), {
+      ...createHudModelOptionsFixture(),
+      firstRunTutorialPrompt: {
+        stepId: 'upgrade',
+        stepNumber: 3,
+        totalSteps: 3,
+        placement: 'upgrade',
+        title: '挑一件真正改变打法的货',
+        body: '这是本局强化，离站后重置。',
+      },
+    }));
+    expect(battleTicket?.hidden).toBe(true);
+    expect(upgradeTicket?.hidden).toBe(false);
+    expect(upgradeTicket?.dataset.step).toBe('upgrade');
+    expect(upgradeTicket?.parentElement?.matches('.battle-dialog--upgrade'))
+      .toBe(true);
+    expect(upgradeTicket?.nextElementSibling?.matches('[data-evolution-ribbon]'))
+      .toBe(true);
+
+    hud.update(createBattleHudModel(createFrameFixture(), {
+      ...createHudModelOptionsFixture(),
+      firstRunTutorialPrompt: null,
+    }));
+    expect(battleTicket?.hidden).toBe(true);
+    expect(upgradeTicket?.hidden).toBe(true);
+
+    hud.dispose();
+    host.remove();
   });
 
   it('uses the real upgrade overlay as cargo unloading without changing battle actions', () => {

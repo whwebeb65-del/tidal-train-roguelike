@@ -29,7 +29,15 @@ export interface BattleHudCallbacks {
   onRequestDoubleSettlement(): void;
   onGiveUp(): void;
   onReturnStation(): void;
+  onSkipTutorial?(): void;
   onBattleSpeed?(speed: BattleSpeed): void;
+}
+
+interface TutorialPanelNodes {
+  readonly root: HTMLElement;
+  readonly progress: HTMLElement;
+  readonly title: HTMLElement;
+  readonly body: HTMLElement;
 }
 
 interface HudNodes {
@@ -46,6 +54,7 @@ interface HudNodes {
   readonly experienceFill: HTMLElement;
   readonly skillButtons: ReadonlyMap<BattleSkillId, HTMLButtonElement>;
   readonly speedButton: HTMLButtonElement;
+  readonly tutorialPanels: readonly TutorialPanelNodes[];
   readonly upgradeOverlay: HTMLElement;
   readonly upgradeDialog: HTMLElement;
   readonly upgradeOptions: HTMLElement;
@@ -124,6 +133,8 @@ export function renderBattleHudShell(): string {
       <p data-interaction-notice></p>
     </aside>
 
+    ${tutorialTicket('battle')}
+
     <div class="battle-hud__skills" aria-label="主动技能">
       ${skillButton('tidal-volley', '潮汐齐射', '1', BATTLE_ART_URLS.skillTidalVolley)}
       ${skillButton('bubble-barrier', '泡泡屏障', '2', BATTLE_ART_URLS.skillBubbleBarrier)}
@@ -145,6 +156,7 @@ export function renderBattleHudShell(): string {
         <span class="battle-dialog__eyebrow">CARGO UNLOADING / ROGUELITE UPGRADE</span>
         <h2>打开一只潮汐奖励箱</h2>
         <p>三选一立即装车，最高可叠加至 3 级。</p>
+        ${tutorialTicket('upgrade')}
         <span class="battle-evolution-ribbon" data-evolution-ribbon hidden>技能进化 · 改变战斗方式</span>
         <div class="evolution-crest" data-evolution-crest hidden aria-hidden="true"><i></i><i></i><i></i><b>EVOLVE</b></div>
         <div class="battle-upgrade-grid" data-upgrade-options>
@@ -223,6 +235,10 @@ export class BattleHUD {
       return;
     }
     const action = button.dataset.battleAction;
+    if (action === 'skip-tutorial') {
+      this.callbacks.onSkipTutorial?.();
+      return;
+    }
     if (action === 'speed' && this.model) {
       const available = this.model.speed.available;
       const currentIndex = available.indexOf(this.model.speed.current);
@@ -321,6 +337,24 @@ export class BattleHUD {
     setText(nodes.combo, model.comboLabel);
     setText(nodes.experienceLabel, model.experienceLabel);
     setWidth(nodes.experienceFill, model.experiencePercent);
+
+    for (const panel of nodes.tutorialPanels) {
+      const prompt = model.firstRunTutorialPrompt;
+      const visible = prompt !== null
+        && prompt.placement === panel.root.dataset.battleTutorial;
+      panel.root.hidden = !visible;
+      if (!visible || !prompt) {
+        delete panel.root.dataset.step;
+        continue;
+      }
+      panel.root.dataset.step = prompt.stepId;
+      setText(
+        panel.progress,
+        `首次值班 ${prompt.stepNumber} / ${prompt.totalSteps}`,
+      );
+      setText(panel.title, prompt.title);
+      setText(panel.body, prompt.body);
+    }
 
     setText(nodes.speedButton, formatBattleSpeed(model.speed.current));
     nodes.speedButton.setAttribute(
@@ -550,6 +584,15 @@ function skillButton(
   </button>`;
 }
 
+function tutorialTicket(placement: 'battle' | 'upgrade'): string {
+  return `<aside class="battle-tutorial-ticket battle-tutorial-ticket--${placement}" data-battle-tutorial="${placement}" aria-live="polite" hidden>
+    <span data-tutorial-progress></span>
+    <strong data-tutorial-title></strong>
+    <p data-tutorial-body></p>
+    <button type="button" data-battle-action="skip-tutorial" aria-label="跳过首次战斗引导">跳过引导</button>
+  </aside>`;
+}
+
 function upgradeSlot(index: number): string {
   return `<button class="battle-upgrade-card reward-crate" type="button" data-upgrade-slot="${index}" hidden>
     <span data-upgrade-level></span>
@@ -567,6 +610,14 @@ function collectNodes(host: HTMLElement): HudNodes {
     const id = button.dataset.battleSkill as BattleSkillId;
     skillButtons.set(id, button);
   }
+  const tutorialPanels = [
+    ...host.querySelectorAll<HTMLElement>('[data-battle-tutorial]'),
+  ].map((root): TutorialPanelNodes => ({
+    root,
+    progress: requireElement(root, '[data-tutorial-progress]'),
+    title: requireElement(root, '[data-tutorial-title]'),
+    body: requireElement(root, '[data-tutorial-body]'),
+  }));
   return {
     wave: requireElement(host, '[data-hud-wave]'),
     timer: requireElement(host, '[data-hud-time]'),
@@ -581,6 +632,7 @@ function collectNodes(host: HTMLElement): HudNodes {
     experienceFill: requireElement(host, '[data-hud-experience-fill]'),
     skillButtons,
     speedButton: requireElement(host, '[data-battle-action="speed"]'),
+    tutorialPanels,
     upgradeOverlay: requireElement(host, '[data-upgrade-overlay]'),
     upgradeDialog: requireElement(host, '.battle-dialog--upgrade'),
     upgradeOptions: requireElement(host, '[data-upgrade-options]'),

@@ -19,6 +19,7 @@ import type {
   SkillVariantId,
 } from './BattleTypes';
 import type { BattleSpeed } from '../../src/domain/progression/AccountProgressionSystem';
+import type { FirstRunBattleTutorialPrompt } from '../../src/domain/onboarding/FirstRunBattleTutorial';
 
 export interface BattleUpgradeCardModel {
   readonly id: BattleUpgradeId;
@@ -80,6 +81,7 @@ export interface BattleHudModel {
   readonly settlementVisible: boolean;
   readonly doubleSettlementVisible: boolean;
   readonly pendingActions: ReadonlySet<string>;
+  readonly firstRunTutorialPrompt: FirstRunBattleTutorialPrompt | null;
 }
 
 export interface BattleHudModelOptions {
@@ -94,6 +96,7 @@ export interface BattleHudModelOptions {
   readonly pendingActions?: ReadonlySet<string>;
   readonly battleSpeed?: BattleSpeed;
   readonly availableBattleSpeeds?: readonly BattleSpeed[];
+  readonly firstRunTutorialPrompt?: FirstRunBattleTutorialPrompt | null;
 }
 
 const UPGRADE_COPY: Readonly<Record<BattleUpgradeId, {
@@ -274,6 +277,7 @@ export function createBattleHudModel(
       && settlement?.doubleSettlementAvailable === true
       && settlement.doubled === false,
     pendingActions,
+    firstRunTutorialPrompt: options.firstRunTutorialPrompt ?? null,
   };
 }
 
