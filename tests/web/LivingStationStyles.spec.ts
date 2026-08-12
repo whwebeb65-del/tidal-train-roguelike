@@ -10,6 +10,10 @@ describe('living station styles', () => {
     new URL('../../web/styles/living-station-workshop.css', import.meta.url),
     'utf8',
   );
+  const archiveCss = readFileSync(
+    new URL('../../web/styles/tidal-archive.css', import.meta.url),
+    'utf8',
+  );
   const guidebookCss = readFileSync(
     new URL('../../web/styles/captain-guidebook.css', import.meta.url),
     'utf8',
@@ -74,6 +78,32 @@ describe('living station styles', () => {
   it('keeps workshop equipment controls at the 44px touch-target minimum', () => {
     expect(workshopCss).toMatch(
       /\.workbench-item button\s*\{[^}]*min-height:\s*(?:4[4-9]|[5-9]\d|\d{3,})px;/,
+    );
+  });
+
+  it('imports a touch-safe physical archive after the workshop styles', () => {
+    const entry = readFileSync(
+      new URL('../../web/styles.css', import.meta.url),
+      'utf8',
+    );
+    expect(entry).toContain('@import "./styles/tidal-archive.css";');
+    expect(entry.indexOf('living-station-workshop.css')).toBeLessThan(
+      entry.indexOf('tidal-archive.css'),
+    );
+    expect(archiveCss).toMatch(
+      /\.workshop-tabs button\s*\{[^}]*min-width:\s*44px;[^}]*min-height:\s*44px;/s,
+    );
+    expect(archiveCss).toMatch(
+      /\.workshop-tabs button\s*\{[^}]*height:\s*46px;/s,
+    );
+    expect(archiveCss).toMatch(
+      /\.archive-card::before,[\s\S]*?\.archive-card::after\s*\{[^}]*pointer-events:\s*none;/s,
+    );
+    expect(archiveCss).toMatch(
+      /@media \(max-width: 430px\)[\s\S]*?\.archive-card-grid/s,
+    );
+    expect(archiveCss).toMatch(
+      /@media \(prefers-reduced-motion: reduce\)[\s\S]*?animation:\s*none;[\s\S]*?transform:\s*none;/s,
     );
   });
 

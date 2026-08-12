@@ -58,6 +58,16 @@ describe('browser smoke script', () => {
     expect(source).toContain('data-ambient-event');
     expect(source).toContain('assertMobileReadingSafety');
     expect(source).toContain('assertCaptainGuidebook');
+    expect(source).toContain('assertTidalArchiveCarriage');
+    expect(source).toContain('show-tidal-archive');
+    expect(source).toContain('data-archive-enemy');
+    expect(source).toContain('archive images must load');
+    expect(source).toContain("readCurrency(client, 'routeMarks')");
+    expect(source).toContain("readCurrency(client, 'starTickets')");
+    expect(source).toMatch(
+      /await navigateScene\(client, 'station'\);\s*await assertFirstRunBattleTutorial\(client, label\);\s*await navigateScene\(client, 'equipment'\);/,
+    );
+    expect(source.match(/await assertFirstRunBattleTutorial\(client, label\)/g)).toHaveLength(1);
     expect(source).toContain('guidebook-current-ticket');
     expect(source).toContain('visibleRouteContent');
     expect(source).toContain('brandTextFullyVisible');

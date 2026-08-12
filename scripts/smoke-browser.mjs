@@ -301,6 +301,195 @@ async function assertCaptainGuidebook(client, label) {
   );
 }
 
+async function assertTidalArchiveCarriage(client, label, { full = false } = {}) {
+  await navigateScene(client, 'equipment');
+
+  const openAndInspectArchive = async (phase) => {
+    const opened = await evaluate(client, `(() => {
+      const button = document.querySelector('[data-action="show-tidal-archive"]');
+      if (!(button instanceof HTMLButtonElement) || button.disabled) return false;
+      button.click();
+      return true;
+    })()`);
+    assert.equal(opened, true, `${label} ${phase} archive tab must be clickable`);
+    await waitForEvaluation(
+      client,
+      `Boolean(document.querySelector('.tidal-archive-carriage'))
+        && document.querySelector('[data-action="show-tidal-archive"]')
+          ?.getAttribute('aria-pressed') === 'true'`,
+      { label: `${label} ${phase} tidal archive carriage` },
+    );
+
+    const overview = await evaluate(client, `(() => {
+      const root = document.querySelector('.tidal-archive-carriage');
+      const active = document.querySelector('[data-action="show-tidal-archive"]');
+      const tabs = [...document.querySelectorAll(
+        '.otter-workshop .workshop-tabs button:not([disabled])'
+      )].filter((button) => {
+        const style = getComputedStyle(button);
+        return button.getClientRects().length > 0
+          && style.display !== 'none'
+          && style.visibility !== 'hidden';
+      });
+      return {
+        root: root instanceof HTMLElement,
+        active: active?.getAttribute('aria-pressed'),
+        enemyCount: root?.querySelectorAll('[data-archive-enemy]').length ?? 0,
+        variantCount: root?.querySelectorAll('[data-archive-variant]').length ?? 0,
+        equipmentCount: root?.querySelectorAll('[data-archive-equipment]').length ?? 0,
+        enemyDiscovered: root?.querySelectorAll(
+          '[data-archive-enemy].is-discovered'
+        ).length ?? 0,
+        tabs: tabs.map((tab) => {
+          const rect = tab.getBoundingClientRect();
+          return { width: rect.width, height: rect.height };
+        }),
+        scrollWidth: document.documentElement.scrollWidth,
+        innerWidth,
+      };
+    })()`);
+    assert.equal(overview.root, true, `${label} ${phase} archive root is missing`);
+    assert.equal(overview.active, 'true', `${label} ${phase} archive tab is inactive`);
+    assert.deepEqual(
+      [overview.enemyCount, overview.variantCount, overview.equipmentCount],
+      [8, 12, 8],
+      `${label} ${phase} archive must expose exact 8/12/8 card counts`,
+    );
+    assert.ok(
+      overview.tabs.length > 0
+        && overview.tabs.every(({ width, height }) => width >= 44 && height >= 44),
+      `${label} ${phase} archive tab is below 44x44: ${JSON.stringify(overview.tabs)}`,
+    );
+    assert.ok(
+      overview.scrollWidth <= overview.innerWidth + 1,
+      `${label} ${phase} archive overflows horizontally`,
+    );
+
+    await evaluate(client, `(async () => {
+      const cards = [...document.querySelectorAll('.archive-card')];
+      for (const card of cards) {
+        card.scrollIntoView({ block: 'center', inline: 'nearest' });
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+      }
+      return true;
+    })()`);
+    await waitForEvaluation(
+      client,
+      `(() => {
+        const images = [...document.querySelectorAll(
+          '.tidal-archive-carriage img'
+        )];
+        return images.length > 0
+          && images.every((image) => image.complete && image.naturalWidth > 0);
+      })()`,
+      { label: `${label} ${phase} archive images must load` },
+    );
+
+    const cardBounds = await evaluate(client, `(async () => {
+      const cards = [...document.querySelectorAll('.tidal-archive-carriage .archive-card')];
+      const results = [];
+      for (const card of cards) {
+        card.scrollIntoView({ block: 'center', inline: 'nearest' });
+        await new Promise((resolve) => requestAnimationFrame(() => (
+          requestAnimationFrame(resolve)
+        )));
+        const rect = card.getBoundingClientRect();
+        results.push({
+          key: card.getAttribute('data-archive-enemy')
+            ?? card.getAttribute('data-archive-variant')
+            ?? card.getAttribute('data-archive-equipment'),
+          left: rect.left,
+          right: rect.right,
+          top: rect.top,
+          bottom: rect.bottom,
+          innerWidth,
+          innerHeight,
+          scrollWidth: document.documentElement.scrollWidth,
+        });
+      }
+      return results;
+    })()`);
+    assert.equal(cardBounds.length, 28, `${label} ${phase} archive card walk is incomplete`);
+    assert.ok(
+      cardBounds.every((card) => (
+        card.left >= -1
+        && card.right <= card.innerWidth + 1
+        && card.top >= -1
+        && card.bottom <= card.innerHeight + 1
+        && card.scrollWidth <= card.innerWidth + 1
+      )),
+      `${label} ${phase} archive card escapes the viewport: `
+        + JSON.stringify(cardBounds.filter((card) => (
+          card.left < -1
+          || card.right > card.innerWidth + 1
+          || card.top < -1
+          || card.bottom > card.innerHeight + 1
+          || card.scrollWidth > card.innerWidth + 1
+        ))),
+    );
+    return overview;
+  };
+
+  const initial = await openAndInspectArchive('initial');
+  if (full) {
+    const currenciesBefore = await Promise.all([
+      readCurrency(client, 'gears'),
+      readCurrency(client, 'routeMarks'),
+      readCurrency(client, 'starTickets'),
+    ]);
+    assert.ok(
+      currenciesBefore.every(Number.isFinite),
+      `${label} archive discovery currency baseline is unreadable`,
+    );
+    await navigateScene(client, 'station');
+    await assertFirstRunBattleTutorial(client, label);
+    await navigateScene(client, 'equipment');
+    const grown = await openAndInspectArchive('post-battle');
+    assert.ok(
+      grown.enemyDiscovered > initial.enemyDiscovered,
+      `${label} real battle must increase archive enemy discovery`,
+    );
+    const currenciesAfter = await Promise.all([
+      readCurrency(client, 'gears'),
+      readCurrency(client, 'routeMarks'),
+      readCurrency(client, 'starTickets'),
+    ]);
+    assert.deepEqual(
+      currenciesAfter,
+      currenciesBefore,
+      `${label} archive discovery alone must not change currencies`,
+    );
+  }
+
+  const switchedBack = await evaluate(client, `(() => {
+    const button = document.querySelector('[data-action="show-equipment-workshop"]');
+    if (!(button instanceof HTMLButtonElement) || button.disabled) return false;
+    button.click();
+    return true;
+  })()`);
+  assert.equal(switchedBack, true, `${label} workshop tab must remain clickable`);
+  await waitForEvaluation(
+    client,
+    `document.querySelector('[data-action="show-equipment-workshop"]')
+      ?.getAttribute('aria-pressed') === 'true'
+      && !document.querySelector('.tidal-archive-carriage')`,
+    { label: `${label} restored equipment workshop` },
+  );
+  const mutationControls = await evaluate(client, `({
+    upgrade: document.querySelectorAll('[data-action="upgrade-equipment"]').length,
+    star: document.querySelectorAll('[data-action="star-equipment"]').length,
+    reroll: document.querySelectorAll('[data-action="reroll-equipment"]').length,
+  })`);
+  assert.ok(
+    mutationControls.upgrade > 0
+      && mutationControls.star > 0
+      && mutationControls.reroll > 0,
+    `${label} switch-back workshop mutation controls are missing: `
+      + JSON.stringify(mutationControls),
+  );
+  await navigateScene(client, 'station');
+}
+
 async function assertBattleHudGeometry(client, label) {
   const geometry = await evaluate(client, `(() => {
     const hud = document.querySelector('.battle-hud__tide-log');
@@ -2363,12 +2552,12 @@ async function runViewport(client, viewport, smokeId, browserErrors) {
   await loadViewport(client, viewport, smokeId);
   await assertNoHorizontalOverflow(client, `${label} launch`);
   await exerciseScenes(client, label);
+  await assertTidalArchiveCarriage(client, label, { full: viewport.full });
   await assertMobileReadingSafety(client, label);
   await assertCaptainGuidebook(client, label);
   await inspectHandDrawnStation(client, label);
   await captureQaScreenshot(client, `station-${label}`);
   if (viewport.full) {
-    await assertFirstRunBattleTutorial(client, label);
     await assertLowQualityResilience(client, label);
     await assertReducedMotionResilience(client, label);
   }
