@@ -34,6 +34,10 @@ import {
   normalizeFirstRunBattleTutorialState,
   type FirstRunBattleTutorialState,
 } from '../../src/domain/onboarding/FirstRunBattleTutorial';
+import {
+  normalizeTidalArchiveState,
+  type TidalArchiveState,
+} from '../../src/domain/collection/TidalArchiveSystem';
 
 export const APP_STORAGE_KEYS = {
   player: 'tidal-train-prototype-save-v1',
@@ -44,6 +48,7 @@ export const APP_STORAGE_KEYS = {
   selectedMap: 'tidal-train-selected-map-v1',
   guidebook: 'tidal-train-captain-guidebook-v1',
   firstRunBattleTutorial: 'tidal-train-first-run-battle-tutorial-v1',
+  tidalArchive: 'tidal-train-tidal-archive-v1',
 } as const;
 
 export interface AppStateRepository {
@@ -56,6 +61,7 @@ export interface AppStateRepository {
   saveSelectedMap(next: MapId): void;
   saveGuidebook(next: CaptainGuidebookState): void;
   saveFirstRunBattleTutorial(next: FirstRunBattleTutorialState): void;
+  saveTidalArchive(next: TidalArchiveState): void;
   clear(): void;
 }
 
@@ -121,6 +127,9 @@ export function createBrowserAppStateRepository(
         firstRunBattleTutorial: normalizeFirstRunBattleTutorialState(
           readJson(storage, APP_STORAGE_KEYS.firstRunBattleTutorial),
         ),
+        tidalArchive: normalizeTidalArchiveState(
+          readJson(storage, APP_STORAGE_KEYS.tidalArchive),
+        ),
       };
     },
 
@@ -162,6 +171,13 @@ export function createBrowserAppStateRepository(
       storage.setItem(
         APP_STORAGE_KEYS.firstRunBattleTutorial,
         JSON.stringify(normalizeFirstRunBattleTutorialState(next)),
+      );
+    },
+
+    saveTidalArchive(next: TidalArchiveState): void {
+      storage.setItem(
+        APP_STORAGE_KEYS.tidalArchive,
+        JSON.stringify(normalizeTidalArchiveState(next)),
       );
     },
 

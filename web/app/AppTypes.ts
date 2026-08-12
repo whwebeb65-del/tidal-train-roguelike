@@ -6,6 +6,7 @@ import type { MapId } from '../../src/domain/station/MapProgression';
 import type { PlayerSave } from '../../src/save/SaveRepository';
 import type { CaptainGuidebookState } from '../../src/domain/retention/CaptainGuidebookSystem';
 import type { FirstRunBattleTutorialState } from '../../src/domain/onboarding/FirstRunBattleTutorial';
+import type { TidalArchiveState } from '../../src/domain/collection/TidalArchiveSystem';
 
 export type SceneId =
   | 'station'
@@ -26,6 +27,7 @@ export interface PersistentAppState {
   readonly selectedMapId: MapId;
   readonly guidebook: CaptainGuidebookState;
   readonly firstRunBattleTutorial: FirstRunBattleTutorialState;
+  readonly tidalArchive: TidalArchiveState;
 }
 
 export interface StartBattleRequest {

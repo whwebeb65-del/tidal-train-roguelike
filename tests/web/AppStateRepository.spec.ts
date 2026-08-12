@@ -51,6 +51,11 @@ describe('AppStateRepository', () => {
       completedStepIds: [],
       skipped: false,
     });
+    expect(initial.tidalArchive).toEqual({
+      version: 1,
+      discoveredEnemyKinds: [],
+      discoveredSkillVariantIds: [],
+    });
 
     repository.savePlayer({ ...initial.save, gears: 77 });
     expect(repository.load().save.gears).toBe(77);
@@ -67,6 +72,13 @@ describe('AppStateRepository', () => {
     });
     expect(repository.load().firstRunBattleTutorial.completedStepIds)
       .toEqual(['aim']);
+    repository.saveTidalArchive({
+      version: 1,
+      discoveredEnemyKinds: ['bubble-fin'],
+      discoveredSkillVariantIds: ['split-tide-arrow'],
+    });
+    expect(repository.load().tidalArchive.discoveredEnemyKinds)
+      .toEqual(['bubble-fin']);
 
     repository.clear();
     expect(storage.getItem('unrelated')).toBe('keep');
@@ -114,6 +126,28 @@ describe('AppStateRepository', () => {
       version: 1,
       completedStepIds: ['aim'],
       skipped: false,
+    });
+    expect(repository.load().save).toEqual(defaultSave());
+  });
+
+  it('normalizes malformed tidal archive discoveries in catalog order', () => {
+    const storage = new MemoryStorage();
+    storage.setItem(APP_STORAGE_KEYS.tidalArchive, JSON.stringify({
+      version: 99,
+      discoveredEnemyKinds: ['reef-crab', 'unknown', 'bubble-fin', 'reef-crab'],
+      discoveredSkillVariantIds: [
+        'double-crest',
+        'unknown',
+        'split-tide-arrow',
+        'double-crest',
+      ],
+    }));
+    const repository = createBrowserAppStateRepository(storage);
+
+    expect(repository.load().tidalArchive).toEqual({
+      version: 1,
+      discoveredEnemyKinds: ['bubble-fin', 'reef-crab'],
+      discoveredSkillVariantIds: ['split-tide-arrow', 'double-crest'],
     });
     expect(repository.load().save).toEqual(defaultSave());
   });
