@@ -54,6 +54,41 @@ describe('GameApp navigation', () => {
 });
 
 describe('LegacyGameRuntime E2E snapshots', () => {
+  it('keeps the battle-engine inspection seam behind the exact e2e=1 gate', async () => {
+    window.history.replaceState({}, '', '/');
+    const app = document.createElement('div');
+    const storage = window.localStorage;
+    storage.clear();
+    storage.setItem(APP_STORAGE_KEYS.player, JSON.stringify({
+      ...defaultSave(),
+      selectedCaptainId: 'captain-tide-female',
+    }));
+    const onBattleEngineCreated = vi.fn();
+    const audio = new Proxy({}, { get: () => () => undefined }) as never;
+    const runtime = createLegacyGameRuntime(app, storage, true, audio, {
+      getSettings: () => ({ version: 2, musicEnabled: false, sfxEnabled: false, reducedMotion: true, qualityPreference: 'auto', preferredBattleSpeed: 1 }),
+      updateSettings: () => ({ version: 2, musicEnabled: false, sfxEnabled: false, reducedMotion: true, qualityPreference: 'auto', preferredBattleSpeed: 1 }),
+    }, {
+      prepareStationRun: async () => ({ status: 'ready', assets: { failedIds: [], get: () => null } }),
+      prepareBattleScene: () => ({
+        id: 'battle',
+        mount: async () => undefined,
+        unmount: () => undefined,
+      } as never),
+      onBattleEngineCreated,
+    });
+    onTestFinished(() => runtime.destroy());
+
+    await runtime.start();
+    const start = document.createElement('button');
+    start.dataset.action = 'start-run';
+    app.append(start);
+    start.click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(onBattleEngineCreated).not.toHaveBeenCalled();
+  });
+
   it('records authoritative archive discoveries once and opens the archive without changing player assets', async () => {
     const restoreCanvas = installCanvas2DStub();
     window.history.replaceState({}, '', '/?e2e=1&e2eSeed=17');
@@ -81,6 +116,7 @@ describe('LegacyGameRuntime E2E snapshots', () => {
     let getBattleInput: () => ReturnType<BattleEngine['inputForTest']> | undefined = (
       () => undefined
     );
+    let battleEngineCreatedCount = 0;
     const audio = new Proxy({}, { get: () => () => undefined }) as never;
     const runtime = createLegacyGameRuntime(app, storage, true, audio, {
       getSettings: () => ({ version: 2, musicEnabled: false, sfxEnabled: false, reducedMotion: true, qualityPreference: 'auto', preferredBattleSpeed: 1 }),
@@ -89,6 +125,7 @@ describe('LegacyGameRuntime E2E snapshots', () => {
       prepareStationRun: async () => ({ status: 'ready', assets: { failedIds: [], get: () => null } }),
       onTelemetryEvent: (event) => telemetryEvents.push(event),
       onBattleEngineCreated: (engine) => {
+        battleEngineCreatedCount += 1;
         getBattleInput = () => engine.inputForTest();
       },
     });
@@ -103,6 +140,7 @@ describe('LegacyGameRuntime E2E snapshots', () => {
     await runtime.e2eStartNormalBattle();
     const startingBattle = runtime.e2eSnapshot().battle;
     expect(startingBattle).not.toBeNull();
+    expect(battleEngineCreatedCount).toBe(1);
     const startingBattleInput = structuredClone(
       getBattleInput(),
     );
@@ -110,6 +148,7 @@ describe('LegacyGameRuntime E2E snapshots', () => {
 
     for (let index = 0; index < 20; index += 1) {
       if ((runtime.e2eSnapshot().battle?.enemies.length ?? 0) > 0) break;
+      expect(storage.getItem(APP_STORAGE_KEYS.tidalArchive)).toBeNull();
       runtime.e2eAdvanceBattle(250);
     }
     const firstEnemyFrame = runtime.e2eSnapshot().battle;
@@ -150,6 +189,14 @@ describe('LegacyGameRuntime E2E snapshots', () => {
         const offeredVariant = battle.offeredUpgradeIds.find((upgradeId) => (
           getBattleUpgradeDefinition(upgradeId).kind === 'skill-variant'
         ));
+        expect(offeredVariant).toBeTruthy();
+        expect(JSON.parse(
+          storage.getItem(APP_STORAGE_KEYS.tidalArchive) ?? '{}',
+        ).discoveredSkillVariantIds).toEqual([]);
+        expect(telemetryEvents.filter((event) => (
+          event.name === 'tidal_archive_entry_discovered'
+          && event.payload.entryType === 'skill-variant'
+        ))).toHaveLength(0);
         if (offeredVariant) {
           selectedVariantId = offeredVariant;
           const variantButton = app.querySelector<HTMLButtonElement>(
@@ -232,8 +279,11 @@ describe('LegacyGameRuntime E2E snapshots', () => {
       (event) => event.name === 'tidal_archive_viewed',
     );
     expect(viewedEvents).toHaveLength(1);
-    expect(Object.values(viewedEvents[0].payload)).toHaveLength(3);
-    expect(Object.values(viewedEvents[0].payload).every(Number.isInteger)).toBe(true);
+    expect(viewedEvents[0].payload).toEqual({
+      enemyCount: 3,
+      skillVariantCount: 1,
+      equipmentCount: 4,
+    });
     const discoveryKeysAfterRerender = telemetryEvents
       .filter((event) => event.name === 'tidal_archive_entry_discovered')
       .map((event) => `${event.payload.entryType}:${event.payload.entryId}`);

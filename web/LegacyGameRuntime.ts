@@ -1502,7 +1502,9 @@ async function startRun(
       dailyTrial: dailyDefinition,
       skillMasteryXp: candidateSave.skillMasteryXp,
     }));
-    dependencies.onBattleEngineCreated?.(candidateEngine);
+    if (e2eEnabled) {
+      dependencies.onBattleEngineCreated?.(candidateEngine);
+    }
     activeBattleEngine = candidateEngine;
     trackedSkillRanks = { ...candidateEngine.frame.skillRanks };
     trackedSkillVariants = Object.fromEntries(
