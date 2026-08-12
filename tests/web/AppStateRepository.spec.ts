@@ -46,6 +46,11 @@ describe('AppStateRepository', () => {
     expect(initial.save).toEqual(defaultSave());
     expect(initial.selectedMapId).toBe('drift-suburb');
     expect(initial.guidebook).toEqual({ version: 1, claimedObjectiveIds: [] });
+    expect(initial.firstRunBattleTutorial).toEqual({
+      version: 1,
+      completedStepIds: [],
+      skipped: false,
+    });
 
     repository.savePlayer({ ...initial.save, gears: 77 });
     expect(repository.load().save.gears).toBe(77);
@@ -55,6 +60,13 @@ describe('AppStateRepository', () => {
     });
     expect(repository.load().guidebook.claimedObjectiveIds)
       .toEqual(['first-clear']);
+    repository.saveFirstRunBattleTutorial({
+      version: 1,
+      completedStepIds: ['aim'],
+      skipped: false,
+    });
+    expect(repository.load().firstRunBattleTutorial.completedStepIds)
+      .toEqual(['aim']);
 
     repository.clear();
     expect(storage.getItem('unrelated')).toBe('keep');
@@ -85,6 +97,23 @@ describe('AppStateRepository', () => {
     expect(repository.load().guidebook).toEqual({
       version: 1,
       claimedObjectiveIds: ['station-level-2'],
+    });
+    expect(repository.load().save).toEqual(defaultSave());
+  });
+
+  it('normalizes malformed first-run tutorial progress without affecting the player save', () => {
+    const storage = new MemoryStorage();
+    storage.setItem(APP_STORAGE_KEYS.firstRunBattleTutorial, JSON.stringify({
+      version: 99,
+      completedStepIds: ['aim', 'upgrade', 'bad', 'aim'],
+      skipped: 'yes',
+    }));
+    const repository = createBrowserAppStateRepository(storage);
+
+    expect(repository.load().firstRunBattleTutorial).toEqual({
+      version: 1,
+      completedStepIds: ['aim'],
+      skipped: false,
     });
     expect(repository.load().save).toEqual(defaultSave());
   });

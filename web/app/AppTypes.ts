@@ -5,6 +5,7 @@ import type { SocialExpeditionState } from '../../src/domain/social/SocialExpedi
 import type { MapId } from '../../src/domain/station/MapProgression';
 import type { PlayerSave } from '../../src/save/SaveRepository';
 import type { CaptainGuidebookState } from '../../src/domain/retention/CaptainGuidebookSystem';
+import type { FirstRunBattleTutorialState } from '../../src/domain/onboarding/FirstRunBattleTutorial';
 
 export type SceneId =
   | 'station'
@@ -24,6 +25,7 @@ export interface PersistentAppState {
   readonly dailyCheckIn: DailyCheckInState;
   readonly selectedMapId: MapId;
   readonly guidebook: CaptainGuidebookState;
+  readonly firstRunBattleTutorial: FirstRunBattleTutorialState;
 }
 
 export interface StartBattleRequest {
