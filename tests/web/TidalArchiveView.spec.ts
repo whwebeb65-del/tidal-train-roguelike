@@ -19,9 +19,10 @@ describe('TidalArchiveView', () => {
   it('renders all three complete catalogs from authoritative discovery state', () => {
     const model = buildTidalArchiveViewModel({
       archive: {
-        version: 1,
+        version: 2,
         discoveredEnemyKinds: ['bubble-fin'],
         discoveredSkillVariantIds: ['split-tide-arrow'],
+        unreadEntryKeys: [],
       },
       equipmentInventory: createStarterEquipmentState().inventory,
       skillMasteryXp: createSkillMasteryXp(),
@@ -58,9 +59,10 @@ describe('TidalArchiveView', () => {
   it('keeps unlock directions visible while concealing private locked copy', () => {
     const model = buildTidalArchiveViewModel({
       archive: {
-        version: 1,
+        version: 2,
         discoveredEnemyKinds: ['bubble-fin'],
         discoveredSkillVariantIds: ['split-tide-arrow'],
+        unreadEntryKeys: [],
       },
       equipmentInventory: createStarterEquipmentState().inventory,
       skillMasteryXp: createSkillMasteryXp(),

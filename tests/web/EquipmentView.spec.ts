@@ -37,9 +37,10 @@ describe('EquipmentView', () => {
     const starter = createStarterEquipmentState();
     const archive = buildTidalArchiveViewModel({
       archive: {
-        version: 1,
+        version: 2,
         discoveredEnemyKinds: [],
         discoveredSkillVariantIds: [],
+        unreadEntryKeys: [],
       },
       equipmentInventory: starter.inventory,
       skillMasteryXp: createSkillMasteryXp(),

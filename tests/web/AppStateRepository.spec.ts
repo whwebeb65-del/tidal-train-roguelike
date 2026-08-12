@@ -52,9 +52,10 @@ describe('AppStateRepository', () => {
       skipped: false,
     });
     expect(initial.tidalArchive).toEqual({
-      version: 1,
+      version: 2,
       discoveredEnemyKinds: [],
       discoveredSkillVariantIds: [],
+      unreadEntryKeys: [],
     });
 
     repository.savePlayer({ ...initial.save, gears: 77 });
@@ -73,9 +74,10 @@ describe('AppStateRepository', () => {
     expect(repository.load().firstRunBattleTutorial.completedStepIds)
       .toEqual(['aim']);
     repository.saveTidalArchive({
-      version: 1,
+      version: 2,
       discoveredEnemyKinds: ['bubble-fin'],
       discoveredSkillVariantIds: ['split-tide-arrow'],
+      unreadEntryKeys: [],
     });
     expect(repository.load().tidalArchive.discoveredEnemyKinds)
       .toEqual(['bubble-fin']);
@@ -145,9 +147,10 @@ describe('AppStateRepository', () => {
     const repository = createBrowserAppStateRepository(storage);
 
     expect(repository.load().tidalArchive).toEqual({
-      version: 1,
+      version: 2,
       discoveredEnemyKinds: ['bubble-fin', 'reef-crab'],
       discoveredSkillVariantIds: ['split-tide-arrow', 'double-crest'],
+      unreadEntryKeys: [],
     });
     expect(repository.load().save).toEqual(defaultSave());
   });
