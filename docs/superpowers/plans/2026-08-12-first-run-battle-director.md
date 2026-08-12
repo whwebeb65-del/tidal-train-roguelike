@@ -71,7 +71,7 @@ describe('FirstRunBattleTutorial', () => {
   it('normalizes only a contiguous known prefix', () => {
     expect(normalizeFirstRunBattleTutorialState({
       version: 99,
-      completedStepIds: ['skill', 'aim', 'bad', 'aim', 'upgrade'],
+      completedStepIds: ['aim', 'skill', 'bad', 'aim', 'upgrade'],
       skipped: false,
     })).toEqual({ version: 1, completedStepIds: ['aim', 'skill'], skipped: false });
     expect(normalizeFirstRunBattleTutorialState(null))
@@ -165,7 +165,7 @@ expect(repository.load().firstRunBattleTutorial.completedStepIds)
   .toEqual(['aim']);
 ```
 
-Also prove malformed `['skill', 'aim', 'upgrade', 'bad']` becomes `['aim', 'skill']`. The existing `Object.values(APP_STORAGE_KEYS)` loop must prove `clear()` removes the key.
+Also prove malformed `['aim', 'skill', 'bad', 'upgrade']` becomes `['aim', 'skill']`, while fully reversed known IDs become the empty safe default. The existing `Object.values(APP_STORAGE_KEYS)` loop must prove `clear()` removes the key.
 
 - [ ] **Step 2: Run RED**
 

@@ -59,6 +59,11 @@ describe('FirstRunBattleTutorial', () => {
       completedStepIds: ['skill', 'upgrade'],
       skipped: false,
     })).toEqual(createFirstRunBattleTutorialState());
+    expect(normalizeFirstRunBattleTutorialState({
+      version: 1,
+      completedStepIds: ['upgrade', 'skill', 'aim'],
+      skipped: false,
+    })).toEqual(createFirstRunBattleTutorialState());
     expect(normalizeFirstRunBattleTutorialState(null))
       .toEqual(createFirstRunBattleTutorialState());
   });

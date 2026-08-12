@@ -76,7 +76,7 @@ export interface FirstRunBattleTutorialState {
 模块提供：
 
 - `createFirstRunBattleTutorialState()`：安全默认状态。
-- `normalizeFirstRunBattleTutorialState(value)`：过滤未知步骤、去重并保持目录顺序，损坏数据回退默认值。
+- `normalizeFirstRunBattleTutorialState(value)`：只保留从 `aim` 开始、按目录顺序可证明已完成的连续前缀；重复项去重，遇到未知、乱序或越级数据即停止恢复，避免损坏存档伪造“全部完成”。
 - `getFirstRunBattleTutorialPrompt(state)`：返回当前提示或 `null`。
 - `completeFirstRunBattleTutorialStep(state, stepId)`：只允许按顺序前进；重复和越级事件幂等。
 - `skipFirstRunBattleTutorial(state)`：返回跳过状态；已完成状态不被降级。

@@ -69,15 +69,18 @@ export function normalizeFirstRunBattleTutorialState(
   if (!isRecord(value) || !Array.isArray(value.completedStepIds)) {
     return createFirstRunBattleTutorialState();
   }
-  const candidateIds = new Set(
-    value.completedStepIds.filter((stepId): stepId is string => (
-      typeof stepId === 'string'
-    )),
-  );
   const completedStepIds: FirstRunBattleTutorialStepId[] = [];
-  for (const prompt of TUTORIAL_PROMPTS) {
-    if (!candidateIds.has(prompt.stepId)) break;
-    completedStepIds.push(prompt.stepId);
+  for (const candidateId of value.completedStepIds) {
+    if (typeof candidateId !== 'string') break;
+    const expected = TUTORIAL_PROMPTS[completedStepIds.length]?.stepId;
+    if (candidateId === expected) {
+      completedStepIds.push(candidateId);
+      continue;
+    }
+    if (completedStepIds.includes(candidateId as FirstRunBattleTutorialStepId)) {
+      continue;
+    }
+    break;
   }
   return createState(completedStepIds, value.skipped === true);
 }
