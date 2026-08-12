@@ -218,6 +218,13 @@ describe('LegacyGameRuntime E2E snapshots', () => {
     expect(trialApp.querySelectorAll(
       '[data-battle-tutorial]:not([hidden])',
     )).toHaveLength(0);
+    expect(trialRuntime.e2eSetMainCannonAim(195, 320)).toBe(true);
+    trialRuntime.e2eAdvanceBattle(1_000);
+    expect(trialRuntime.e2eUseSkill('tidal-volley')).toBe(true);
+    trialRuntime.e2eAdvanceBattle(17);
+    expect(
+      storage.getItem(APP_STORAGE_KEYS.firstRunBattleTutorial),
+    ).toBeNull();
     trialRuntime.destroy();
     trialApp.remove();
     restoreCanvas();

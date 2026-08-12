@@ -538,8 +538,12 @@ function createBattleScene(
     getFirstRunTutorialPrompt: () => runMode === 'normal'
       ? getFirstRunBattleTutorialPrompt(firstRunBattleTutorialState)
       : null,
-    onFirstRunTutorialStep: commitFirstRunTutorialStep,
-    onSkipFirstRunTutorial: skipCurrentFirstRunTutorial,
+    onFirstRunTutorialStep: runMode === 'normal'
+      ? commitFirstRunTutorialStep
+      : undefined,
+    onSkipFirstRunTutorial: runMode === 'normal'
+      ? skipCurrentFirstRunTutorial
+      : undefined,
     qualityPreference,
     diagnostics,
     manualStepMode: e2eEnabled,
@@ -852,6 +856,7 @@ function track(name: PrototypeEventName, payload: Record<string, string | number
 function commitFirstRunTutorialStep(
   stepId: FirstRunBattleTutorialStepId,
 ): void {
+  if (runMode !== 'normal') return;
   const previousPrompt = getFirstRunBattleTutorialPrompt(
     firstRunBattleTutorialState,
   );
@@ -872,6 +877,7 @@ function commitFirstRunTutorialStep(
 }
 
 function skipCurrentFirstRunTutorial(): void {
+  if (runMode !== 'normal') return;
   const prompt = getFirstRunBattleTutorialPrompt(
     firstRunBattleTutorialState,
   );
