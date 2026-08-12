@@ -342,6 +342,7 @@ describe('BattleScene', () => {
   it('maps an active canvas pointer drag through the letterboxed viewport and keeps its final aim', () => {
     const engine = createEngine();
     engine.setMainCannonAim = vi.fn(() => true);
+    const onFirstRunTutorialStep = vi.fn();
     const { host, canvas, dispatchCanvasPointer } = createHost({
       left: 30,
       top: 40,
@@ -362,6 +363,7 @@ describe('BattleScene', () => {
       scheduler: new ManualFrameScheduler(),
       eventTarget: new EventTarget(),
       getDevicePixelRatio: () => 1,
+      onFirstRunTutorialStep,
     });
     scene.mount(host);
 
@@ -374,10 +376,109 @@ describe('BattleScene', () => {
     expect(engine.setMainCannonAim).toHaveBeenNthCalledWith(1, { x: 195, y: 422 });
     expect(engine.setMainCannonAim).toHaveBeenNthCalledWith(2, { x: 195, y: 522 });
     expect(engine.setMainCannonAim).toHaveBeenCalledTimes(2);
+    expect(onFirstRunTutorialStep).toHaveBeenCalledTimes(1);
+    expect(onFirstRunTutorialStep).toHaveBeenCalledWith('aim');
     expect(canvas.releasePointerCapture).toHaveBeenCalledWith(7);
     scene.unmount();
     dispatchCanvasPointer('pointermove', { pointerId: 7, clientX: 225, clientY: 740 });
     expect(engine.setMainCannonAim).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not complete aiming when the engine rejects the pointer target', () => {
+    const engine = createEngine();
+    engine.setMainCannonAim = vi.fn(() => false);
+    const onFirstRunTutorialStep = vi.fn();
+    const { host, dispatchCanvasPointer } = createHost();
+    const scene = new BattleScene({
+      ...TEST_BATTLE_SPEED_DEPENDENCIES,
+      engine,
+      effects: { view: EMPTY_EFFECT_FRAME_VIEW, consume: vi.fn(), update: vi.fn(), reset: vi.fn() },
+      assets: { failedIds: [], get: () => null },
+      callbacks: createCallbacks(),
+      createRenderer: () => ({ render: vi.fn() }),
+      createHud: () => ({ mount: vi.fn(), update: vi.fn(), dispose: vi.fn() }),
+      captainArtId: 'captainFemaleBase',
+      reducedMotion: false,
+      manualStepMode: true,
+      scheduler: new ManualFrameScheduler(),
+      eventTarget: new EventTarget(),
+      getDevicePixelRatio: () => 1,
+      onFirstRunTutorialStep,
+    });
+    scene.mount(host);
+
+    dispatchCanvasPointer('pointerdown', {
+      pointerId: 1,
+      clientX: 150,
+      clientY: 320,
+    });
+
+    expect(engine.setMainCannonAim).toHaveBeenCalledTimes(1);
+    expect(onFirstRunTutorialStep).not.toHaveBeenCalled();
+    scene.unmount();
+  });
+
+  it('forwards real skill and upgrade events, the current prompt, and skip', () => {
+    const engine = createEngine();
+    const onFirstRunTutorialStep = vi.fn();
+    const onSkipFirstRunTutorial = vi.fn();
+    const hudCallbackRef: { current?: BattleHudCallbacks } = {};
+    const hudUpdate = vi.fn();
+    const prompt = {
+      stepId: 'skill' as const,
+      stepNumber: 2,
+      totalSteps: 3 as const,
+      placement: 'battle' as const,
+      title: '把技能用在潮头上',
+      body: '亮起时点任意一枚试试。',
+    };
+    const { host } = createHost();
+    const scene = new BattleScene({
+      ...TEST_BATTLE_SPEED_DEPENDENCIES,
+      engine,
+      effects: { view: EMPTY_EFFECT_FRAME_VIEW, consume: vi.fn(), update: vi.fn(), reset: vi.fn() },
+      assets: { failedIds: [], get: () => null },
+      callbacks: createCallbacks(),
+      createRenderer: () => ({ render: vi.fn() }),
+      createHud: (callbacks) => {
+        hudCallbackRef.current = callbacks;
+        return { mount: vi.fn(), update: hudUpdate, dispose: vi.fn() };
+      },
+      captainArtId: 'captainFemaleBase',
+      reducedMotion: false,
+      manualStepMode: true,
+      scheduler: new ManualFrameScheduler(),
+      eventTarget: new EventTarget(),
+      getDevicePixelRatio: () => 1,
+      getFirstRunTutorialPrompt: () => prompt,
+      onFirstRunTutorialStep,
+      onSkipFirstRunTutorial,
+    });
+    scene.mount(host);
+
+    expect(hudUpdate.mock.lastCall?.[0].firstRunTutorialPrompt).toBe(prompt);
+
+    engine.events.push({ type: 'skill-used', skillId: 'tidal-volley' });
+    scene.advanceForE2E(17);
+    engine.events.push({
+      type: 'upgrade-selected',
+      upgradeId: 'rapid-reload',
+      source: 'manual',
+      level: 1,
+      runLevel: 2,
+      nextExperienceThreshold: 470,
+      skillRanks: createFrameFixture().skillRanks,
+      skillVariants: createFrameFixture().skillVariants,
+    });
+    scene.advanceForE2E(17);
+    hudCallbackRef.current?.onSkipTutorial?.();
+
+    expect(onFirstRunTutorialStep.mock.calls).toEqual([
+      ['skill'],
+      ['upgrade'],
+    ]);
+    expect(onSkipFirstRunTutorial).toHaveBeenCalledTimes(1);
+    scene.unmount();
   });
 
   it('does not let a second pointer steal the active manual aim', () => {

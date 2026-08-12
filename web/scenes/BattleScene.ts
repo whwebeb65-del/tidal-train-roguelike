@@ -59,6 +59,10 @@ import type {
 } from '../battle/TrainMotionTypes';
 import type { GameScene } from './Scene';
 import type { BattleSpeed } from '../../src/domain/progression/AccountProgressionSystem';
+import type {
+  FirstRunBattleTutorialPrompt,
+  FirstRunBattleTutorialStepId,
+} from '../../src/domain/onboarding/FirstRunBattleTutorial';
 
 export interface FrameScheduler {
   request(callback: FrameRequestCallback): number;
@@ -153,6 +157,11 @@ export interface BattleSceneDependencies {
   readonly onBattleSpeedChanged: (speed: BattleSpeed) => void;
   readonly onBattleEvents: (events: readonly BattleEvent[]) => void;
   readonly monotonicNowMs?: () => number;
+  readonly getFirstRunTutorialPrompt?: () => FirstRunBattleTutorialPrompt | null;
+  readonly onFirstRunTutorialStep?: (
+    stepId: FirstRunBattleTutorialStepId,
+  ) => void;
+  readonly onSkipFirstRunTutorial?: () => void;
 }
 
 const BROWSER_FRAME_SCHEDULER: FrameScheduler = {
@@ -263,7 +272,7 @@ export class BattleScene implements GameScene {
     }
     this.activeAimPointerId = event.pointerId;
     this.canvas?.setPointerCapture?.(event.pointerId);
-    this.updateMainCannonAimFromPointer(event);
+    this.updateMainCannonAimFromPointer(event, true);
     event.preventDefault();
   };
 
@@ -627,6 +636,12 @@ export class BattleScene implements GameScene {
 
   private handleEvents(events: readonly BattleEvent[]): void {
     for (const event of events) {
+      if (event.type === 'skill-used') {
+        this.dependencies.onFirstRunTutorialStep?.('skill');
+      }
+      if (event.type === 'upgrade-selected') {
+        this.dependencies.onFirstRunTutorialStep?.('upgrade');
+      }
       if (event.type === 'boss-intro-started') {
         this.sound.setBattlePhase('boss');
       }
@@ -688,12 +703,17 @@ export class BattleScene implements GameScene {
         visibilityResumeRequired: this.visibilityPaused,
         battleSpeed: this.battleSpeed,
         availableBattleSpeeds: this.availableBattleSpeeds,
+        firstRunTutorialPrompt:
+          this.dependencies.getFirstRunTutorialPrompt?.() ?? null,
       },
     ));
     this.updateDiagnostics(false);
   }
 
-  private updateMainCannonAimFromPointer(event: PointerEvent): void {
+  private updateMainCannonAimFromPointer(
+    event: PointerEvent,
+    reportTutorialStep = false,
+  ): void {
     const canvasHost = this.canvasHost;
     if (!canvasHost) return;
     this.refreshViewport();
@@ -704,7 +724,11 @@ export class BattleScene implements GameScene {
       event.clientX - bounds.left,
       event.clientY - bounds.top,
     );
-    if (this.dependencies.engine.setMainCannonAim(aim)) this.renderBattle();
+    if (!this.dependencies.engine.setMainCannonAim(aim)) return;
+    if (reportTutorialStep) {
+      this.dependencies.onFirstRunTutorialStep?.('aim');
+    }
+    this.renderBattle();
   }
 
   private removeCanvasPointerListeners(): void {
@@ -1064,6 +1088,10 @@ export class BattleScene implements GameScene {
         if (this.exitRequested) return;
         this.exitRequested = true;
         this.dependencies.callbacks.onExit();
+      },
+      onSkipTutorial: () => {
+        this.dependencies.onSkipFirstRunTutorial?.();
+        this.renderBattle();
       },
     };
   }
