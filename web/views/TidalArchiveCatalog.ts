@@ -1,4 +1,7 @@
-import type { TideBeastArchiveId } from '../../src/domain/collection/TidalArchiveSystem';
+import {
+  TIDE_BEAST_ARCHIVE_IDS,
+  type TideBeastArchiveId,
+} from '../../src/domain/collection/TidalArchiveSystem';
 import {
   EQUIPMENT_CATALOG,
   type EquipmentRarity,
@@ -62,72 +65,75 @@ export interface TidalArchiveEquipmentCard {
   readonly source: string;
 }
 
-export const TIDAL_ARCHIVE_ENEMIES = [
-  {
-    id: 'bubble-fin',
+type TidalArchiveEnemyMetadata = Omit<TidalArchiveEnemyDefinition, 'id'>;
+
+const TIDAL_ARCHIVE_ENEMY_METADATA = {
+  'bubble-fin': {
     name: '泡鳍怪',
     artUrl: BATTLE_ART_URLS.bubbleFin,
     role: '贴线冲锋',
     counter: '优先集火，别让它贴近车体',
     source: '任意航线 · 第 1 波',
   },
-  {
-    id: 'needle-jelly',
+  'needle-jelly': {
     name: '针水母',
     artUrl: BATTLE_ART_URLS.needleJelly,
     role: '远程针刺',
     counter: '利用齐射尽早削减远程火力',
     source: '任意航线 · 第 2 波',
   },
-  {
-    id: 'reef-crab',
+  'reef-crab': {
     name: '礁蟹',
     artUrl: BATTLE_ART_URLS.reefCrab,
     role: '护甲前排',
     counter: '先破防，再投入爆发伤害',
     source: '任意航线 · 第 3 波',
   },
-  {
-    id: 'tide-shell-hatchling',
+  'tide-shell-hatchling': {
     name: '潮壳幼蟹',
     artUrl: BATTLE_ART_URLS.tideShellHatchling,
     role: '换道突进',
     counter: '留意换道路线并及时转移火力',
     source: '任意航线 · 第 1 波',
   },
-  {
-    id: 'lantern-ray',
+  'lantern-ray': {
     name: '灯笼鳐',
     artUrl: BATTLE_ART_URLS.lanternRay,
     role: '蓄光远射',
     counter: '看到蓄光预警后优先打断',
     source: '任意航线 · 第 3 波',
   },
-  {
-    id: 'tide-parasite-snail',
+  'tide-parasite-snail': {
     name: '寄潮螺',
     artUrl: BATTLE_ART_URLS.tideParasiteSnail,
     role: '怪潮支援',
     counter: '先清除支援脉冲的源头',
     source: '任意航线 · 第 5 波',
   },
-  {
-    id: 'storm-ray-elite',
+  'storm-ray-elite': {
     name: '雷鳐督军',
     artUrl: BATTLE_ART_URLS.stormRayElite,
     role: '精英冲锋',
     counter: '躲过冲锋后抓住暴露窗口',
     source: '精英潮头',
   },
-  {
-    id: 'deep-echo-boss',
+  'deep-echo-boss': {
     name: '深海回响',
     artUrl: BATTLE_ART_URLS.deepEchoBoss,
     role: '多阶段 Boss',
     counter: '观察安全航道，并瞄准开放弱点',
     source: 'Boss 潮头',
   },
-] as const satisfies readonly TidalArchiveEnemyDefinition[];
+} as const satisfies Readonly<
+  Record<TideBeastArchiveId, TidalArchiveEnemyMetadata>
+>;
+
+export const TIDAL_ARCHIVE_ENEMIES = Object.freeze(
+  TIDE_BEAST_ARCHIVE_IDS.map((id) => Object.freeze({
+    id,
+    ...TIDAL_ARCHIVE_ENEMY_METADATA[id],
+  })),
+) satisfies readonly TidalArchiveEnemyDefinition[];
 
 const SKILL_NAMES: Readonly<Record<BattleSkillId, string>> = {
   'tidal-volley': '潮汐齐射',

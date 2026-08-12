@@ -1,12 +1,21 @@
 import { describe, expect, it } from 'vitest';
+import { TIDE_BEAST_ARCHIVE_IDS } from '../../src/domain/collection/TidalArchiveSystem';
 import { createStarterEquipmentState } from '../../src/domain/equipment/EquipmentSystem';
 import { createSkillMasteryXp } from '../../src/domain/progression/SkillMasterySystem';
+import { TIDAL_ARCHIVE_ENEMIES } from '../../web/views/TidalArchiveCatalog';
 import {
   buildTidalArchiveViewModel,
   renderTidalArchive,
 } from '../../web/views/TidalArchiveView';
 
 describe('TidalArchiveView', () => {
+  it('derives an immutable enemy catalog in authoritative ID order', () => {
+    expect(TIDAL_ARCHIVE_ENEMIES.map((entry) => entry.id))
+      .toEqual(TIDE_BEAST_ARCHIVE_IDS);
+    expect(Object.isFrozen(TIDAL_ARCHIVE_ENEMIES)).toBe(true);
+    expect(TIDAL_ARCHIVE_ENEMIES.every(Object.isFrozen)).toBe(true);
+  });
+
   it('renders all three complete catalogs from authoritative discovery state', () => {
     const model = buildTidalArchiveViewModel({
       archive: {
