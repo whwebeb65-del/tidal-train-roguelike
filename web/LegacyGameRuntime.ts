@@ -109,6 +109,12 @@ import {
   type FirstRunBattleTutorialStepId,
 } from '../src/domain/onboarding/FirstRunBattleTutorial';
 import {
+  discoverSkillVariant,
+  discoverTideBeast,
+  type TidalArchiveState,
+} from '../src/domain/collection/TidalArchiveSystem';
+import type { SkillVariantId } from '../src/domain/skill/SkillProgressionTypes';
+import {
   getProductDefinition,
   PRODUCT_CATALOG,
   type ProductReward,
@@ -147,7 +153,9 @@ import { renderWardrobe } from './views/WardrobeView';
 import {
   PROTOTYPE_REROLL,
   renderEquipment,
+  type EquipmentPanel,
 } from './views/EquipmentView';
+import { buildTidalArchiveViewModel } from './views/TidalArchiveView';
 import { createBrowserAppStateRepository } from './app/AppStateRepository';
 import {
   BattleSettlementAdapter,
@@ -173,6 +181,7 @@ import {
 import { BATTLE_INTERACTIONS } from './battle/BattleInteractionSchedule';
 import { BattleEngine } from './battle/BattleEngine';
 import { BattleDiagnostics } from './battle/BattleDiagnostics';
+import { getBattleUpgradeDefinition } from './battle/BattleUpgradeCatalog';
 import type {
   BattleE2EController,
   BattleE2ESnapshot,
@@ -285,6 +294,7 @@ export interface LegacyRuntimeDependencies {
     initial: number,
     available: readonly number[],
   ) => void;
+  readonly onBattleEngineCreated?: (engine: BattleEngine) => void;
   readonly onTelemetryEvent?: (event: PrototypeEvent) => void;
 }
 
@@ -350,12 +360,15 @@ let dailyTrialState = initialState.dailyTrial;
 let dailyCheckInState = initialState.dailyCheckIn;
 let guidebookState = initialState.guidebook;
 let firstRunBattleTutorialState = initialState.firstRunBattleTutorial;
+let tidalArchiveState = initialState.tidalArchive;
 let phase: 'station' | 'combat' = 'station';
 type HubView = Exclude<SceneId, 'battle'>;
 let hubView: HubView = 'station';
 let captainSelectionTracked = false;
 let wardrobeViewTracked = false;
 let equipmentViewTracked = false;
+let equipmentPanel: EquipmentPanel = 'workshop';
+let archiveViewTracked = false;
 let runMode: 'normal' | 'daily-trial' = 'normal';
 let e2ePrecisionWeakPointHits = 0;
 let currentMapId: MapId = initialState.selectedMapId;
@@ -853,6 +866,17 @@ function track(name: PrototypeEventName, payload: Record<string, string | number
   dependencies.onTelemetryEvent?.(event);
 }
 
+function commitArchiveDiscovery(
+  entryType: 'enemy' | 'skill-variant',
+  entryId: string,
+  next: TidalArchiveState,
+): void {
+  if (next === tidalArchiveState) return;
+  tidalArchiveState = next;
+  appStateRepository.saveTidalArchive(next);
+  track('tidal_archive_entry_discovered', { entryType, entryId });
+}
+
 function commitFirstRunTutorialStep(
   stepId: FirstRunBattleTutorialStepId,
 ): void {
@@ -891,6 +915,24 @@ function skipCurrentFirstRunTutorial(): void {
 
 function trackBattleEvents(events: readonly BattleEvent[]): void {
   for (const event of events) {
+    if (event.type === 'enemy-spawned') {
+      commitArchiveDiscovery(
+        'enemy',
+        event.kind,
+        discoverTideBeast(tidalArchiveState, event.kind),
+      );
+    }
+    if (
+      event.type === 'upgrade-selected'
+      && getBattleUpgradeDefinition(event.upgradeId).kind === 'skill-variant'
+    ) {
+      const variantId = event.upgradeId as SkillVariantId;
+      commitArchiveDiscovery(
+        'skill-variant',
+        variantId,
+        discoverSkillVariant(tidalArchiveState, variantId),
+      );
+    }
     if (event.type === 'run-level-reached') {
       track('run_level_reached', { runLevel: event.runLevel });
     }
@@ -1112,7 +1154,24 @@ function renderEquipmentScreen(): string {
     track('equipment_viewed', { inventorySize: save.equipmentInventory.length });
     equipmentViewTracked = true;
   }
-  return renderEquipment({ state: getEquipmentStateFromSave() });
+  const archive = buildTidalArchiveViewModel({
+    archive: tidalArchiveState,
+    equipmentInventory: save.equipmentInventory,
+    skillMasteryXp: save.skillMasteryXp,
+  });
+  if (equipmentPanel === 'archive' && !archiveViewTracked) {
+    track('tidal_archive_viewed', {
+      enemyCount: archive.enemySummary.discovered,
+      skillVariantCount: archive.variantSummary.discovered,
+      equipmentCount: archive.equipmentSummary.discovered,
+    });
+    archiveViewTracked = true;
+  }
+  return renderEquipment({
+    state: getEquipmentStateFromSave(),
+    panel: equipmentPanel,
+    archive,
+  });
 }
 
 function renderCaptainScene(): string {
@@ -1443,6 +1502,7 @@ async function startRun(
       dailyTrial: dailyDefinition,
       skillMasteryXp: candidateSave.skillMasteryXp,
     }));
+    dependencies.onBattleEngineCreated?.(candidateEngine);
     activeBattleEngine = candidateEngine;
     trackedSkillRanks = { ...candidateEngine.frame.skillRanks };
     trackedSkillVariants = Object.fromEntries(
@@ -2367,6 +2427,16 @@ const onClick = async (event: Event): Promise<void> => {
   }
   if (action === 'equip-skin' && button.dataset.skinId) {
     handleSkinEquip(button.dataset.skinId as SkinId);
+    return;
+  }
+  if (action === 'show-equipment-workshop') {
+    equipmentPanel = 'workshop';
+    render();
+    return;
+  }
+  if (action === 'show-tidal-archive') {
+    equipmentPanel = 'archive';
+    render();
     return;
   }
   if (action === 'equip-equipment' && button.dataset.instanceId) {

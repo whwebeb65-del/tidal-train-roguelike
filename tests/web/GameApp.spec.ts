@@ -1,9 +1,11 @@
 // @vitest-environment jsdom
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, onTestFinished, vi } from 'vitest';
 import { appSceneForAction } from '../../web/app/GameApp';
 import { createLegacyGameRuntime, progressionTelemetryForUpgrade } from '../../web/LegacyGameRuntime';
 import { APP_STORAGE_KEYS } from '../../web/app/AppStateRepository';
 import { defaultSave } from '../../src/save/SaveRepository';
+import { getBattleUpgradeDefinition } from '../../web/battle/BattleUpgradeCatalog';
+import type { BattleEngine } from '../../web/battle/BattleEngine';
 
 function installCanvas2DStub(): () => void {
   const original = HTMLCanvasElement.prototype.getContext;
@@ -52,6 +54,193 @@ describe('GameApp navigation', () => {
 });
 
 describe('LegacyGameRuntime E2E snapshots', () => {
+  it('records authoritative archive discoveries once and opens the archive without changing player assets', async () => {
+    const restoreCanvas = installCanvas2DStub();
+    window.history.replaceState({}, '', '/?e2e=1&e2eSeed=17');
+    const app = document.createElement('div');
+    document.body.append(app);
+    const storage = window.localStorage;
+    storage.clear();
+    const seededSave = {
+      ...defaultSave(),
+      gears: 321,
+      routeMarks: 45,
+      starTickets: 6,
+      selectedCaptainId: 'captain-tide-female' as const,
+    };
+    storage.setItem(APP_STORAGE_KEYS.player, JSON.stringify(seededSave));
+    storage.setItem(APP_STORAGE_KEYS.firstRunBattleTutorial, JSON.stringify({
+      version: 1,
+      completedStepIds: ['aim', 'skill', 'upgrade'],
+      skipped: false,
+    }));
+    const telemetryEvents: Array<{
+      readonly name: string;
+      readonly payload: Readonly<Record<string, string | number | boolean>>;
+    }> = [];
+    let getBattleInput: () => ReturnType<BattleEngine['inputForTest']> | undefined = (
+      () => undefined
+    );
+    const audio = new Proxy({}, { get: () => () => undefined }) as never;
+    const runtime = createLegacyGameRuntime(app, storage, true, audio, {
+      getSettings: () => ({ version: 2, musicEnabled: false, sfxEnabled: false, reducedMotion: true, qualityPreference: 'auto', preferredBattleSpeed: 1 }),
+      updateSettings: () => ({ version: 2, musicEnabled: false, sfxEnabled: false, reducedMotion: true, qualityPreference: 'auto', preferredBattleSpeed: 1 }),
+    }, {
+      prepareStationRun: async () => ({ status: 'ready', assets: { failedIds: [], get: () => null } }),
+      onTelemetryEvent: (event) => telemetryEvents.push(event),
+      onBattleEngineCreated: (engine) => {
+        getBattleInput = () => engine.inputForTest();
+      },
+    });
+
+    onTestFinished(() => {
+      runtime.destroy();
+      app.remove();
+      restoreCanvas();
+    });
+    await runtime.start();
+    expect(storage.getItem(APP_STORAGE_KEYS.tidalArchive)).toBeNull();
+    await runtime.e2eStartNormalBattle();
+    const startingBattle = runtime.e2eSnapshot().battle;
+    expect(startingBattle).not.toBeNull();
+    const startingBattleInput = structuredClone(
+      getBattleInput(),
+    );
+    expect(startingBattleInput).toBeTruthy();
+
+    for (let index = 0; index < 20; index += 1) {
+      if ((runtime.e2eSnapshot().battle?.enemies.length ?? 0) > 0) break;
+      runtime.e2eAdvanceBattle(250);
+    }
+    const firstEnemyFrame = runtime.e2eSnapshot().battle;
+    const firstEnemyKind = firstEnemyFrame?.enemies[0]?.kind;
+    expect(firstEnemyKind).toBeTruthy();
+    expect(firstEnemyFrame).toMatchObject({
+      maxTrainHp: startingBattle?.maxTrainHp,
+      runLevel: startingBattle?.runLevel,
+      skillRanks: startingBattle?.skillRanks,
+      skillVariants: startingBattle?.skillVariants,
+    });
+    expect(structuredClone(getBattleInput())).toEqual(
+      startingBattleInput,
+    );
+    expect(JSON.parse(
+      storage.getItem(APP_STORAGE_KEYS.tidalArchive) ?? '{}',
+    ).discoveredEnemyKinds).toEqual([firstEnemyKind]);
+
+    let selectedVariantId: string | null = null;
+    for (let index = 0; index < 300; index += 1) {
+      const battle = runtime.e2eSnapshot().battle;
+      expect(battle?.status).not.toBe('defeat');
+      expect(battle?.status).not.toBe('victory');
+      if (battle?.status === 'upgrade') {
+        if (battle.runLevel < 5) {
+          const nonVariant = battle.offeredUpgradeIds.find((upgradeId) => (
+            getBattleUpgradeDefinition(upgradeId).kind !== 'skill-variant'
+          ));
+          expect(nonVariant).toBeTruthy();
+          app.querySelector<HTMLButtonElement>(
+            `[data-upgrade-id="${nonVariant}"]`,
+          )?.click();
+          await runtime.e2eRequestResume();
+          runtime.e2eAdvanceBattle(17);
+          continue;
+        }
+        expect(battle.runLevel).toBe(5);
+        const offeredVariant = battle.offeredUpgradeIds.find((upgradeId) => (
+          getBattleUpgradeDefinition(upgradeId).kind === 'skill-variant'
+        ));
+        if (offeredVariant) {
+          selectedVariantId = offeredVariant;
+          const variantButton = app.querySelector<HTMLButtonElement>(
+            `[data-upgrade-id="${offeredVariant}"]`,
+          );
+          expect(variantButton).not.toBeNull();
+          variantButton?.click();
+          await runtime.e2eRequestResume();
+          runtime.e2eAdvanceBattle(17);
+          break;
+        }
+        expect(runtime.e2eChooseFirstUpgrade()).toBe(true);
+        await runtime.e2eRequestResume();
+        runtime.e2eAdvanceBattle(17);
+        continue;
+      }
+      runtime.e2eAdvanceBattle(1_000);
+    }
+    expect(selectedVariantId).not.toBeNull();
+    const storedArchive = JSON.parse(
+      storage.getItem(APP_STORAGE_KEYS.tidalArchive) ?? '{}',
+    );
+    expect(storedArchive.discoveredSkillVariantIds).toEqual([selectedVariantId]);
+    expect(storedArchive.discoveredEnemyKinds.filter(
+      (kind: string) => kind === firstEnemyKind,
+    )).toHaveLength(1);
+    expect(structuredClone(getBattleInput())).toEqual(
+      startingBattleInput,
+    );
+
+    const savedAfterDiscoveries = JSON.parse(
+      storage.getItem(APP_STORAGE_KEYS.player) ?? '{}',
+    );
+    expect(savedAfterDiscoveries).toMatchObject({
+      gears: seededSave.gears,
+      routeMarks: seededSave.routeMarks,
+      starTickets: seededSave.starTickets,
+      equipmentInventory: seededSave.equipmentInventory,
+      equippedEquipmentIds: seededSave.equippedEquipmentIds,
+      equipmentFragments: seededSave.equipmentFragments,
+      ownedSkinIds: seededSave.ownedSkinIds,
+      skillMasteryXp: seededSave.skillMasteryXp,
+    });
+
+    const discoveryKeys = telemetryEvents
+      .filter((event) => event.name === 'tidal_archive_entry_discovered')
+      .map((event) => `${event.payload.entryType}:${event.payload.entryId}`);
+    expect(new Set(discoveryKeys).size).toBe(discoveryKeys.length);
+    expect(discoveryKeys.filter((key) => key === `enemy:${firstEnemyKind}`)).toHaveLength(1);
+    expect(discoveryKeys.filter((key) => key === `skill-variant:${selectedVariantId}`)).toHaveLength(1);
+
+    await runtime.e2eReturnToStation();
+    await runtime.e2eNavigate('equipment');
+    const archiveTab = app.querySelector<HTMLButtonElement>(
+      '[data-action="show-tidal-archive"]',
+    );
+    expect(archiveTab).not.toBeNull();
+    archiveTab?.click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(app.querySelector('.tidal-archive-carriage')).not.toBeNull();
+    expect(app.querySelector(
+      '[data-action="show-tidal-archive"]',
+    )?.getAttribute('aria-pressed')).toBe('true');
+    expect(app.querySelector(
+      `[data-archive-enemy="${firstEnemyKind}"].is-discovered`,
+    )).not.toBeNull();
+    expect(app.querySelector(
+      `[data-archive-variant="${selectedVariantId}"].is-discovered`,
+    )).not.toBeNull();
+
+    app.querySelector<HTMLButtonElement>(
+      '[data-action="show-equipment-workshop"]',
+    )?.click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    app.querySelector<HTMLButtonElement>(
+      '[data-action="show-tidal-archive"]',
+    )?.click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const viewedEvents = telemetryEvents.filter(
+      (event) => event.name === 'tidal_archive_viewed',
+    );
+    expect(viewedEvents).toHaveLength(1);
+    expect(Object.values(viewedEvents[0].payload)).toHaveLength(3);
+    expect(Object.values(viewedEvents[0].payload).every(Number.isInteger)).toBe(true);
+    const discoveryKeysAfterRerender = telemetryEvents
+      .filter((event) => event.name === 'tidal_archive_entry_discovered')
+      .map((event) => `${event.payload.entryType}:${event.payload.entryId}`);
+    expect(discoveryKeysAfterRerender).toEqual(discoveryKeys);
+
+  });
+
   it('deep-copies progression variant arrays so mutations cannot affect the engine or later snapshots', async () => {
     window.history.replaceState({}, '', '/?e2e=1&e2eSeed=17');
     const app = document.createElement('div');

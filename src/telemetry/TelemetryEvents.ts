@@ -48,6 +48,8 @@ export type PrototypeEventName =
   | 'equipment_starred'
   | 'equipment_rerolled'
   | 'equipment_set_activated'
+  | 'tidal_archive_viewed'
+  | 'tidal_archive_entry_discovered'
   | 'battle_wave_started'
   | 'battle_skill_used'
   | 'battle_upgrade_offered'
