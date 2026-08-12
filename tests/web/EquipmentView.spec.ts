@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { createStarterEquipmentState } from '../../src/domain/equipment/EquipmentSystem';
+import { createSkillMasteryXp } from '../../src/domain/progression/SkillMasterySystem';
 import { renderEquipment } from '../../web/views/EquipmentView';
+import { buildTidalArchiveViewModel } from '../../web/views/TidalArchiveView';
 
 describe('EquipmentView', () => {
   it('renders four slots, both sets and deterministic progression actions', () => {
@@ -27,5 +29,30 @@ describe('EquipmentView', () => {
     expect(html).toContain('workbench-item');
     expect(html).toContain('parts-bin');
     expect(html).toContain('maintenance-tag');
+    expect(html).toContain('data-action="show-equipment-workshop" aria-pressed="true"');
+    expect(html).toContain('data-action="show-tidal-archive" aria-pressed="false"');
+  });
+
+  it('renders the archive panel without equipment mutation actions', () => {
+    const starter = createStarterEquipmentState();
+    const archive = buildTidalArchiveViewModel({
+      archive: {
+        version: 1,
+        discoveredEnemyKinds: [],
+        discoveredSkillVariantIds: [],
+      },
+      equipmentInventory: starter.inventory,
+      skillMasteryXp: createSkillMasteryXp(),
+    });
+    const html = renderEquipment({ state: starter, panel: 'archive', archive });
+
+    expect(html).toContain('data-action="show-equipment-workshop" aria-pressed="false"');
+    expect(html).toContain('data-action="show-tidal-archive" aria-pressed="true"');
+    expect(html).toContain('tidal-archive-carriage');
+    expect(html).not.toContain('equipment-layout');
+    expect(html).not.toContain('data-action="equip-equipment"');
+    expect(html).not.toContain('data-action="upgrade-equipment"');
+    expect(html).not.toContain('data-action="star-equipment"');
+    expect(html).not.toContain('data-action="reroll-equipment"');
   });
 });

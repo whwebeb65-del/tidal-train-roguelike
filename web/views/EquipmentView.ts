@@ -7,7 +7,13 @@ import {
   type EquipmentSlot,
 } from '../../src/domain/equipment/EquipmentCatalog';
 import type { EquipmentInstance, EquipmentState } from '../../src/domain/equipment/EquipmentSystem';
-import type { PermanentStatModifiers } from '../../src/domain/progression/ProgressionTypes';
+import {
+  equipmentModifierSummary,
+} from './TidalArchiveCatalog';
+import {
+  renderTidalArchive,
+  type TidalArchiveViewModel,
+} from './TidalArchiveView';
 
 export const PROTOTYPE_REROLL = {
   cannon: [{ id: 'damage-percent', value: 0.01 }],
@@ -18,7 +24,11 @@ export const PROTOTYPE_REROLL = {
 
 export interface EquipmentViewModel {
   readonly state: EquipmentState;
+  readonly panel?: EquipmentPanel;
+  readonly archive?: TidalArchiveViewModel;
 }
+
+export type EquipmentPanel = 'workshop' | 'archive';
 
 const SLOTS: readonly EquipmentSlot[] = ['cannon', 'carriage', 'core', 'instrument'];
 const SLOT_LABELS: Readonly<Record<EquipmentSlot, string>> = {
@@ -39,18 +49,6 @@ const AFFIX_LABELS: Readonly<Record<EquipmentAffixId, string>> = {
   'repair-flat': '维修',
 };
 
-function modifierSummary(modifiers: PermanentStatModifiers): string {
-  return [
-    modifiers.maxHpFlat ? `生命 +${modifiers.maxHpFlat}` : '',
-    modifiers.maxHpPercent ? `生命 +${modifiers.maxHpPercent * 100}%` : '',
-    modifiers.damageFlat ? `伤害 +${modifiers.damageFlat}` : '',
-    modifiers.damagePercent ? `伤害 +${modifiers.damagePercent * 100}%` : '',
-    modifiers.gearsPercent ? `齿轮 +${modifiers.gearsPercent * 100}%` : '',
-    modifiers.initialMomentum ? `动能 +${modifiers.initialMomentum}` : '',
-    modifiers.repairFlat ? `维修 +${modifiers.repairFlat}` : '',
-  ].filter(Boolean).join(' · ');
-}
-
 function affixLabel(affix: EquipmentAffix): string {
   const percentage = affix.id.endsWith('percent');
   return `${AFFIX_LABELS[affix.id]} +${percentage ? `${affix.value * 100}%` : affix.value}`;
@@ -67,7 +65,7 @@ function renderEquipmentCard(instance: EquipmentInstance, state: EquipmentState)
   return `<article class="equipment-card workbench-item ${equipped ? 'is-equipped' : ''}">
     <div class="equipment-card__heading"><small>${SLOT_LABELS[definition.slot]} · ${SET_LABELS[definition.setId]}</small><span>${'★'.repeat(instance.stars)}${'☆'.repeat(5 - instance.stars)}</span></div>
     <h3>${definition.name}</h3>
-    <p>Lv.${instance.level} · ${modifierSummary(definition.baseModifiers)}</p>
+    <p>Lv.${instance.level} · ${equipmentModifierSummary(definition.baseModifiers)}</p>
     <p>词条：${instance.affixes.length > 0 ? instance.affixes.map(affixLabel).join(' · ') : '暂无'}</p>
     <div class="equipment-actions">
       <button class="secondary" data-action="equip-equipment" data-instance-id="${instance.instanceId}" ${equipped ? 'disabled' : ''}>${equipped ? '已装备' : '装备'}</button>
@@ -80,6 +78,7 @@ function renderEquipmentCard(instance: EquipmentInstance, state: EquipmentState)
 
 export function renderEquipment(model: EquipmentViewModel): string {
   const { state } = model;
+  const panel = model.panel ?? 'workshop';
   const equippedInstances = new Set(Object.values(state.equippedEquipmentIds).filter(Boolean));
   const setCounts = new Map<EquipmentSetId, number>();
   for (const instance of state.inventory) {
@@ -108,20 +107,32 @@ export function renderEquipment(model: EquipmentViewModel): string {
     const bonus = EQUIPMENT_SET_BONUSES[setId];
     return `<article class="set-bonus workshop-blueprint ${count >= 2 ? 'is-active' : ''}">
       <h3>${SET_LABELS[setId]} · ${count}/4</h3>
-      <p>2 件：${modifierSummary(bonus.twoPiece)} ${count >= 2 ? '· 已激活' : ''}</p>
-      <p>4 件：${modifierSummary(bonus.fourPiece)} ${count >= 4 ? '· 已激活' : ''}</p>
+      <p>2 件：${equipmentModifierSummary(bonus.twoPiece)} ${count >= 2 ? '· 已激活' : ''}</p>
+      <p>4 件：${equipmentModifierSummary(bonus.fourPiece)} ${count >= 4 ? '· 已激活' : ''}</p>
     </article>`;
   }).join('');
 
-  return `<section class="equipment scene living-zone otter-workshop">
-    <div class="run-heading workshop-sign"><div><span class="eyebrow">OTTER MAINTENANCE BAY</span><h1>海獭维修工坊</h1><p>工具墙、零件箱和工作台都已就位。装备、强化、升星和定向重铸遵循同一套成长规则。</p></div><button class="secondary" data-nav-scene="captain">返回角色</button></div>
-    <div class="equipment-layout">
+  if (panel === 'archive' && !model.archive) {
+    throw new Error('Archive view model is required for the archive panel');
+  }
+
+  const content = panel === 'archive'
+    ? renderTidalArchive(model.archive!)
+    : `<div class="equipment-layout">
       <aside class="tool-wall">
         <div class="equipment-loadout">${slots}</div>
         <div class="equipment-wallet"><span>可用齿轮</span><b>${state.gears}</b></div>
         <div class="set-bonus-list">${setBonuses}</div>
       </aside>
       <div class="equipment-inventory parts-bin">${groups}</div>
+    </div>`;
+
+  return `<section class="equipment scene living-zone otter-workshop">
+    <div class="run-heading workshop-sign"><div><span class="eyebrow">OTTER MAINTENANCE BAY</span><h1>海獭维修工坊</h1><p>工具墙、零件箱和工作台都已就位。装备、强化、升星和定向重铸遵循同一套成长规则。</p></div><button class="secondary" data-nav-scene="captain">返回角色</button></div>
+    <div class="workshop-tabs" aria-label="工坊区域">
+      <button data-action="show-equipment-workshop" aria-pressed="${panel === 'workshop'}">维修工作台</button>
+      <button data-action="show-tidal-archive" aria-pressed="${panel === 'archive'}">潮汐档案</button>
     </div>
+    ${content}
   </section>`;
 }
