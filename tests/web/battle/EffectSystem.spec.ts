@@ -781,10 +781,12 @@ describe('EffectSystem', () => {
       'bursting-bubble',
       'reflective-spines',
       'overflow-membrane',
+      'emergency-trigger',
     ] as const;
     effects.consume([
       { type: 'skill-used', skillId: 'bubble-barrier' },
       { type: 'barrier-burst' },
+      { type: 'barrier-emergency-triggered', effectRatio: 0.6 },
     ], createVariantFrame(ids));
 
     const bubbleMotifs = effects.view.particles.filter((particle) => (

@@ -44,7 +44,10 @@ const INPUT = {
   readonly [BattleSkillId, string, string, SkillEvolutionParticleKind]
 >>;
 
-export const SKILL_EVOLUTION_VISUAL_SIGNATURES = Object.freeze(
+export const SKILL_EVOLUTION_VISUAL_SIGNATURES: Readonly<Record<
+  SkillVariantId,
+  SkillEvolutionVisualSignature
+>> = Object.freeze(
   Object.fromEntries(SKILL_VARIANT_IDS.map((id) => {
     const input = INPUT[id];
     if (input === undefined) {
