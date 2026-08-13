@@ -9,6 +9,7 @@ import type {
 } from './BattleTypes';
 import type { BattleSpeed } from '../../src/domain/progression/AccountProgressionSystem';
 import { BATTLE_ART_URLS, BATTLE_VARIANT_GLYPH_URLS } from '../assets/BattleArtCatalog';
+import type { TidalArchiveDiscoveryPresentation } from '../app/AppTypes';
 
 export {
   createBattleHudModel,
@@ -86,6 +87,7 @@ interface HudNodes {
   readonly settlementProgression: HTMLElement;
   readonly settlementAccount: HTMLElement;
   readonly settlementMastery: HTMLElement;
+  readonly settlementArchive: HTMLElement;
   readonly expedition: HTMLElement;
   readonly dailyScore: HTMLElement;
   readonly firstClearTicket: HTMLElement;
@@ -209,6 +211,7 @@ export function renderBattleHudShell(): string {
           <p data-settlement-account hidden></p>
           <p data-settlement-mastery hidden></p>
         </div>
+        <section class="settlement-archive-luggage" data-settlement-archive hidden></section>
         <div class="battle-settlement-meta">
           <span data-settlement-expedition hidden></span>
         </div>
@@ -352,6 +355,8 @@ export class BattleHUD {
     const archiveDiscovery = model.archiveDiscovery;
     nodes.archiveDiscovery.hidden = archiveDiscovery === null;
     if (archiveDiscovery) {
+      nodes.archiveDiscovery.dataset.archiveDiscoveryKind =
+        archiveDiscovery.entryType;
       if (nodes.archiveDiscoveryArt.getAttribute('src') !== archiveDiscovery.artUrl) {
         nodes.archiveDiscoveryArt.src = archiveDiscovery.artUrl;
       }
@@ -362,6 +367,8 @@ export class BattleHUD {
           : '新进化标本已归档',
       );
       setText(nodes.archiveDiscoveryName, archiveDiscovery.name);
+    } else {
+      delete nodes.archiveDiscovery.dataset.archiveDiscoveryKind;
     }
 
     for (const panel of nodes.tutorialPanels) {
@@ -530,6 +537,10 @@ export class BattleHUD {
     nodes.firstClearTicket.hidden = !firstClearSettlement;
     nodes.repeatClearTicket.hidden = !repeatClearSettlement;
     nodes.settlementRewards.hidden = trialSettlement;
+    renderSettlementArchiveDiscoveries(
+      nodes.settlementArchive,
+      model.settlement?.archiveDiscoveries ?? [],
+    );
     if (model.settlement) {
       setText(nodes.settlementTitle, model.settlement.title);
       setText(
@@ -719,6 +730,7 @@ function collectNodes(host: HTMLElement): HudNodes {
     ),
     settlementAccount: requireElement(host, '[data-settlement-account]'),
     settlementMastery: requireElement(host, '[data-settlement-mastery]'),
+    settlementArchive: requireElement(host, '[data-settlement-archive]'),
     expedition: requireElement(host, '[data-settlement-expedition]'),
     dailyScore: requireElement(host, '[data-settlement-daily-score]'),
     firstClearTicket: requireElement(host, '[data-arrival-ticket="first"]'),
@@ -732,6 +744,39 @@ function collectNodes(host: HTMLElement): HudNodes {
       '[data-battle-action="return-station"]',
     ),
   };
+}
+
+function renderSettlementArchiveDiscoveries(
+  root: HTMLElement,
+  discoveries: readonly TidalArchiveDiscoveryPresentation[],
+): void {
+  root.replaceChildren();
+  root.hidden = discoveries.length === 0;
+  if (discoveries.length === 0) return;
+
+  const document = root.ownerDocument;
+  const heading = document.createElement('h3');
+  heading.textContent = '本局新档案';
+  root.append(heading);
+
+  for (const discovery of discoveries) {
+    const entry = document.createElement('article');
+    entry.dataset.settlementArchiveEntry = discovery.key;
+
+    const image = document.createElement('img');
+    image.src = discovery.artUrl;
+    image.alt = discovery.name;
+
+    const type = document.createElement('small');
+    type.textContent = discovery.entryType === 'enemy'
+      ? '潮兽目击'
+      : '技能进化';
+
+    const name = document.createElement('b');
+    name.textContent = discovery.name;
+    entry.append(image, type, name);
+    root.append(entry);
+  }
 }
 
 function setText(node: HTMLElement, value: string): void {

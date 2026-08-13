@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 function relativeLuminance(hex: string): number {
@@ -34,6 +34,13 @@ describe('living station styles', () => {
     new URL('../../web/styles/tidal-archive.css', import.meta.url),
     'utf8',
   );
+  const discoveryCssUrl = new URL(
+    '../../web/styles/tidal-archive-discovery.css',
+    import.meta.url,
+  );
+  const discoveryCss = existsSync(discoveryCssUrl)
+    ? readFileSync(discoveryCssUrl, 'utf8')
+    : '';
   const guidebookCss = readFileSync(
     new URL('../../web/styles/captain-guidebook.css', import.meta.url),
     'utf8',
@@ -157,6 +164,86 @@ describe('living station styles', () => {
     );
     expect(archiveCss).toMatch(
       /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.tidal-archive-carriage \.archive-card:nth-child\(even\),\s*\.tidal-archive-carriage \.archive-card:nth-child\(3n\)\s*\{[^}]*transform:\s*none;/s,
+    );
+  });
+
+  it('imports scoped archive discovery feedback after the archive foundation', () => {
+    const entry = readFileSync(
+      new URL('../../web/styles.css', import.meta.url),
+      'utf8',
+    );
+    expect(entry).toContain('@import "./styles/tidal-archive-discovery.css";');
+    expect(entry.indexOf('tidal-archive.css')).toBeLessThan(
+      entry.indexOf('tidal-archive-discovery.css'),
+    );
+    expect(discoveryCss).toContain('.app-shell--battle .battle-archive-discovery');
+    expect(discoveryCss).toContain('.otter-workshop .archive-unread-seal');
+    expect(discoveryCss).toContain('.tidal-archive-carriage .archive-new-stamp');
+    expect(discoveryCss).toContain('.battle-overlay--settlement .settlement-archive-luggage');
+    expect(discoveryCss).not.toMatch(
+      /(^|,)\s*\.(?:battle-archive-discovery|archive-unread-seal|archive-new-stamp|settlement-archive-luggage)/m,
+    );
+  });
+
+  it('keeps every new feedback pseudo decorative in one pointer-safe rule', () => {
+    expect(discoveryCss.match(/pointer-events:\s*none;/g)).toHaveLength(1);
+    expect(discoveryCss).toMatch(
+      /\.app-shell--battle \.battle-archive-discovery::before,\s*\.app-shell--battle \.battle-archive-discovery::after,\s*\.otter-workshop \.archive-unread-seal::before,\s*\.otter-workshop \.archive-unread-seal::after,\s*\.tidal-archive-carriage \.archive-new-stamp::before,\s*\.tidal-archive-carriage \.archive-new-stamp::after,\s*\.battle-overlay--settlement \.settlement-archive-luggage::before,\s*\.battle-overlay--settlement \[data-settlement-archive-entry\]::before,\s*\.battle-overlay--settlement \[data-settlement-archive-entry\]::after\s*\{[^}]*pointer-events:\s*none;/s,
+    );
+  });
+
+  it('styles the battle ticket, unread seal and NEW stamp without stealing layout space', () => {
+    expect(discoveryCss).toMatch(
+      /\.app-shell--battle \.battle-archive-discovery\s*\{[^}]*position:\s*absolute;[^}]*right:\s*max\([^;]*safe-area-inset-right[^;]*\);[^}]*background:\s*#fff1c4;/s,
+    );
+    expect(discoveryCss).toMatch(
+      /\.app-shell--battle \.battle-archive-discovery::after\s*\{[^}]*color:\s*#a63f38;[^}]*border:[^;]*#a63f38;/s,
+    );
+    expect(discoveryCss).toMatch(
+      /\.app-shell--battle \.battle-archive-discovery\[data-archive-discovery-kind="enemy"\]\s*\{[^}]*border-color:\s*#147f7b;/s,
+    );
+    expect(discoveryCss).toMatch(
+      /\.app-shell--battle \.battle-archive-discovery\[data-archive-discovery-kind="skill-variant"\]\s*\{[^}]*border-color:\s*#684086;[^}]*box-shadow:[^;]*#b08a3a;/s,
+    );
+    expect(discoveryCss).toMatch(
+      /\.otter-workshop \.archive-unread-seal\s*\{[^}]*position:\s*absolute;/s,
+    );
+    expect(archiveCss).toMatch(/\.workshop-tabs button\s*\{[^}]*height:\s*46px;/s);
+    expect(discoveryCss).toMatch(
+      /\.tidal-archive-carriage \.archive-new-stamp\s*\{[^}]*position:\s*absolute;/s,
+    );
+  });
+
+  it('wraps settlement luggage, constrains failed images and preserves actions on mobile', () => {
+    expect(discoveryCss).toMatch(
+      /\.battle-overlay--settlement \.settlement-archive-luggage\s*\{[^}]*display:\s*flex;[^}]*flex-wrap:\s*wrap;[^}]*max-width:\s*100%;/s,
+    );
+    expect(discoveryCss).toMatch(
+      /\.battle-overlay--settlement \[data-settlement-archive-entry\]\s*\{[^}]*grid-template-columns:\s*44px minmax\(0,\s*1fr\);[^}]*min-width:\s*0;[^}]*max-width:\s*100%;/s,
+    );
+    expect(discoveryCss).toMatch(
+      /\.battle-overlay--settlement \[data-settlement-archive-entry\] img\s*\{[^}]*width:\s*44px;[^}]*height:\s*44px;[^}]*object-fit:\s*contain;/s,
+    );
+    expect(discoveryCss).toMatch(
+      /\.battle-overlay--settlement \[data-settlement-archive-entry\] (?:small|b),[\s\S]*?overflow-wrap:\s*anywhere;/s,
+    );
+    expect(discoveryCss).toMatch(
+      /@media \(max-width:\s*430px\)[\s\S]*?\.app-shell--battle \.battle-archive-discovery\s*\{[^}]*max-width:\s*calc\(100%[^;]*safe-area-inset-left[^;]*safe-area-inset-right[^;]*\);/s,
+    );
+    expect(discoveryCss).toMatch(
+      /@media \(max-width:\s*430px\)[\s\S]*?\.battle-overlay--settlement \[data-settlement-archive-entry\]\s*\{[^}]*flex-basis:\s*100%;/s,
+    );
+    expect(discoveryCss).toMatch(
+      /\.battle-overlay--settlement \.battle-dialog--settlement\s*\{[^}]*max-height:\s*calc\(100dvh[^;]*\);[^}]*overflow-y:\s*auto;/s,
+    );
+    expect(discoveryCss).toMatch(
+      /\.battle-overlay--settlement \.battle-dialog__actions\s*\{[^}]*position:\s*sticky;[^}]*bottom:\s*0;/s,
+    );
+  });
+
+  it('removes discovery feedback motion from elements and pseudos on request', () => {
+    expect(discoveryCss).toMatch(
+      /@media \(prefers-reduced-motion:\s*reduce\)[\s\S]*?\.app-shell--battle \.battle-archive-discovery,\s*\.app-shell--battle \.battle-archive-discovery::before,\s*\.app-shell--battle \.battle-archive-discovery::after,\s*\.otter-workshop \.archive-unread-seal,\s*\.otter-workshop \.archive-unread-seal::before,\s*\.otter-workshop \.archive-unread-seal::after,\s*\.tidal-archive-carriage \.archive-new-stamp,\s*\.tidal-archive-carriage \.archive-new-stamp::before,\s*\.tidal-archive-carriage \.archive-new-stamp::after,\s*\.battle-overlay--settlement \.settlement-archive-luggage,\s*\.battle-overlay--settlement \.settlement-archive-luggage::before,\s*\.battle-overlay--settlement \[data-settlement-archive-entry\],\s*\.battle-overlay--settlement \[data-settlement-archive-entry\]::before,\s*\.battle-overlay--settlement \[data-settlement-archive-entry\]::after\s*\{[^}]*animation:\s*none;[^}]*transition:\s*none;[^}]*transform:\s*none;/s,
     );
   });
 

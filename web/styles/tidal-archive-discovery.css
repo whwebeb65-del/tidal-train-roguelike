@@ -1,0 +1,350 @@
+.app-shell--battle .battle-archive-discovery::before,
+.app-shell--battle .battle-archive-discovery::after,
+.otter-workshop .archive-unread-seal::before,
+.otter-workshop .archive-unread-seal::after,
+.tidal-archive-carriage .archive-new-stamp::before,
+.tidal-archive-carriage .archive-new-stamp::after,
+.battle-overlay--settlement .settlement-archive-luggage::before,
+.battle-overlay--settlement [data-settlement-archive-entry]::before,
+.battle-overlay--settlement [data-settlement-archive-entry]::after {
+  pointer-events: none;
+}
+
+.app-shell--battle .battle-archive-discovery {
+  position: absolute;
+  z-index: 12;
+  top: calc(116px + env(safe-area-inset-top));
+  right: max(10px, env(safe-area-inset-right));
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr);
+  grid-template-areas:
+    "art kicker"
+    "art type"
+    "art name";
+  width: min(224px, calc(100% - 20px));
+  max-width: calc(100% - 20px);
+  min-width: 0;
+  padding: 10px 11px;
+  border: 3px solid #147f7b;
+  border-radius: 7px 12px 6px 10px;
+  color: #45352b;
+  text-align: left;
+  background: #fff1c4;
+  box-shadow: 4px 5px 0 rgb(4 50 61 / 68%);
+  transform: rotate(1deg);
+  transition: transform 180ms ease, opacity 180ms ease;
+}
+
+.app-shell--battle .battle-archive-discovery[data-archive-discovery-kind="enemy"] {
+  border-color: #147f7b;
+}
+
+.app-shell--battle .battle-archive-discovery[data-archive-discovery-kind="skill-variant"] {
+  border-color: #684086;
+  box-shadow: 4px 5px 0 #b08a3a;
+}
+
+.app-shell--battle .battle-archive-discovery::before {
+  position: absolute;
+  top: -7px;
+  left: 18px;
+  width: 43px;
+  height: 12px;
+  content: "";
+  background: rgb(239 216 157 / 82%);
+  transform: rotate(-4deg);
+}
+
+.app-shell--battle .battle-archive-discovery::after {
+  position: absolute;
+  right: 7px;
+  bottom: 5px;
+  padding: 2px 4px;
+  color: #a63f38;
+  border: 2px solid #a63f38;
+  border-radius: 50%;
+  content: "NEW";
+  font: 900 8px/1 ui-monospace, monospace;
+  transform: rotate(-9deg);
+}
+
+.app-shell--battle .battle-archive-discovery img {
+  grid-area: art;
+  align-self: center;
+  width: 48px;
+  height: 48px;
+  object-fit: contain;
+  border-radius: 6px;
+  background: #d8efe0;
+}
+
+.app-shell--battle .battle-archive-discovery > span {
+  grid-area: kicker;
+  min-width: 0;
+  color: #a63f38;
+  font: 900 8px/1.2 ui-monospace, monospace;
+  letter-spacing: .05em;
+  overflow-wrap: anywhere;
+}
+
+.app-shell--battle .battle-archive-discovery > small {
+  grid-area: type;
+  min-width: 0;
+  color: #526d69;
+  font-size: 9px;
+  overflow-wrap: anywhere;
+}
+
+.app-shell--battle .battle-archive-discovery > b {
+  grid-area: name;
+  min-width: 0;
+  padding-right: 30px;
+  color: #3f2d25;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.otter-workshop .workshop-tabs button[data-action="show-tidal-archive"] {
+  position: relative;
+  overflow: visible;
+}
+
+.otter-workshop .archive-unread-seal {
+  position: absolute;
+  z-index: 3;
+  top: -9px;
+  right: -8px;
+  min-width: 42px;
+  padding: 4px 6px;
+  border: 2px solid #813b36;
+  border-radius: 48% 42% 51% 45%;
+  color: #fff4d0;
+  background: #a94a40;
+  box-shadow: 2px 2px 0 #4d2925;
+  font: 900 9px/1 ui-monospace, monospace;
+  white-space: nowrap;
+  transform: rotate(6deg);
+  transition: transform 160ms ease;
+}
+
+.otter-workshop .archive-unread-seal::before,
+.otter-workshop .archive-unread-seal::after {
+  position: absolute;
+  inset: 2px;
+  border: 1px dashed rgb(255 244 208 / 72%);
+  border-radius: inherit;
+  content: "";
+}
+
+.otter-workshop .archive-unread-seal::after {
+  inset: -4px;
+  border-color: rgb(129 59 54 / 45%);
+}
+
+.tidal-archive-carriage .archive-card.is-new {
+  outline: 3px solid rgb(169 74 64 / 32%);
+  outline-offset: 2px;
+}
+
+.tidal-archive-carriage .archive-new-stamp {
+  position: absolute;
+  z-index: 3;
+  top: -13px;
+  right: -5px;
+  padding: 5px 8px;
+  border: 2px solid #8f3935;
+  border-radius: 8px 5px 9px 4px;
+  color: #fff4d0;
+  background: #a94a40;
+  box-shadow: 2px 3px 0 #5d302c;
+  font: 900 10px/1 ui-monospace, monospace;
+  letter-spacing: .08em;
+  transform: rotate(7deg);
+  transition: transform 160ms ease;
+}
+
+.tidal-archive-carriage .archive-new-stamp::before,
+.tidal-archive-carriage .archive-new-stamp::after {
+  position: absolute;
+  inset: 2px;
+  border: 1px dashed rgb(255 244 208 / 76%);
+  border-radius: inherit;
+  content: "";
+}
+
+.tidal-archive-carriage .archive-new-stamp::after {
+  inset: -5px;
+  border-color: rgb(143 57 53 / 38%);
+}
+
+.battle-overlay--settlement .battle-dialog--settlement {
+  max-height: calc(100dvh - 36px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.battle-overlay--settlement .settlement-archive-luggage {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 12px 8px 8px;
+  border: 2px dashed #8c5a43;
+  border-radius: 10px 7px 12px 8px;
+  background: #f6dfaa;
+  transform: rotate(-.35deg);
+  transition: transform 180ms ease;
+}
+
+.battle-overlay--settlement .settlement-archive-luggage::before {
+  position: absolute;
+  top: -7px;
+  right: 14%;
+  width: 47px;
+  height: 11px;
+  content: "";
+  background: rgb(255 244 208 / 78%);
+  transform: rotate(4deg);
+}
+
+.battle-overlay--settlement .settlement-archive-luggage h3 {
+  flex: 1 0 100%;
+  margin: 0;
+  color: #783d35;
+  font-size: 12px;
+  text-align: left;
+}
+
+.battle-overlay--settlement [data-settlement-archive-entry] {
+  position: relative;
+  display: grid;
+  flex: 1 1 145px;
+  grid-template-columns: 44px minmax(0, 1fr);
+  grid-template-areas: "art type" "art name";
+  min-width: 0;
+  max-width: 100%;
+  padding: 7px 9px 7px 7px;
+  border: 2px solid #52776d;
+  border-radius: 7px 11px 6px 9px;
+  color: #3d3027;
+  text-align: left;
+  background: #fff3cf;
+  box-shadow: 2px 3px 0 rgb(92 59 42 / 35%);
+  transform: rotate(.45deg);
+  transition: transform 180ms ease;
+}
+
+.battle-overlay--settlement [data-settlement-archive-entry]::before {
+  position: absolute;
+  top: -4px;
+  left: 12px;
+  width: 28px;
+  height: 7px;
+  content: "";
+  background: rgb(220 194 131 / 76%);
+  transform: rotate(-5deg);
+}
+
+.battle-overlay--settlement [data-settlement-archive-entry]::after {
+  position: absolute;
+  right: 4px;
+  bottom: 3px;
+  content: "归档";
+  color: rgb(166 63 56 / 56%);
+  font: 900 7px/1 ui-monospace, monospace;
+  transform: rotate(-7deg);
+}
+
+.battle-overlay--settlement [data-settlement-archive-entry] img {
+  grid-area: art;
+  align-self: center;
+  width: 44px;
+  height: 44px;
+  object-fit: contain;
+  border-radius: 6px;
+  background: #d9eee0;
+}
+
+.battle-overlay--settlement [data-settlement-archive-entry] small,
+.battle-overlay--settlement [data-settlement-archive-entry] b {
+  min-width: 0;
+  padding-left: 7px;
+  overflow-wrap: anywhere;
+}
+
+.battle-overlay--settlement [data-settlement-archive-entry] small {
+  grid-area: type;
+  align-self: end;
+  color: #8b4b3e;
+  font-size: 8px;
+}
+
+.battle-overlay--settlement [data-settlement-archive-entry] b {
+  grid-area: name;
+  align-self: start;
+  padding-right: 22px;
+  font-size: 11px;
+}
+
+.battle-overlay--settlement .battle-dialog__actions {
+  position: sticky;
+  z-index: 4;
+  bottom: 0;
+  padding-top: 9px;
+  background: linear-gradient(180deg, rgb(255 241 196 / 0%), #fff1c4 22%);
+}
+
+@media (max-width: 430px) {
+  .app-shell--battle .battle-archive-discovery {
+    right: max(8px, env(safe-area-inset-right));
+    width: min(212px, calc(100% - 16px - env(safe-area-inset-left) - env(safe-area-inset-right)));
+    max-width: calc(100% - 16px - env(safe-area-inset-left) - env(safe-area-inset-right));
+  }
+
+  .battle-overlay--settlement [data-settlement-archive-entry] {
+    flex-basis: 100%;
+  }
+}
+
+@media (max-width: 370px) {
+  .app-shell--battle .battle-archive-discovery {
+    top: calc(108px + env(safe-area-inset-top));
+    grid-template-columns: 42px minmax(0, 1fr);
+    width: min(190px, calc(100% - 16px - env(safe-area-inset-left) - env(safe-area-inset-right)));
+    padding: 8px;
+  }
+
+  .app-shell--battle .battle-archive-discovery img {
+    width: 38px;
+    height: 38px;
+  }
+
+  .battle-overlay--settlement .settlement-archive-luggage {
+    padding-inline: 6px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-shell--battle .battle-archive-discovery,
+  .app-shell--battle .battle-archive-discovery::before,
+  .app-shell--battle .battle-archive-discovery::after,
+  .otter-workshop .archive-unread-seal,
+  .otter-workshop .archive-unread-seal::before,
+  .otter-workshop .archive-unread-seal::after,
+  .tidal-archive-carriage .archive-new-stamp,
+  .tidal-archive-carriage .archive-new-stamp::before,
+  .tidal-archive-carriage .archive-new-stamp::after,
+  .battle-overlay--settlement .settlement-archive-luggage,
+  .battle-overlay--settlement .settlement-archive-luggage::before,
+  .battle-overlay--settlement [data-settlement-archive-entry],
+  .battle-overlay--settlement [data-settlement-archive-entry]::before,
+  .battle-overlay--settlement [data-settlement-archive-entry]::after {
+    animation: none;
+    transition: none;
+    transform: none;
+  }
+}

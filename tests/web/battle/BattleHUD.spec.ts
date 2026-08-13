@@ -19,7 +19,7 @@ const ARCHIVE_DISCOVERY: TidalArchiveDiscoveryPresentation = Object.freeze({
   key: 'enemy:bubble-fin',
   entryType: 'enemy',
   entryId: 'bubble-fin',
-  name: '泡鳍兽',
+  name: '泡鳍怪',
   artUrl: '/archive/bubble-fin.webp',
 });
 
@@ -98,11 +98,12 @@ describe('BattleHUD', () => {
       '[data-archive-discovery-art]',
     );
     expect(ticket?.hidden).toBe(false);
+    expect(ticket?.dataset.archiveDiscoveryKind).toBe('enemy');
     expect(ticket?.textContent).toContain('NEW ARCHIVE ENTRY');
     expect(ticket?.querySelector('[data-archive-discovery-type]')?.textContent)
       .toBe('首次目击已装订');
     expect(ticket?.querySelector('[data-archive-discovery-name]')?.textContent)
-      .toBe('泡鳍兽');
+      .toBe('泡鳍怪');
     expect(art?.getAttribute('src')).toBe('/archive/bubble-fin.webp');
     expect(art?.getAttribute('alt')).toBe('');
 
@@ -124,6 +125,7 @@ describe('BattleHUD', () => {
     }));
     expect(ticket?.querySelector('[data-archive-discovery-type]')?.textContent)
       .toBe('新进化标本已归档');
+    expect(ticket?.dataset.archiveDiscoveryKind).toBe('skill-variant');
 
     hud.dispose();
     host.remove();
@@ -294,6 +296,122 @@ describe('BattleHUD', () => {
     expect(host.querySelector(
       '[data-battle-action="return-station"]',
     )).not.toBeNull();
+
+    hud.dispose();
+    host.remove();
+  });
+
+  it('renders immutable settlement discoveries as luggage tags after progression and before actions', () => {
+    const hud = new BattleHUD(createCallbacks(), window);
+    const host = document.createElement('div');
+    document.body.append(host);
+    hud.mount(host);
+    const archiveDiscoveries = Object.freeze([
+      Object.freeze({
+        key: 'enemy:bubble-fin' as const,
+        entryType: 'enemy' as const,
+        entryId: 'bubble-fin',
+        name: '泡鳍怪',
+        artUrl: '/archive/bubble-fin.webp',
+      }),
+      Object.freeze({
+        key: 'skill-variant:split-tide-arrow' as const,
+        entryType: 'skill-variant' as const,
+        entryId: 'split-tide-arrow',
+        name: '分汐浪箭',
+        artUrl: '/archive/split-tide-arrow.webp',
+      }),
+    ]);
+
+    hud.update(createBattleHudModel(createFrameFixture({ status: 'victory' }), {
+      ...createHudModelOptionsFixture(),
+      settlement: {
+        title: '潮汐航线通关',
+        description: '奖励已到账。',
+        rewards: { gears: 80, routeMarks: 2, starTickets: 0 },
+        expeditionPoints: 0,
+        dailyTrialScore: null,
+        archiveDiscoveries,
+        doubleSettlementAvailable: false,
+        doubled: false,
+      },
+    }));
+
+    const luggage = host.querySelector<HTMLElement>(
+      '[data-settlement-archive]',
+    );
+    const progression = host.querySelector('.battle-settlement-progression');
+    const actions = host.querySelector('.battle-overlay--settlement .battle-dialog__actions');
+    if (!luggage || !progression || !actions) {
+      throw new Error('Expected settlement archive luggage placement hooks');
+    }
+    const entries = luggage?.querySelectorAll<HTMLElement>(
+      '[data-settlement-archive-entry]',
+    );
+    expect(luggage?.classList.contains('settlement-archive-luggage')).toBe(true);
+    expect(luggage?.hidden).toBe(false);
+    expect(luggage?.querySelector('h3')?.textContent).toBe('本局新档案');
+    expect(progression.compareDocumentPosition(luggage))
+      .toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(luggage.compareDocumentPosition(actions))
+      .toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(entries).toHaveLength(2);
+    expect(entries?.[0]?.dataset.settlementArchiveEntry)
+      .toBe('enemy:bubble-fin');
+    expect(entries?.[0]?.querySelector('img')?.getAttribute('src'))
+      .toBe('/archive/bubble-fin.webp');
+    expect(entries?.[0]?.querySelector('img')?.getAttribute('alt'))
+      .toBe('泡鳍怪');
+    expect(entries?.[0]?.querySelector('small')?.textContent).toBe('潮兽目击');
+    expect(entries?.[0]?.querySelector('b')?.textContent).toBe('泡鳍怪');
+    expect(entries?.[1]?.dataset.settlementArchiveEntry)
+      .toBe('skill-variant:split-tide-arrow');
+    expect(entries?.[1]?.querySelector('img')?.getAttribute('alt'))
+      .toBe('分汐浪箭');
+    expect(entries?.[1]?.querySelector('small')?.textContent).toBe('技能进化');
+    expect(entries?.[1]?.querySelector('b')?.textContent).toBe('分汐浪箭');
+
+    hud.dispose();
+    host.remove();
+  });
+
+  it('hides and clears settlement luggage when no discoveries are present', () => {
+    const hud = new BattleHUD(createCallbacks(), window);
+    const host = document.createElement('div');
+    document.body.append(host);
+    hud.mount(host);
+    const frame = createFrameFixture({ status: 'victory' });
+    const settlement = {
+      title: '潮汐航线通关',
+      description: '奖励已到账。',
+      rewards: { gears: 80, routeMarks: 2, starTickets: 0 },
+      expeditionPoints: 0,
+      dailyTrialScore: null,
+      archiveDiscoveries: [{
+        key: 'enemy:bubble-fin' as const,
+        entryType: 'enemy' as const,
+        entryId: 'bubble-fin',
+        name: '<img data-injected alt="bad">',
+        artUrl: '/archive/bubble-fin.webp',
+      }],
+      doubleSettlementAvailable: false,
+      doubled: false,
+    };
+    hud.update(createBattleHudModel(frame, {
+      ...createHudModelOptionsFixture(),
+      settlement,
+    }));
+    const luggage = host.querySelector<HTMLElement>('[data-settlement-archive]');
+    expect(luggage?.querySelector('[data-injected]')).toBeNull();
+    expect(luggage?.querySelector('b')?.textContent)
+      .toBe('<img data-injected alt="bad">');
+
+    hud.update(createBattleHudModel(frame, {
+      ...createHudModelOptionsFixture(),
+      settlement: { ...settlement, archiveDiscoveries: [] },
+    }));
+    expect(luggage?.hidden).toBe(true);
+    expect(luggage?.childElementCount).toBe(0);
 
     hud.dispose();
     host.remove();
