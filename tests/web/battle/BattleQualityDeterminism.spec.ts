@@ -6,6 +6,11 @@ import {
   getRenderBudget,
   type QualityLevel,
 } from '../../../web/battle/QualityMonitor';
+import {
+  SKILL_VARIANT_IDS,
+} from '../../../src/domain/skill/SkillProgressionTypes';
+import type { BattleEvent } from '../../../web/battle/BattleTypes';
+import { createFrameFixture } from './helpers/BattleFixtures';
 
 function runAtQuality(level: QualityLevel) {
   const engine = new BattleEngine({
@@ -52,6 +57,40 @@ function runAtQuality(level: QualityLevel) {
   };
 }
 
+function evolutionViewAtQuality(level: QualityLevel) {
+  const effects = new EffectSystem({
+    particleLimit: 200,
+    damageNumberLimit: 18,
+    impactLimit: 24,
+    reducedMotion: false,
+  });
+  effects.setRenderBudget(getRenderBudget(level));
+  const frame = createFrameFixture({
+    skillRanks: { 'tidal-volley': 5, 'bubble-barrier': 5, 'extreme-tide': 5 },
+    skillVariants: {
+      'tidal-volley': ['split-tide-arrow', 'reef-piercer', 'returning-volley', 'rainstorm-school'],
+      'bubble-barrier': ['bursting-bubble', 'reflective-spines', 'overflow-membrane', 'emergency-trigger'],
+      'extreme-tide': ['undertow-eye', 'lingering-vortex', 'energy-return', 'double-crest'],
+    },
+  });
+  const events: readonly BattleEvent[] = [
+    { type: 'skill-used', skillId: 'tidal-volley' },
+    { type: 'skill-used', skillId: 'bubble-barrier' },
+    { type: 'skill-used', skillId: 'extreme-tide' },
+    { type: 'barrier-burst' },
+    { type: 'barrier-emergency-triggered', effectRatio: 0.6 },
+    { type: 'extreme-pull-started', durationMs: 2000 },
+    { type: 'extreme-vortex-started', durationMs: 4000 },
+    { type: 'extreme-energy-refunded', amount: 2 },
+    { type: 'extreme-second-crest', durationMs: 1200, amount: 45 },
+  ];
+  effects.consume(events, frame);
+  expect(frame.skillVariants['tidal-volley'].length
+    + frame.skillVariants['bubble-barrier'].length
+    + frame.skillVariants['extreme-tide'].length).toBe(SKILL_VARIANT_IDS.length);
+  return effects.view;
+}
+
 describe('battle visual quality determinism', () => {
   it('produces the same result at high, medium and low quality', () => {
     const high = runAtQuality('high');
@@ -59,4 +98,11 @@ describe('battle visual quality determinism', () => {
     expect(runAtQuality('medium')).toEqual(high);
     expect(runAtQuality('low')).toEqual(high);
   });
+
+  it.each(['high', 'medium', 'low'] as const)(
+    'produces deep-equal evolution effect views for identical %s-quality input',
+    (quality) => {
+      expect(evolutionViewAtQuality(quality)).toEqual(evolutionViewAtQuality(quality));
+    },
+  );
 });

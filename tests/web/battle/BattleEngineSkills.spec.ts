@@ -223,12 +223,19 @@ describe('BattleEngine skills', () => {
       },
     };
     emergencyEngine.debugDamageTrain(76);
+    const events = emergencyEngine.drainEvents();
     expect(emergencyEngine.frame.trainHp).toBe(32);
     expect(emergencyEngine.frame.shield).toBe(15);
+    expect(events.filter((event) => event.type === 'barrier-emergency-triggered'))
+      .toEqual([{ type: 'barrier-emergency-triggered', effectRatio: 0.6 }]);
 
     const baselineEngine = new BattleEngine({ ...input, maxTrainHp: 101 });
     expect(baselineEngine.useSkill('bubble-barrier')).toBe(true);
     expect(baselineEngine.frame.shield).toBe(25.25);
+    const manualBarrierEvents = baselineEngine.drainEvents();
+    expect(manualBarrierEvents.some(
+      (event) => event.type === 'barrier-emergency-triggered',
+    )).toBe(false);
   });
 
   it('fires volley, applies barrier and spends full extreme energy', () => {

@@ -4,13 +4,22 @@ import type {
   EnemyState,
 } from './BattleTypes';
 import {
+  SKILL_VARIANT_IDS,
+  type SkillVariantId,
+} from '../../src/domain/skill/SkillProgressionTypes';
+import {
   EntityPool,
   type EntityPoolStats,
 } from './EntityPool';
 import type { RenderBudget } from './QualityMonitor';
 import { LANE_X } from './BattleConfig';
+import {
+  getSkillEvolutionVisualSignature,
+  type SkillEvolutionParticleKind,
+} from './SkillEvolutionVisualCatalog';
 
 export type EffectParticleKind =
+  | SkillEvolutionParticleKind
   | 'muzzle'
   | 'brush-smear'
   | 'splash'
@@ -24,11 +33,7 @@ export type EffectParticleKind =
   | 'core-pulse'
   | 'rank-volley-trail'
   | 'extreme-radial-stroke'
-  | 'coral-pierce'
-  | 'reflection'
   | 'extreme-pull'
-  | 'extreme-vortex'
-  | 'second-crest'
   | 'ranged-warning'
   | 'support-wave'
   | 'elite-charge'
@@ -198,6 +203,7 @@ export class EffectSystem {
   private damageNumberLimit: number;
   private impactLimit: number;
   private particleSpawnScale = 1;
+  private activeSkillParticleBudget: number | null = null;
 
   public constructor(options: EffectSystemOptions) {
     assertLimit(options.particleLimit, 'Particle limit');
@@ -319,6 +325,31 @@ export class EffectSystem {
     events: readonly BattleEvent[],
     frame: BattleFrameView,
   ): void {
+    const evolutionIds = this.triggeredEvolutionIds(events, frame);
+    const hasSkillPresentation = evolutionIds.length > 0 || events.some(
+      (event) => event.type === 'skill-used',
+    );
+    this.activeSkillParticleBudget = hasSkillPresentation
+      ? this.evolutionParticleBudget()
+      : null;
+    if (this.reducedMotion) {
+      this.addReducedEvolutionSignatures(evolutionIds, 195, 470);
+    } else {
+      for (const id of evolutionIds) {
+        const signature = getSkillEvolutionVisualSignature(id);
+        const y = signature.skillId === 'tidal-volley'
+          ? 650
+          : signature.skillId === 'bubble-barrier'
+            ? 690
+            : 430;
+        this.spawnEvolutionSignature(
+          id,
+          195,
+          y,
+          frame.skillRanks[signature.skillId],
+        );
+      }
+    }
     for (const event of events) {
       if (event.type === 'weapon-fired') {
         const projectile = frame.projectiles.find(
@@ -554,25 +585,19 @@ export class EffectSystem {
         const isExtreme = event.skillId === 'extreme-tide';
         const rank = frame.skillRanks[event.skillId];
         if (this.reducedMotion) {
-          this.addRing(195, isExtreme ? 470 : 700, 56, 56, isExtreme ? '#ffcf86' : '#b9fff4', 7, undefined, 'static-skill-silhouette');
+          // Variant silhouettes are allocated before all animated rank layers.
         } else if (event.skillId === 'tidal-volley') {
-          this.spawnBurst(195, 680, this.rankCount(rank, 3, 5, 7), '#65edff', 'rank-volley-trail', 480, 5, 'front-effects');
-          if (frame.skillVariants['tidal-volley'].includes('reef-piercer')) {
-            this.spawnBurst(195, 650, this.majorCount(3), '#ff8d73', 'coral-pierce', 520, 6, 'front-effects');
-          }
+          this.spawnSkillBurst(195, 680, this.rankCount(rank, 3, 5, 7), '#65edff', 'rank-volley-trail', 480, 5, 'front-effects');
         } else if (event.skillId === 'bubble-barrier') {
-          const rings = this.rankCount(rank, 1, 2, 3);
+          const rings = this.rankCount(rank, 1, 3, 5);
           for (let index = 0; index < rings; index += 1) {
             this.addRing(195, 700, 26 + index * 10, 68 + index * 14, '#74f5cf', 6, '#e7c66e', 'barrier-membrane');
           }
-          if (frame.skillVariants['bubble-barrier'].includes('reflective-spines')) {
-            this.spawnBurst(195, 690, this.majorCount(4), '#f5d77b', 'reflection', 540, 6, 'front-effects');
-          }
         } else {
-          this.spawnBurst(195, 470, this.rankCount(rank, 8, 12, 16), '#ffd793', 'extreme-radial-stroke', 720, 6, 'front-effects');
+          this.spawnSkillBurst(195, 470, this.rankCount(rank, 8, 12, 16), '#ffd793', 'extreme-radial-stroke', 720, 5, 'front-effects');
         }
         if (!this.reducedMotion && !this.isLowQuality()) {
-          this.spawnBurst(
+          this.spawnSkillBurst(
             195,
             isExtreme ? 470 : 700,
             isExtreme ? 16 : 8,
@@ -593,26 +618,7 @@ export class EffectSystem {
           if (isExtreme) this.shake(6, 180);
         }
       }
-      if (event.type === 'extreme-pull-started') {
-        if (this.reducedMotion) {
-          this.addRing(195, 430, 58, 58, '#78e8ff', 7, undefined, 'static-skill-silhouette');
-        } else {
-          this.spawnBurst(195, 430, this.majorCount(5), '#6de8ff', 'extreme-pull', Math.min(900, event.durationMs), 7, 'front-effects');
-        }
-      }
-      if (event.type === 'extreme-vortex-started') {
-        if (this.reducedMotion) {
-          this.addRing(195, 430, 64, 64, '#9576ff', 7, undefined, 'static-skill-silhouette');
-        } else {
-          this.spawnBurst(195, 430, this.majorCount(8), '#9877ff', 'extreme-vortex', Math.min(1200, event.durationMs), 7, 'front-effects');
-        }
-      }
       if (event.type === 'extreme-second-crest') {
-        if (this.reducedMotion) {
-          this.addRing(195, 430, 68, 68, '#ffb77d', 8, undefined, 'static-skill-silhouette');
-        } else {
-          this.spawnBurst(195, 430, this.majorCount(6), '#ffb77d', 'second-crest', Math.min(680, event.durationMs), 8, 'front-effects');
-        }
         this.addDamageNumber(195, 430, event.amount, false);
       }
       if (event.type === 'elite-entered') {
@@ -664,6 +670,7 @@ export class EffectSystem {
         this.darkenRemainingMs = 1000;
       }
     }
+    this.activeSkillParticleBudget = null;
     this.trim();
   }
 
@@ -729,10 +736,14 @@ export class EffectSystem {
     lifetimeMs: number,
     priority: number,
     layer: EffectParticleView['layer'],
-  ): void {
+    maximumCount = Number.POSITIVE_INFINITY,
+  ): number {
     const scaledCount = this.particleLimit <= 0
       ? 0
-      : Math.max(1, Math.floor(count * this.particleSpawnScale));
+      : Math.min(
+          maximumCount,
+          Math.max(1, Math.floor(count * this.particleSpawnScale)),
+        );
     for (let index = 0; index < scaledCount; index += 1) {
       const id = this.nextId++;
       const angle = id * 2.399963 + index * 0.31;
@@ -758,6 +769,121 @@ export class EffectSystem {
       particle.originY = y;
       this.particles.push(particle);
     }
+    return scaledCount;
+  }
+
+  private spawnSkillBurst(
+    x: number,
+    y: number,
+    count: number,
+    color: string,
+    kind: EffectParticleKind,
+    lifetimeMs: number,
+    priority: number,
+    layer: EffectParticleView['layer'],
+  ): void {
+    const maximumCount = this.activeSkillParticleBudget
+      ?? Number.POSITIVE_INFINITY;
+    const spawned = this.spawnBurst(
+      x,
+      y,
+      count,
+      color,
+      kind,
+      lifetimeMs,
+      priority,
+      layer,
+      maximumCount,
+    );
+    if (this.activeSkillParticleBudget !== null) {
+      this.activeSkillParticleBudget = Math.max(
+        0,
+        this.activeSkillParticleBudget - spawned,
+      );
+    }
+  }
+
+  private spawnEvolutionSignature(
+    id: SkillVariantId,
+    x: number,
+    y: number,
+    rank: number,
+  ): void {
+    if (
+      this.particleLimit <= 0
+      || this.activeSkillParticleBudget === 0
+    ) return;
+    const signature = getSkillEvolutionVisualSignature(id);
+    const catalogIndex = SKILL_VARIANT_IDS.indexOf(id);
+    const offsetX = (catalogIndex % 4 - 1.5) * 6;
+    const offsetY = (Math.floor(catalogIndex / 4) - 1) * 5;
+    const angle = (catalogIndex + 1) * 0.71;
+    const particle = this.particlePool.acquire();
+    particle.id = this.nextId++;
+    particle.kind = signature.particleKind;
+    particle.layer = 'front-effects';
+    particle.color = signature.primary;
+    particle.size = 3.2 + rank * 0.65;
+    particle.lifetimeMs = 480 + rank * 60;
+    particle.priority = 6;
+    particle.x = x + offsetX;
+    particle.y = y + offsetY;
+    particle.vx = Math.cos(angle) * (18 + catalogIndex % 3 * 4);
+    particle.vy = Math.sin(angle) * 16 - 12;
+    particle.rotation = angle;
+    particle.spin = (catalogIndex % 2 === 0 ? 1 : -1) * 1.4;
+    particle.ageMs = 0;
+    particle.sourceEnemyId = null;
+    particle.originX = x;
+    particle.originY = y;
+    this.particles.push(particle);
+    if (this.activeSkillParticleBudget !== null) {
+      this.activeSkillParticleBudget -= 1;
+    }
+  }
+
+  private addReducedEvolutionSignatures(
+    ids: readonly SkillVariantId[],
+    x: number,
+    y: number,
+  ): void {
+    for (const id of ids) {
+      const signature = getSkillEvolutionVisualSignature(id);
+      const catalogIndex = SKILL_VARIANT_IDS.indexOf(id);
+      const radius = 38 + catalogIndex * 4;
+      const signatureY = signature.skillId === 'extreme-tide'
+        ? y - 40
+        : signature.skillId === 'tidal-volley'
+          ? y + 180
+          : y + 220;
+      this.addRing(
+        x,
+        signatureY,
+        radius,
+        radius,
+        signature.primary,
+        6,
+        signature.secondary,
+        'static-skill-silhouette',
+      );
+    }
+  }
+
+  private triggeredEvolutionIds(
+    events: readonly BattleEvent[],
+    frame: BattleFrameView,
+  ): readonly SkillVariantId[] {
+    return SKILL_VARIANT_IDS.filter((id) => {
+      const signature = getSkillEvolutionVisualSignature(id);
+      if (!frame.skillVariants[signature.skillId].includes(id)) return false;
+      return events.some((event) => evolutionEventTriggers(id, event));
+    });
+  }
+
+  private evolutionParticleBudget(): number {
+    if (this.particleLimit >= 200) return 30;
+    if (this.particleLimit >= 130) return 20;
+    return 12;
   }
 
   private spawnWarningBurst(x: number, y: number, count: number): void {
@@ -776,7 +902,8 @@ export class EffectSystem {
 
   private rankCount(rank: number, low: number, medium: number, high: number): number {
     if (this.isLowQuality()) return 1;
-    return rank >= 5 ? high : rank >= 3 ? medium : low;
+    if (rank === 3) return medium;
+    return Math.round(low + (high - low) * (rank - 1) / 4);
   }
 
   private majorCount(count: number): number {
@@ -927,6 +1054,26 @@ function findEnemy(
   enemyId: number,
 ): EnemyState | undefined {
   return frame.enemies.find((enemy) => enemy.id === enemyId);
+}
+
+function evolutionEventTriggers(
+  id: SkillVariantId,
+  event: BattleEvent,
+): boolean {
+  if (id === 'bursting-bubble') return event.type === 'barrier-burst';
+  if (id === 'emergency-trigger') {
+    return event.type === 'barrier-emergency-triggered';
+  }
+  if (id === 'undertow-eye') return event.type === 'extreme-pull-started';
+  if (id === 'lingering-vortex') {
+    return event.type === 'extreme-vortex-started';
+  }
+  if (id === 'energy-return') {
+    return event.type === 'extreme-energy-refunded';
+  }
+  if (id === 'double-crest') return event.type === 'extreme-second-crest';
+  return event.type === 'skill-used'
+    && event.skillId === getSkillEvolutionVisualSignature(id).skillId;
 }
 
 function trimByPriority<

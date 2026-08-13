@@ -1542,6 +1542,10 @@ export class BattleEngine {
       consumed: this.emergencyBarrierConsumed, effectRatio: profile.emergencyEffectRatio })) {
       this.emergencyBarrierConsumed = true;
       this.applyBarrier(profile.emergencyEffectRatio, 'emergency');
+      this.events.push({
+        type: 'barrier-emergency-triggered',
+        effectRatio: profile.emergencyEffectRatio,
+      });
     }
     if (this.trainHp <= 0) this.finish(false);
   }

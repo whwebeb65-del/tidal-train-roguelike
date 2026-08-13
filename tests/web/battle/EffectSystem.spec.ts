@@ -1,7 +1,84 @@
 import { describe, expect, it } from 'vitest';
 import { EffectSystem } from '../../../web/battle/EffectSystem';
-import { getRenderBudget } from '../../../web/battle/QualityMonitor';
+import type {
+  BattleEvent,
+  BattleFrameView,
+} from '../../../web/battle/BattleTypes';
+import {
+  getRenderBudget,
+  type QualityLevel,
+} from '../../../web/battle/QualityMonitor';
+import {
+  getSkillEvolutionVisualSignature,
+} from '../../../web/battle/SkillEvolutionVisualCatalog';
+import {
+  SKILL_VARIANT_IDS,
+  SKILL_VARIANTS_BY_SKILL,
+  type BattleSkillId,
+  type SkillVariantId,
+} from '../../../src/domain/skill/SkillProgressionTypes';
 import { createFrameFixture } from './helpers/BattleFixtures';
+
+const DEDICATED_EVOLUTION_EVENTS: Readonly<Partial<Record<
+  SkillVariantId,
+  BattleEvent
+>>> = {
+  'bursting-bubble': { type: 'barrier-burst' },
+  'emergency-trigger': { type: 'barrier-emergency-triggered', effectRatio: 0.6 },
+  'undertow-eye': { type: 'extreme-pull-started', durationMs: 2000 },
+  'lingering-vortex': { type: 'extreme-vortex-started', durationMs: 4000 },
+  'energy-return': { type: 'extreme-energy-refunded', amount: 2 },
+  'double-crest': { type: 'extreme-second-crest', durationMs: 1200, amount: 45 },
+};
+
+function createVariantFrame(ids: readonly SkillVariantId[]): BattleFrameView {
+  return createFrameFixture({
+    skillRanks: { 'tidal-volley': 5, 'bubble-barrier': 5, 'extreme-tide': 5 },
+    skillVariants: {
+      'tidal-volley': ids.filter((id) => (
+        getSkillEvolutionVisualSignature(id).skillId === 'tidal-volley'
+      )),
+      'bubble-barrier': ids.filter((id) => (
+        getSkillEvolutionVisualSignature(id).skillId === 'bubble-barrier'
+      )),
+      'extreme-tide': ids.filter((id) => (
+        getSkillEvolutionVisualSignature(id).skillId === 'extreme-tide'
+      )),
+    },
+  });
+}
+
+function authoritativeEventsForVariant(id: SkillVariantId): readonly BattleEvent[] {
+  const dedicated = DEDICATED_EVOLUTION_EVENTS[id];
+  return dedicated
+    ? [dedicated]
+    : [{
+        type: 'skill-used',
+        skillId: getSkillEvolutionVisualSignature(id).skillId,
+      }];
+}
+
+function allSkillUseEvents(): readonly BattleEvent[] {
+  return [
+    { type: 'skill-used', skillId: 'tidal-volley' },
+    { type: 'skill-used', skillId: 'bubble-barrier' },
+    { type: 'skill-used', skillId: 'extreme-tide' },
+    ...Object.values(DEDICATED_EVOLUTION_EVENTS).filter(
+      (event): event is BattleEvent => event !== undefined,
+    ),
+  ];
+}
+
+function createEffectsForQuality(quality: QualityLevel, reducedMotion = false): EffectSystem {
+  const effects = new EffectSystem({
+    particleLimit: 200,
+    damageNumberLimit: 18,
+    impactLimit: 24,
+    reducedMotion,
+  });
+  effects.setRenderBudget(getRenderBudget(quality));
+  return effects;
+}
 
 describe('EffectSystem', () => {
   it('separates critical, armour, weak-point, and boss-arrival signatures', () => {
@@ -415,7 +492,7 @@ describe('EffectSystem', () => {
     expect(effects.poolStats.particles.created).toBeLessThanOrEqual(8);
   });
 
-  it('maps skill rank to bounded volley trails, barrier membranes and extreme strokes', () => {
+  it('maps all five skill ranks to strictly increasing volley, barrier, and extreme layers', () => {
     const count = (skillId: 'tidal-volley' | 'bubble-barrier' | 'extreme-tide', rank: 1 | 2 | 3 | 4 | 5) => {
       const effects = new EffectSystem({
         particleLimit: 200,
@@ -432,12 +509,93 @@ describe('EffectSystem', () => {
       return effects.view;
     };
 
-    expect(count('tidal-volley', 1).particles.filter((item) => item.kind === 'rank-volley-trail')).toHaveLength(3);
-    expect(count('tidal-volley', 5).particles.filter((item) => item.kind === 'rank-volley-trail')).toHaveLength(7);
-    expect(count('bubble-barrier', 1).rings.filter((item) => item.kind === 'barrier-membrane')).toHaveLength(1);
-    expect(count('bubble-barrier', 5).rings.filter((item) => item.kind === 'barrier-membrane')).toHaveLength(3);
-    expect(count('extreme-tide', 1).particles.filter((item) => item.kind === 'extreme-radial-stroke')).toHaveLength(8);
-    expect(count('extreme-tide', 5).particles.filter((item) => item.kind === 'extreme-radial-stroke')).toHaveLength(16);
+    const layerCounts = (
+      skillId: BattleSkillId,
+      kind: 'rank-volley-trail' | 'barrier-membrane' | 'extreme-radial-stroke',
+    ) => ([1, 2, 3, 4, 5] as const).map((rank) => {
+      const view = count(skillId, rank);
+      return kind === 'barrier-membrane'
+        ? view.rings.filter((item) => item.kind === kind).length
+        : view.particles.filter((item) => item.kind === kind).length;
+    });
+
+    expect(layerCounts('tidal-volley', 'rank-volley-trail')).toEqual([3, 4, 5, 6, 7]);
+    expect(layerCounts('bubble-barrier', 'barrier-membrane')).toEqual([1, 2, 3, 4, 5]);
+    expect(layerCounts('extreme-tide', 'extreme-radial-stroke')).toEqual([8, 10, 12, 14, 16]);
+  });
+
+  it.each(SKILL_VARIANT_IDS)(
+    'maps the authoritative event for %s to its catalog motif and color',
+    (id) => {
+      const effects = createEffectsForQuality('high');
+      const signature = getSkillEvolutionVisualSignature(id);
+
+      effects.consume(authoritativeEventsForVariant(id), createVariantFrame([id]));
+
+      expect(effects.view.particles).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          kind: signature.particleKind,
+          color: signature.primary,
+        }),
+      ]));
+    },
+  );
+
+  it.each(['high', 'medium', 'low'] as const)(
+    'keeps every selected motif while respecting the %s signature budget',
+    (quality) => {
+      const effects = createEffectsForQuality(quality);
+      effects.consume(allSkillUseEvents(), createVariantFrame(SKILL_VARIANT_IDS));
+      const kinds = new Set(effects.view.particles.map((item) => item.kind));
+      for (const id of SKILL_VARIANT_IDS) {
+        expect(kinds).toContain(getSkillEvolutionVisualSignature(id).particleKind);
+      }
+      expect(effects.view.particles.length).toBeLessThanOrEqual(
+        quality === 'high' ? 30 : quality === 'medium' ? 20 : 12,
+      );
+    },
+  );
+
+  it.each(Object.keys(SKILL_VARIANTS_BY_SKILL) as BattleSkillId[])(
+    'retains every %s motif before rank and decorative particles when constrained',
+    (skillId) => {
+      const ids = SKILL_VARIANTS_BY_SKILL[skillId];
+      const effects = new EffectSystem({
+        particleLimit: ids.length,
+        damageNumberLimit: 4,
+        impactLimit: 8,
+        reducedMotion: false,
+      });
+      const events = [
+        { type: 'skill-used' as const, skillId },
+        ...ids.flatMap((id) => {
+          const event = DEDICATED_EVOLUTION_EVENTS[id];
+          return event ? [event] : [];
+        }),
+      ];
+
+      effects.consume(events, createVariantFrame(ids));
+
+      expect(new Set(effects.view.particles.map((item) => item.kind))).toEqual(
+        new Set(ids.map((id) => getSkillEvolutionVisualSignature(id).particleKind)),
+      );
+    },
+  );
+
+  it('uses one distinct static catalog silhouette per selected variant in reduced motion', () => {
+    const effects = createEffectsForQuality('high', true);
+    effects.consume(allSkillUseEvents(), createVariantFrame(SKILL_VARIANT_IDS));
+
+    const silhouettes = effects.view.rings.filter(
+      (item) => item.kind === 'static-skill-silhouette',
+    );
+    expect(effects.view.particles).toEqual([]);
+    expect(effects.view.camera.amplitude).toBe(0);
+    expect(silhouettes).toHaveLength(SKILL_VARIANT_IDS.length);
+    expect(new Set(silhouettes.map((item) => item.radius)).size).toBe(SKILL_VARIANT_IDS.length);
+    expect(new Set(silhouettes.map((item) => item.color))).toEqual(
+      new Set(SKILL_VARIANT_IDS.map((id) => getSkillEvolutionVisualSignature(id).primary)),
+    );
   });
 
   it('keeps variant cues identifiable while low quality and reduced motion use static bounded fallbacks', () => {
@@ -459,7 +617,7 @@ describe('EffectSystem', () => {
     const high = new EffectSystem({ particleLimit: 200, damageNumberLimit: 18, reducedMotion: false });
     high.consume(events, frame);
     expect(high.view.particles.map((item) => item.kind)).toEqual(expect.arrayContaining([
-      'coral-pierce', 'reflection', 'extreme-pull', 'extreme-vortex', 'second-crest',
+      'coral-pierce', 'reflection', 'undertow-eye', 'extreme-vortex', 'second-crest',
     ]));
 
     const low = new EffectSystem({ particleLimit: 200, damageNumberLimit: 18, reducedMotion: false });

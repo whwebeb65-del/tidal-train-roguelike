@@ -254,6 +254,7 @@ export type BattleEvent =
     }
   | { readonly type: 'shield-changed'; readonly shield: number }
   | { readonly type: 'barrier-burst' }
+  | { readonly type: 'barrier-emergency-triggered'; readonly effectRatio: number }
   | { readonly type: 'skill-used'; readonly skillId: BattleSkillId }
   | { readonly type: 'extreme-pull-started'; readonly durationMs: number }
   | { readonly type: 'extreme-vortex-started'; readonly durationMs: number }
