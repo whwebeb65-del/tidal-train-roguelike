@@ -410,6 +410,75 @@ describe('EffectSystem', () => {
     expect(silhouettes()).toHaveLength(0);
   });
 
+  it('keeps a newer animated expiry when an older static ring expires', () => {
+    const effects = createEffectsForQuality('high', true);
+    const frame = createVariantFrame(['energy-return']);
+    const refund = [{
+      type: 'extreme-energy-refunded' as const,
+      amount: 2,
+    }];
+    const silhouettes = () => effects.view.rings.filter((ring) => (
+      ring.kind === 'static-skill-silhouette'
+    ));
+
+    effects.consume(refund, frame);
+    expect(silhouettes()).toHaveLength(1);
+    effects.update(100);
+    effects.setReducedMotion(false);
+    effects.consume(refund, frame);
+    expect(effects.view.particles.filter((particle) => (
+      particle.kind === 'energy-return'
+    ))).toHaveLength(1);
+
+    effects.update(320);
+    expect(silhouettes()).toHaveLength(0);
+    effects.setReducedMotion(true);
+
+    expect(effects.view.particles).toEqual([]);
+    expect(silhouettes()).toEqual([
+      expect.objectContaining({
+        color: getSkillEvolutionVisualSignature('energy-return').primary,
+      }),
+    ]);
+    const radius = silhouettes()[0]!.radius;
+    effects.update(419);
+    expect(silhouettes()).toHaveLength(1);
+    expect(silhouettes()[0]!.radius).toBe(radius);
+    effects.update(1);
+    expect(silhouettes()).toHaveLength(0);
+  });
+
+  it('preserves the original absolute silhouette expiry across repeated toggles', () => {
+    const effects = createEffectsForQuality('high', true);
+    const frame = createVariantFrame(['energy-return']);
+    const silhouettes = () => effects.view.rings.filter((ring) => (
+      ring.kind === 'static-skill-silhouette'
+    ));
+
+    effects.consume([{
+      type: 'extreme-energy-refunded',
+      amount: 2,
+    }], frame);
+    effects.update(400);
+    effects.setReducedMotion(false);
+    effects.setReducedMotion(true);
+    expect(silhouettes()).toHaveLength(1);
+
+    effects.update(10);
+    effects.setReducedMotion(false);
+    effects.setReducedMotion(true);
+    expect(silhouettes()).toHaveLength(1);
+    effects.update(9);
+    expect(silhouettes()).toHaveLength(1);
+    effects.update(1);
+    expect(silhouettes()).toHaveLength(0);
+    expect(effects.poolStats.rings.inUse).toBe(0);
+
+    effects.setReducedMotion(false);
+    effects.setReducedMotion(true);
+    expect(silhouettes()).toHaveLength(0);
+  });
+
   it('keeps new impact semantics deterministic while reduced motion suppresses camera shake', () => {
     const animated = new EffectSystem({
       particleLimit: 32,

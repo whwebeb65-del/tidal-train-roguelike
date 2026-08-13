@@ -162,6 +162,7 @@ interface MutableImpactRing {
   id: number;
   kind: NonNullable<ImpactRingView['kind']>;
   evolutionId: SkillVariantId | null;
+  evolutionExpiresAtMs: number | null;
   x: number;
   y: number;
   color: string;
@@ -171,6 +172,10 @@ interface MutableImpactRing {
   lifetimeMs: number;
   priority: number;
   ageMs: number;
+}
+
+interface ActiveEvolutionSignature {
+  readonly authoritativeExpiresAtMs: number;
 }
 
 export interface EffectPoolStats {
@@ -205,7 +210,10 @@ export class EffectSystem {
   private impactLimit: number;
   private particleSpawnScale = 1;
   private activeSkillParticleBudget: number | null = null;
-  private readonly activeEvolutionSignatures = new Map<SkillVariantId, number>();
+  private readonly activeEvolutionSignatures = new Map<
+    SkillVariantId,
+    ActiveEvolutionSignature
+  >();
 
   public constructor(options: EffectSystemOptions) {
     assertLimit(options.particleLimit, 'Particle limit');
@@ -248,9 +256,10 @@ export class EffectSystem {
       this.cameraRemainingMs = 0;
     }
     if (enteringReducedMotion) {
-      const activeEvolutionIds = [...this.activeEvolutionSignatures]
-        .filter(([, expiresAtMs]) => expiresAtMs > this.clockMs)
-        .map(([id]) => id);
+      const activeEvolutionSignatures = [...this.activeEvolutionSignatures]
+        .filter(([, active]) => (
+          active.authoritativeExpiresAtMs > this.clockMs
+        ));
       this.particlePool.releaseAll();
       this.damageNumberPool.releaseAll();
       this.ringPool.releaseAll();
@@ -258,8 +267,14 @@ export class EffectSystem {
       this.damageNumbers.length = 0;
       this.rings.length = 0;
       this.activeSkillParticleBudget = null;
-      this.activeEvolutionSignatures.clear();
-      this.addReducedEvolutionSignatures(activeEvolutionIds, 195, 470);
+      for (const [id, active] of activeEvolutionSignatures) {
+        this.addOrRefreshReducedEvolutionSignature(
+          id,
+          195,
+          470,
+          active.authoritativeExpiresAtMs,
+        );
+      }
     }
   }
 
@@ -730,8 +745,8 @@ export class EffectSystem {
       0,
       this.slowMotionRemainingMs - deltaMs,
     );
-    for (const [id, expiresAtMs] of this.activeEvolutionSignatures) {
-      if (expiresAtMs <= this.clockMs) {
+    for (const [id, active] of this.activeEvolutionSignatures) {
+      if (active.authoritativeExpiresAtMs <= this.clockMs) {
         this.activeEvolutionSignatures.delete(id);
       }
     }
@@ -903,7 +918,9 @@ export class EffectSystem {
     particle.originX = x;
     particle.originY = y;
     this.particles.push(particle);
-    this.activeEvolutionSignatures.set(id, this.clockMs + lifetimeMs);
+    this.activeEvolutionSignatures.set(id, {
+      authoritativeExpiresAtMs: this.clockMs + lifetimeMs,
+    });
     if (this.activeSkillParticleBudget !== null) {
       this.activeSkillParticleBudget -= 1;
     }
@@ -915,7 +932,16 @@ export class EffectSystem {
     y: number,
   ): void {
     for (const id of ids) {
-      this.addOrRefreshReducedEvolutionSignature(id, x, y);
+      const authoritativeExpiresAtMs = this.clockMs + 420;
+      this.activeEvolutionSignatures.set(id, {
+        authoritativeExpiresAtMs,
+      });
+      this.addOrRefreshReducedEvolutionSignature(
+        id,
+        x,
+        y,
+        authoritativeExpiresAtMs,
+      );
     }
   }
 
@@ -923,6 +949,7 @@ export class EffectSystem {
     id: SkillVariantId,
     x: number,
     y: number,
+    authoritativeExpiresAtMs: number,
   ): void {
     const signature = getSkillEvolutionVisualSignature(id);
     const catalogIndex = SKILL_VARIANT_IDS.indexOf(id);
@@ -932,6 +959,12 @@ export class EffectSystem {
       : signature.skillId === 'tidal-volley'
         ? y + 180
         : y + 220;
+    const displayExpiresAtMs = Math.min(
+      authoritativeExpiresAtMs,
+      this.clockMs + 420,
+    );
+    const remainingMs = displayExpiresAtMs - this.clockMs;
+    if (remainingMs <= 0) return;
     const existing = this.rings.find((ring) => ring.evolutionId === id);
     if (existing) {
       existing.x = x;
@@ -940,9 +973,10 @@ export class EffectSystem {
       existing.secondaryColor = signature.secondary;
       existing.startRadius = radius;
       existing.endRadius = radius;
-      existing.lifetimeMs = 420;
+      existing.lifetimeMs = remainingMs;
       existing.priority = 100;
       existing.ageMs = 0;
+      existing.evolutionExpiresAtMs = displayExpiresAtMs;
     } else {
       this.addRing(
         x,
@@ -954,9 +988,10 @@ export class EffectSystem {
         signature.secondary,
         'static-skill-silhouette',
         id,
+        remainingMs,
+        displayExpiresAtMs,
       );
     }
-    this.activeEvolutionSignatures.set(id, this.clockMs + 420);
   }
 
   private triggeredEvolutionIds(
@@ -1060,19 +1095,22 @@ export class EffectSystem {
     secondaryColor?: string,
     kind: MutableImpactRing['kind'] = 'impact-ring',
     evolutionId: SkillVariantId | null = null,
+    lifetimeMs = 420,
+    evolutionExpiresAtMs: number | null = null,
   ): void {
     if (this.impactLimit <= 0) return;
     const ring = this.ringPool.acquire();
     ring.id = this.nextId++;
     ring.kind = kind;
     ring.evolutionId = evolutionId;
+    ring.evolutionExpiresAtMs = evolutionExpiresAtMs;
     ring.x = x;
     ring.y = y;
     ring.color = color;
     ring.secondaryColor = secondaryColor;
     ring.startRadius = startRadius;
     ring.endRadius = endRadius;
-    ring.lifetimeMs = 420;
+    ring.lifetimeMs = lifetimeMs;
     ring.priority = priority;
     ring.ageMs = 0;
     this.rings.push(ring);
@@ -1141,8 +1179,17 @@ export class EffectSystem {
       const ring = this.rings[index];
       if (!ring || ring.ageMs < ring.lifetimeMs) continue;
       this.rings.splice(index, 1);
-      if (ring.evolutionId !== null) {
-        this.activeEvolutionSignatures.delete(ring.evolutionId);
+      if (
+        ring.evolutionId !== null
+        && ring.evolutionExpiresAtMs !== null
+      ) {
+        const active = this.activeEvolutionSignatures.get(ring.evolutionId);
+        if (
+          active?.authoritativeExpiresAtMs === ring.evolutionExpiresAtMs
+          && active.authoritativeExpiresAtMs <= this.clockMs
+        ) {
+          this.activeEvolutionSignatures.delete(ring.evolutionId);
+        }
       }
       this.ringPool.release(ring);
     }
@@ -1281,6 +1328,7 @@ function createImpactRing(): MutableImpactRing {
     id: 0,
     kind: 'impact-ring',
     evolutionId: null,
+    evolutionExpiresAtMs: null,
     x: 0,
     y: 0,
     color: '',
@@ -1297,6 +1345,7 @@ function resetImpactRing(ring: MutableImpactRing): void {
   ring.id = 0;
   ring.kind = 'impact-ring';
   ring.evolutionId = null;
+  ring.evolutionExpiresAtMs = null;
   ring.x = 0;
   ring.y = 0;
   ring.color = '';
