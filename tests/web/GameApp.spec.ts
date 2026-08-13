@@ -256,6 +256,11 @@ describe('LegacyGameRuntime E2E snapshots', () => {
     )).toHaveLength(1);
 
     await runtime.e2eNavigate('station');
+    await runtime.e2eNavigate('equipment');
+    expect(app.querySelector(
+      '[data-archive-variant="undertow-eye"].is-new',
+    )).toBeNull();
+    await runtime.e2eNavigate('station');
     await runtime.e2eStartNormalBattle();
     for (let index = 0; index < 20; index += 1) {
       if ((runtime.e2eSnapshot().battle?.enemies.length ?? 0) > 0) break;

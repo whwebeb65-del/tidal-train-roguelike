@@ -156,7 +156,21 @@ describe('browser smoke script', () => {
       "document.querySelectorAll('.archive-card')",
     );
     expect(source).toMatch(
-      /const first = await finishFullBattle[\s\S]*?const second = await finishFullBattle[\s\S]*?assert\.deepEqual\(\s*\[first\.terminalStatus, second\.terminalStatus\],\s*\['victory', 'victory'\]/,
+      /const first = await assertTidalArchiveDiscoveryFeedback[\s\S]*?const second = await finishFullBattle[\s\S]*?assert\.deepEqual\(\s*\[first\.terminalStatus, second\.terminalStatus\],\s*\['victory', 'victory'\]/,
+    );
+  });
+
+  it('guards the complete tidal archive discovery feedback lifecycle', () => {
+    const source = readFileSync('scripts/smoke-browser.mjs', 'utf8');
+
+    expect(source).toContain('assertTidalArchiveDiscoveryFeedback');
+    expect(source).toContain('data-archive-discovery');
+    expect(source).toContain('data-settlement-archive');
+    expect(source).toContain('archive-unread-seal');
+    expect(source).toContain('archive-new-stamp');
+    expect(source).toContain('unreadEntryKeys');
+    expect(source).toMatch(
+      /assert\.deepEqual\(\s*\[first\.terminalStatus, second\.terminalStatus\],\s*\['victory', 'victory'\]/,
     );
   });
 

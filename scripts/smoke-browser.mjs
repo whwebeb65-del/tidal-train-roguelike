@@ -106,6 +106,32 @@ async function waitForEvaluation(
 }
 
 const hookExpression = 'window.__TIDAL_TRAIN_E2E__';
+const tidalArchiveStorageKey = 'tidal-train-tidal-archive-v1';
+const firstRunBattleTutorialStorageKey =
+  'tidal-train-first-run-battle-tutorial-v1';
+const authoritativeFirstArchiveDiscovery = Object.freeze({
+  entryId: 'bubble-fin',
+  key: 'enemy:bubble-fin',
+  name: '泡鳍怪',
+});
+const completedFirstRunBattleTutorialFixture = Object.freeze({
+  version: 1,
+  completedStepIds: Object.freeze(['aim', 'skill', 'upgrade']),
+  skipped: false,
+});
+
+function createTidalArchiveFixture({ unread = false } = {}) {
+  return {
+    version: 2,
+    discoveredEnemyKinds: unread
+      ? [authoritativeFirstArchiveDiscovery.entryId]
+      : [],
+    discoveredSkillVariantIds: [],
+    unreadEntryKeys: unread
+      ? [authoritativeFirstArchiveDiscovery.key]
+      : [],
+  };
+}
 
 async function snapshot(client) {
   return evaluate(client, `${hookExpression}.snapshot()`);
@@ -115,6 +141,42 @@ async function callHook(client, body) {
   return evaluate(
     client,
     `(async () => { const hook = ${hookExpression}; ${body} })()`,
+  );
+}
+
+async function reloadWithE2EArchiveFixture(
+  client,
+  { unread = false } = {},
+) {
+  const fixtureInstalled = await evaluate(client, `(() => {
+    const exactE2EGate = new URLSearchParams(location.search).get('e2e') === '1'
+      && Boolean(${hookExpression});
+    if (!exactE2EGate) return false;
+    localStorage.setItem(
+      ${JSON.stringify(tidalArchiveStorageKey)},
+      ${JSON.stringify(JSON.stringify(createTidalArchiveFixture({ unread })))}
+    );
+    localStorage.setItem(
+      ${JSON.stringify(firstRunBattleTutorialStorageKey)},
+      ${JSON.stringify(JSON.stringify(completedFirstRunBattleTutorialFixture))}
+    );
+    return true;
+  })()`);
+  assert.equal(
+    fixtureInstalled,
+    true,
+    'archive fixtures must only be installed through the exact e2e=1 gate',
+  );
+  const navigation = await client.send('Page.reload', { ignoreCache: true });
+  if (navigation.errorText) {
+    throw new Error(`Fixture reload failed: ${navigation.errorText}`);
+  }
+  await waitForEvaluation(
+    client,
+    `Boolean(${hookExpression})
+      && ${hookExpression}.snapshot().sceneId === 'station'
+      && document.querySelector('#scene-host')?.dataset.sceneId === 'station'`,
+    { label: 'E2E archive fixture reload' },
   );
 }
 
@@ -301,8 +363,58 @@ async function assertCaptainGuidebook(client, label) {
   );
 }
 
+async function readStoredTidalArchive(client) {
+  return evaluate(client, `JSON.parse(
+    localStorage.getItem(${JSON.stringify(tidalArchiveStorageKey)}) ?? '{}'
+  )`);
+}
+
+async function assertArchiveUnreadSeal(client, label) {
+  const seal = await evaluate(client, `(() => {
+    const workshop = document.querySelector('.otter-workshop');
+    const tab = workshop?.querySelector(
+      '[data-action="show-tidal-archive"]'
+    );
+    const node = tab?.querySelector('.archive-unread-seal');
+    if (!(tab instanceof HTMLButtonElement) || !(node instanceof HTMLElement)) {
+      return null;
+    }
+    const rect = node.getBoundingClientRect();
+    const style = getComputedStyle(node);
+    return {
+      text: node.textContent?.trim() ?? '',
+      visible: node.getClientRects().length > 0
+        && style.display !== 'none'
+        && style.visibility !== 'hidden',
+      contained: rect.left >= -1
+        && rect.right <= innerWidth + 1
+        && rect.top >= -1
+        && rect.bottom <= innerHeight + 1,
+      scrollWidth: document.documentElement.scrollWidth,
+      innerWidth,
+    };
+  })()`);
+  assert.ok(seal, `${label} archive-unread-seal is missing`);
+  assert.equal(seal.visible, true, `${label} archive unread seal is hidden`);
+  assert.match(seal.text, /^NEW [1-9]\d*$/, `${label} archive unread seal copy`);
+  assert.equal(seal.contained, true, `${label} archive unread seal is clipped`);
+  assert.ok(
+    seal.scrollWidth <= seal.innerWidth + 1,
+    `${label} archive unread seal causes horizontal overflow`,
+  );
+}
+
 async function assertTidalArchiveCarriage(client, label, { full = false } = {}) {
   await navigateScene(client, 'equipment');
+
+  if (!full) {
+    assert.deepEqual(
+      (await readStoredTidalArchive(client)).unreadEntryKeys,
+      [authoritativeFirstArchiveDiscovery.key],
+      `${label} legal unread fixture must survive normalization`,
+    );
+    await assertArchiveUnreadSeal(client, `${label} seeded`);
+  }
 
   const openAndInspectArchive = async (phase) => {
     const opened = await evaluate(client, `(() => {
@@ -349,6 +461,11 @@ async function assertTidalArchiveCarriage(client, label, { full = false } = {}) 
         enemyDiscovered: root?.querySelectorAll(
           '[data-archive-enemy].is-discovered'
         ).length ?? 0,
+        matchingNewStamp: Boolean(root?.querySelector(
+          '[data-archive-enemy="${authoritativeFirstArchiveDiscovery.entryId}"]'
+            + ' .archive-new-stamp'
+        )),
+        newStampCount: root?.querySelectorAll('.archive-new-stamp').length ?? 0,
         tabs: tabs.map((tab) => {
           const rect = tab.getBoundingClientRect();
           return { width: rect.width, height: rect.height };
@@ -373,6 +490,7 @@ async function assertTidalArchiveCarriage(client, label, { full = false } = {}) 
       overview.scrollWidth <= overview.innerWidth + 1,
       `${label} ${phase} archive overflows horizontally`,
     );
+    await assertGlobalInteractiveTargets(client, `${label} ${phase} archive actions`);
 
     await evaluate(client, `(async () => {
       const cards = [...document.querySelectorAll(
@@ -442,6 +560,23 @@ async function assertTidalArchiveCarriage(client, label, { full = false } = {}) 
   };
 
   const initial = await openAndInspectArchive('initial');
+  if (!full) {
+    assert.deepEqual(
+      (await readStoredTidalArchive(client)).unreadEntryKeys,
+      [],
+      `${label} opening archive must clear persisted unreadEntryKeys`,
+    );
+    assert.equal(
+      initial.matchingNewStamp,
+      true,
+      `${label} seeded card must retain its archive-new-stamp for this visit`,
+    );
+    assert.equal(
+      initial.newStampCount,
+      1,
+      `${label} seeded audit must expose exactly one NEW stamp`,
+    );
+  }
   if (full) {
     const currenciesBefore = await Promise.all([
       readCurrency(client, 'gears'),
@@ -521,6 +656,191 @@ async function assertTidalArchiveCarriage(client, label, { full = false } = {}) 
       + JSON.stringify(mutationControls),
   );
   await navigateScene(client, 'station');
+}
+
+function hasNonZeroCssTime(value) {
+  return value.split(',').some((part) => {
+    const duration = part.trim();
+    const parsed = Number.parseFloat(duration);
+    const seconds = duration.endsWith('ms') ? parsed / 1_000 : parsed;
+    return Number.isFinite(seconds) && seconds > 0.000_01;
+  });
+}
+
+function assertStaticArchiveFeedback(styles, label) {
+  assert.ok(styles.length > 0, `${label} reduced-motion audit is empty`);
+  const failures = styles.filter((style) => (
+    style.animationName !== 'none'
+    || hasNonZeroCssTime(style.animationDuration)
+    || style.transform !== 'none'
+    || hasNonZeroCssTime(style.transitionDuration)
+  ));
+  assert.deepEqual(
+    failures,
+    [],
+    `${label} reduced-motion feedback must have no animation, transition, or transform: `
+      + JSON.stringify(failures),
+  );
+}
+
+async function assertFirstArchiveDiscoveryTicket(
+  client,
+  label,
+  { reducedMotion = false } = {},
+) {
+  let firstEnemyKind = null;
+  for (let index = 0; index < 40; index += 1) {
+    const state = await snapshot(client);
+    firstEnemyKind = state.battle?.enemies[0]?.kind ?? null;
+    const ticketVisible = await evaluate(
+      client,
+      `Boolean(document.querySelector('[data-archive-discovery]:not([hidden])'))`,
+    );
+    if (firstEnemyKind && ticketVisible) break;
+    await advanceBattle(client, 50);
+  }
+  assert.equal(
+    firstEnemyKind,
+    authoritativeFirstArchiveDiscovery.entryId,
+    `${label} first authoritative enemy must match the archive catalog`,
+  );
+  await waitForEvaluation(
+    client,
+    `(() => {
+      const image = document.querySelector(
+        '[data-archive-discovery]:not([hidden]) [data-archive-discovery-art]'
+      );
+      return image instanceof HTMLImageElement
+        && image.complete
+        && image.naturalWidth > 0;
+    })()`,
+    { label: `${label} first discovery image` },
+  );
+
+  const ticket = await evaluate(client, `(() => {
+    const root = document.querySelector(
+      '[data-archive-discovery]:not([hidden])'
+    );
+    const canvas = document.querySelector('[data-battle-canvas]');
+    if (!(root instanceof HTMLElement) || !(canvas instanceof HTMLCanvasElement)) {
+      return null;
+    }
+    const image = root.querySelector('[data-archive-discovery-art]');
+    const rootRect = root.getBoundingClientRect();
+    const canvasRect = canvas.getBoundingClientRect();
+    const overlaps = (first, second) => first.left < second.right
+      && first.right > second.left
+      && first.top < second.bottom
+      && first.bottom > second.top;
+    const rectFor = (selector) => {
+      const node = document.querySelector(selector);
+      if (!(node instanceof HTMLElement) || node.hidden) return null;
+      return node.getBoundingClientRect();
+    };
+    const canvasAimRegion = {
+      left: canvasRect.left + canvasRect.width * .72 - 28,
+      right: canvasRect.left + canvasRect.width * .72 + 28,
+      top: canvasRect.top + canvasRect.height * .34 - 28,
+      bottom: canvasRect.top + canvasRect.height * .34 + 28,
+    };
+    const styleEntries = [null, '::before', '::after']
+      .map((pseudo) => {
+        const style = getComputedStyle(root, pseudo);
+        return {
+          key: 'battle-archive-discovery' + (pseudo ?? ''),
+          pseudo,
+          content: style.content,
+          animationName: style.animationName,
+          animationDuration: style.animationDuration,
+          transitionDuration: style.transitionDuration,
+          transform: style.transform,
+        };
+      })
+      .filter((entry) => entry.pseudo === null || entry.content !== 'none');
+    const protectedRects = {
+      topHud: rectFor('.battle-hud__tide-log'),
+      speed: rectFor('[data-battle-action="speed"]'),
+      pause: rectFor('[data-battle-action="pause"]'),
+      skills: rectFor('.battle-hud__skills'),
+      canvasAimRegion,
+    };
+    return {
+      kind: root.dataset.archiveDiscoveryKind ?? '',
+      name: root.querySelector('[data-archive-discovery-name]')
+        ?.textContent?.trim() ?? '',
+      typeText: root.querySelector('[data-archive-discovery-type]')
+        ?.textContent?.trim() ?? '',
+      ticketText: root.textContent?.trim() ?? '',
+      imageLoaded: image instanceof HTMLImageElement
+        && image.complete
+        && image.naturalWidth > 0,
+      pointerEvents: getComputedStyle(root).pointerEvents,
+      interactiveDescendants: root.querySelectorAll(
+        'button, a[href], input, select, textarea, [tabindex]'
+      ).length,
+      interactionVisible: Boolean(document.querySelector(
+        '[data-battle-action="claim-interaction"]:not([hidden])'
+      )),
+      contained: rootRect.left >= -1
+        && rootRect.right <= innerWidth + 1
+        && rootRect.top >= -1
+        && rootRect.bottom <= innerHeight + 1,
+      overlaps: Object.fromEntries(Object.entries(protectedRects).map(
+        ([key, rect]) => [key, rect ? overlaps(rootRect, rect) : false]
+      )),
+      styles: styleEntries,
+    };
+  })()`);
+  assert.ok(ticket, `${label} battle discovery ticket is missing`);
+  assert.equal(ticket.kind, 'enemy', `${label} discovery kind`);
+  assert.equal(
+    ticket.name,
+    authoritativeFirstArchiveDiscovery.name,
+    `${label} discovery name must use the authoritative archive catalog`,
+  );
+  assert.match(ticket.typeText, /首次目击/, `${label} enemy discovery copy`);
+  assert.equal(ticket.imageLoaded, true, `${label} discovery image must load`);
+  assert.equal(
+    ticket.interactiveDescendants,
+    0,
+    `${label} discovery ticket must have no interactive descendants`,
+  );
+  assert.equal(
+    ticket.pointerEvents,
+    'none',
+    `${label} discovery ticket must use pointer-events: none`,
+  );
+  assert.equal(
+    ticket.interactionVisible,
+    false,
+    `${label} first discovery must occur outside a battle interaction`,
+  );
+  assert.equal(ticket.contained, true, `${label} discovery ticket is clipped`);
+  assert.deepEqual(
+    ticket.overlaps,
+    {
+      topHud: false,
+      speed: false,
+      pause: false,
+      skills: false,
+      canvasAimRegion: false,
+    },
+    `${label} discovery ticket overlaps protected battle geometry`,
+  );
+  assert.deepEqual(
+    (await readStoredTidalArchive(client)).unreadEntryKeys,
+    [authoritativeFirstArchiveDiscovery.key],
+    `${label} first spawn must persist the matching authoritative enemy key`,
+  );
+  if (reducedMotion) {
+    assert.match(
+      ticket.ticketText,
+      /NEW ARCHIVE ENTRY.*首次目击已装订.*泡鳍怪/s,
+      `${label} reduced motion must retain discovery text`,
+    );
+    assertStaticArchiveFeedback(ticket.styles, `${label} battle discovery`);
+  }
+  return authoritativeFirstArchiveDiscovery;
 }
 
 async function assertBattleHudGeometry(client, label) {
@@ -1881,11 +2201,45 @@ async function assertLowQualityResilience(client, label) {
 }
 
 async function assertReducedMotionArchive(client, label) {
-  await client.send('Emulation.setEmulatedMedia', {
-    media: 'screen',
-    features: [{ name: 'prefers-reduced-motion', value: 'reduce' }],
-  });
   await navigateScene(client, 'equipment');
+  await assertArchiveUnreadSeal(client, `${label} reduced-motion`);
+  const inspectFeedback = async (selector) => evaluate(client, `(() => {
+    const nodes = [...document.querySelectorAll(${JSON.stringify(selector)})];
+    const entries = nodes.flatMap((node) => [null, '::before', '::after']
+      .map((pseudo) => {
+        const style = getComputedStyle(node, pseudo);
+        return {
+          key: (node.className || node.tagName) + (pseudo ?? ''),
+          pseudo,
+          content: style.content,
+          animationName: style.animationName,
+          animationDuration: style.animationDuration,
+          transitionDuration: style.transitionDuration,
+          transform: style.transform,
+          pointerEvents: style.pointerEvents,
+        };
+      }))
+      .filter((entry) => entry.pseudo === null || entry.content !== 'none');
+    return {
+      count: nodes.length,
+      text: nodes.map((node) => node.textContent?.trim() ?? ''),
+      entries,
+    };
+  })()`);
+  const sealMotion = await inspectFeedback(
+    '.otter-workshop .archive-unread-seal',
+  );
+  assert.equal(sealMotion.count, 1, `${label} reduced-motion unread seal`);
+  assert.match(sealMotion.text[0] ?? '', /^NEW [1-9]\d*$/);
+  assertStaticArchiveFeedback(sealMotion.entries, `${label} unread seal`);
+  assert.deepEqual(
+    sealMotion.entries
+      .filter((entry) => entry.pseudo !== null)
+      .map((entry) => entry.pointerEvents),
+    ['none', 'none'],
+    `${label} unread seal pseudos must remain non-interactive`,
+  );
+
   const opened = await evaluate(client, `(() => {
     const workshop = document.querySelector('.otter-workshop');
     const button = workshop?.querySelector(
@@ -1898,49 +2252,26 @@ async function assertReducedMotionArchive(client, label) {
   assert.equal(opened, true, `${label} reduced-motion archive must open`);
   await waitForEvaluation(
     client,
-    `Boolean(document.querySelector('.tidal-archive-carriage'))`,
-    { label: `${label} reduced-motion archive root` },
+    `Boolean(document.querySelector(
+      '.tidal-archive-carriage '
+        + '[data-archive-enemy="${authoritativeFirstArchiveDiscovery.entryId}"] '
+        + '.archive-new-stamp'
+    ))`,
+    { label: `${label} reduced-motion archive-new-stamp` },
   );
 
-  const archiveMotion = await evaluate(client, `(() => {
-    const workshop = document.querySelector('.otter-workshop');
-    const root = document.querySelector('.tidal-archive-carriage');
-    if (!(workshop instanceof HTMLElement) || !(root instanceof HTMLElement)) {
-      return { checked: 0, failures: [{ key: 'archive-root', missing: true }] };
-    }
-    const nodes = [
-      ...workshop.querySelectorAll('.workshop-tabs button'),
-      root,
-      ...root.querySelectorAll('*'),
-    ];
-    const inspected = nodes.flatMap((node) => [null, '::before', '::after']
-      .map((pseudo) => {
-        const style = getComputedStyle(node, pseudo);
-        return {
-          key: (node.className || node.tagName) + (pseudo ?? ''),
-          pseudo,
-          content: style.content,
-          animationName: style.animationName,
-          transform: style.transform,
-          pointerEvents: style.pointerEvents,
-        };
-      }))
-      .filter((entry) => entry.pseudo === null || entry.content !== 'none');
-    return {
-      checked: inspected.length,
-      failures: inspected.filter((entry) => (
-        entry.animationName !== 'none'
-        || entry.transform !== 'none'
-        || (entry.pseudo !== null && entry.pointerEvents !== 'none')
-      )),
-    };
-  })()`);
-  assert.ok(archiveMotion.checked > 0, `${label} archive motion audit is empty`);
+  const stampMotion = await inspectFeedback(
+    '.tidal-archive-carriage .archive-new-stamp',
+  );
+  assert.equal(stampMotion.count, 1, `${label} reduced-motion NEW stamp`);
+  assert.deepEqual(stampMotion.text, ['NEW']);
+  assertStaticArchiveFeedback(stampMotion.entries, `${label} archive NEW stamp`);
   assert.deepEqual(
-    archiveMotion.failures,
-    [],
-    `${label} archive reduced-motion decorations must be static and non-interactive: `
-      + JSON.stringify(archiveMotion.failures),
+    stampMotion.entries
+      .filter((entry) => entry.pseudo !== null)
+      .map((entry) => entry.pointerEvents),
+    ['none', 'none'],
+    `${label} archive reduced-motion decorations must be static and non-interactive`,
   );
 
   const closed = await evaluate(client, `(() => {
@@ -1959,13 +2290,14 @@ async function assertReducedMotionArchive(client, label) {
     { label: `${label} closed reduced-motion archive` },
   );
   await navigateScene(client, 'station');
-  await client.send('Emulation.setEmulatedMedia', {
-    media: 'screen',
-    features: [{ name: 'prefers-reduced-motion', value: 'no-preference' }],
-  });
 }
 
 async function assertReducedMotionResilience(client, label) {
+  await reloadWithE2EArchiveFixture(client);
+  await client.send('Emulation.setEmulatedMedia', {
+    media: 'screen',
+    features: [{ name: 'prefers-reduced-motion', value: 'reduce' }],
+  });
   await setDisplaySettings(
     client,
     { qualityPreference: 'high', reducedMotion: true },
@@ -2029,10 +2361,13 @@ async function assertReducedMotionResilience(client, label) {
     { label: `${label} reduced greeting completion`, timeoutMs: 2_000 },
   );
 
-  await assertReducedMotionArchive(client, label);
-
   const baseline = await snapshot(client);
   await startNormalBattle(client);
+  await assertFirstArchiveDiscoveryTicket(
+    client,
+    `${label} reduced-motion isolated discovery`,
+    { reducedMotion: true },
+  );
   const before = requireTrainMotion((await snapshot(client)).trainMotion);
   await advanceBattle(client, 500);
   await callHook(client, `return hook.useSkill('tidal-volley');`);
@@ -2076,11 +2411,16 @@ async function assertReducedMotionResilience(client, label) {
     `${label} reduced motion must preserve battle state text`,
   );
   await returnToStation(client, baseline.diagnostics.activeListeners);
+  await assertReducedMotionArchive(client, label);
   await setDisplaySettings(
     client,
     { qualityPreference: 'high', reducedMotion: false },
     `${label} restore motion`,
   );
+  await client.send('Emulation.setEmulatedMedia', {
+    media: 'screen',
+    features: [{ name: 'prefers-reduced-motion', value: 'no-preference' }],
+  });
 }
 
 function requireTrainMotion(motion) {
@@ -2291,11 +2631,15 @@ async function claimRepeatedSalvage(client) {
   assert.equal(await readCurrency(client, 'gears'), before + 16);
 }
 
-async function finishFullBattle(client, { claimSalvage }) {
+async function finishFullBattle(
+  client,
+  { claimSalvage, afterBattleStart, inspectSettlement },
+) {
   const before = await snapshot(client);
   const listenerBaseline = before.diagnostics.activeListeners;
   const settlementBaseline = before.settlementCount;
   await startNormalBattle(client);
+  if (afterBattleStart) await afterBattleStart();
   await assertTravelMotion(client);
   await assertBattleHudGeometry(client, 'full battle');
   const fire = await probeAutomaticFire(client);
@@ -2551,6 +2895,7 @@ async function finishFullBattle(client, { claimSalvage }) {
   );
   const settled = await snapshot(client);
   assert.equal(settled.settlementCount, settlementBaseline + 1);
+  if (inspectSettlement) await inspectSettlement(settled);
 
   const station = await returnToStation(client, listenerBaseline);
   assert.equal(station.settlementCount, settlementBaseline + 1);
@@ -2580,6 +2925,183 @@ async function finishFullBattle(client, { claimSalvage }) {
   };
 }
 
+async function assertTidalArchiveDiscoveryFeedback(client, label) {
+  await reloadWithE2EArchiveFixture(client);
+  const initialArchive = await readStoredTidalArchive(client);
+  assert.deepEqual(
+    initialArchive,
+    createTidalArchiveFixture(),
+    `${label} discovery lifecycle must start from an empty archive fixture`,
+  );
+
+  const result = await finishFullBattle(client, {
+    claimSalvage: true,
+    afterBattleStart: async () => {
+      await assertFirstArchiveDiscoveryTicket(
+        client,
+        `${label} real first spawn`,
+      );
+    },
+    inspectSettlement: async () => {
+      await waitForEvaluation(
+        client,
+        `(() => {
+          const root = document.querySelector('[data-settlement-archive]');
+          const entry = root?.querySelector(
+            '[data-settlement-archive-entry="${authoritativeFirstArchiveDiscovery.key}"]'
+          );
+          const image = entry?.querySelector('img');
+          return root instanceof HTMLElement
+            && !root.hidden
+            && entry instanceof HTMLElement
+            && image instanceof HTMLImageElement
+            && image.complete
+            && image.naturalWidth > 0;
+        })()`,
+        { label: `${label} settlement archive luggage` },
+      );
+      const settlement = await evaluate(client, `(() => {
+        const root = document.querySelector('[data-settlement-archive]');
+        const entry = root?.querySelector(
+          '[data-settlement-archive-entry="${authoritativeFirstArchiveDiscovery.key}"]'
+        );
+        if (!(root instanceof HTMLElement) || !(entry instanceof HTMLElement)) {
+          return null;
+        }
+        const image = entry.querySelector('img');
+        const rect = entry.getBoundingClientRect();
+        return {
+          heading: root.querySelector('h3')?.textContent?.trim() ?? '',
+          key: entry.getAttribute('data-settlement-archive-entry'),
+          name: entry.querySelector('b')?.textContent?.trim() ?? '',
+          type: entry.querySelector('small')?.textContent?.trim() ?? '',
+          imageLoaded: image instanceof HTMLImageElement
+            && image.complete
+            && image.naturalWidth > 0,
+          imageAlt: image?.getAttribute('alt') ?? '',
+          contained: rect.left >= -1
+            && rect.right <= innerWidth + 1
+            && rect.top >= -1
+            && rect.bottom <= innerHeight + 1,
+          rewards: [
+            '[data-settlement-gears]',
+            '[data-settlement-route-marks]',
+            '[data-settlement-star-tickets]',
+          ].map((selector) => Number(document.querySelector(selector)?.textContent)),
+        };
+      })()`);
+      assert.ok(settlement, `${label} settlement archive entry is missing`);
+      assert.equal(settlement.heading, '本局新档案');
+      assert.equal(settlement.key, authoritativeFirstArchiveDiscovery.key);
+      assert.equal(settlement.name, authoritativeFirstArchiveDiscovery.name);
+      assert.equal(settlement.type, '潮兽目击');
+      assert.equal(settlement.imageLoaded, true);
+      assert.equal(settlement.imageAlt, authoritativeFirstArchiveDiscovery.name);
+      assert.equal(settlement.contained, true, `${label} settlement entry is clipped`);
+      assert.ok(
+        settlement.rewards.every(Number.isFinite),
+        `${label} existing settlement reward values must remain readable`,
+      );
+    },
+  });
+
+  await navigateScene(client, 'equipment');
+  const persistedUnread = (await readStoredTidalArchive(client)).unreadEntryKeys;
+  assert.ok(
+    persistedUnread.includes(authoritativeFirstArchiveDiscovery.key),
+    `${label} first discovery must remain unread at equipment return`,
+  );
+  await assertArchiveUnreadSeal(client, `${label} post-settlement`);
+  const opened = await evaluate(client, `(() => {
+    const workshop = document.querySelector('.otter-workshop');
+    const button = workshop?.querySelector(
+      '[data-action="show-tidal-archive"]'
+    );
+    if (!(button instanceof HTMLButtonElement) || button.disabled) return false;
+    button.click();
+    return true;
+  })()`);
+  assert.equal(opened, true, `${label} archive must open after settlement`);
+  await waitForEvaluation(
+    client,
+    `Boolean(document.querySelector(
+      '[data-archive-enemy="${authoritativeFirstArchiveDiscovery.entryId}"] '
+        + '.archive-new-stamp'
+    ))`,
+    { label: `${label} matching archive NEW stamp` },
+  );
+  assert.deepEqual(
+    (await readStoredTidalArchive(client)).unreadEntryKeys,
+    [],
+    `${label} opening archive must clear persisted unreadEntryKeys`,
+  );
+  const matchingCard = await evaluate(client, `(() => {
+    const card = document.querySelector(
+      '[data-archive-enemy="${authoritativeFirstArchiveDiscovery.entryId}"]'
+    );
+    const stamp = card?.querySelector('.archive-new-stamp');
+    const image = card?.querySelector('img');
+    return {
+      discovered: card?.classList.contains('is-discovered') ?? false,
+      isNew: card?.classList.contains('is-new') ?? false,
+      stampText: stamp?.textContent?.trim() ?? '',
+      imageLoaded: image instanceof HTMLImageElement
+        && image.complete
+        && image.naturalWidth > 0,
+    };
+  })()`);
+  assert.deepEqual(
+    matchingCard,
+    { discovered: true, isNew: true, stampText: 'NEW', imageLoaded: true },
+    `${label} opened archive must retain the matching one-visit NEW card`,
+  );
+
+  const workshopOpened = await evaluate(client, `(() => {
+    const workshop = document.querySelector('.otter-workshop');
+    const button = workshop?.querySelector(
+      '[data-action="show-equipment-workshop"]'
+    );
+    if (!(button instanceof HTMLButtonElement) || button.disabled) return false;
+    button.click();
+    return true;
+  })()`);
+  assert.equal(workshopOpened, true, `${label} workshop tab must clear the visit`);
+  await waitForEvaluation(
+    client,
+    `!document.querySelector('.tidal-archive-carriage')`,
+    { label: `${label} workshop after archive visit` },
+  );
+  await navigateScene(client, 'station');
+  await navigateScene(client, 'equipment');
+  assert.equal(
+    await evaluate(client, `Boolean(document.querySelector('.archive-unread-seal'))`),
+    false,
+    `${label} re-entry must not restore the unread seal`,
+  );
+  const reopened = await evaluate(client, `(() => {
+    const workshop = document.querySelector('.otter-workshop');
+    const button = workshop?.querySelector(
+      '[data-action="show-tidal-archive"]'
+    );
+    if (!(button instanceof HTMLButtonElement) || button.disabled) return false;
+    button.click();
+    return true;
+  })()`);
+  assert.equal(reopened, true, `${label} archive must reopen after navigation`);
+  await waitForEvaluation(
+    client,
+    `Boolean(document.querySelector('.tidal-archive-carriage'))`,
+    { label: `${label} archive re-entry` },
+  );
+  assert.equal(
+    await evaluate(client, `document.querySelectorAll('.archive-new-stamp').length`),
+    0,
+    `${label} workshop plus leave/re-entry must clear all NEW stamps`,
+  );
+  await navigateScene(client, 'station');
+  return result;
+}
+
 async function loadViewport(client, viewport, smokeId) {
   await client.send('Emulation.setDeviceMetricsOverride', {
     width: viewport.width,
@@ -2602,6 +3124,9 @@ async function loadViewport(client, viewport, smokeId) {
     { label: `${viewport.width}x${viewport.height} E2E hook` },
   );
   await ensureCaptainSelected(client);
+  if (!viewport.full) {
+    await reloadWithE2EArchiveFixture(client, { unread: true });
+  }
 }
 
 async function resetSaveBetweenViewports(client) {
@@ -2669,6 +3194,7 @@ async function exerciseScenes(client, label) {
 async function runViewport(client, viewport, smokeId, browserErrors) {
   const label = `${viewport.width}x${viewport.height}`;
   const errorBaseline = browserErrors.length;
+  try {
   await loadViewport(client, viewport, smokeId);
   await assertNoHorizontalOverflow(client, `${label} launch`);
   await exerciseScenes(client, label);
@@ -2680,12 +3206,14 @@ async function runViewport(client, viewport, smokeId, browserErrors) {
   if (viewport.full) {
     await assertLowQualityResilience(client, label);
     await assertReducedMotionResilience(client, label);
+    await resetSaveBetweenViewports(client);
+    await ensureCaptainSelected(client);
   }
   const stationPose = await measureStationDeparturePose(client, label);
 
   let detail;
   if (viewport.full) {
-    const first = await finishFullBattle(client, { claimSalvage: true });
+    const first = await assertTidalArchiveDiscoveryFeedback(client, label);
     const second = await finishFullBattle(client, { claimSalvage: false });
     assert.deepEqual(
       [first.terminalStatus, second.terminalStatus],
@@ -2703,6 +3231,12 @@ async function runViewport(client, viewport, smokeId, browserErrors) {
   console.log(`[smoke] ${label} PASS - ${detail}`);
   await resetSaveBetweenViewports(client);
   return stationPose;
+  } finally {
+    await client.send('Emulation.setEmulatedMedia', {
+      media: 'screen',
+      features: [{ name: 'prefers-reduced-motion', value: 'no-preference' }],
+    });
+  }
 }
 
 async function assertOrdinaryUrlHasNoHook(client, smokeId) {
