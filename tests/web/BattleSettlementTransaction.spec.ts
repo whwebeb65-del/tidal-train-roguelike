@@ -33,6 +33,9 @@ describe('persisted normal battle settlement transaction', () => {
     expect(first.accepted).toBe(true);
     expect(replay).toMatchObject({ accepted: false, save: snapshot });
     expect(replay.presentation.rewards).toEqual({ gears: 0, routeMarks: 0, starTickets: 0 });
+    expect(first.presentation.archiveDiscoveries).toEqual([]);
+    expect(replay.presentation.archiveDiscoveries).toEqual([]);
+    expect(next.presentation.archiveDiscoveries).toEqual([]);
     expect(replay.presentation.title).toBe('本局已结算');
     expect(snapshot.settledBattleIds).toEqual(['reload-safe']);
     expect(next.accepted).toBe(true);
@@ -45,6 +48,7 @@ describe('persisted normal battle settlement transaction', () => {
     const duplicate = settleNormalOutcomeForSave(first.save, outcome('live-duplicate'));
     expect(duplicate.save).toEqual(first.save);
     expect(duplicate.presentation.rewards.gears).toBe(0);
+    expect(duplicate.presentation.archiveDiscoveries).toEqual([]);
   });
 
   it('settles victory once with first-clear, only used skill mastery, and stamina XP in the summary', () => {

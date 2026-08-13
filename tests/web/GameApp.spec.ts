@@ -2,11 +2,15 @@
 import { describe, expect, it, onTestFinished, vi } from 'vitest';
 import { appSceneForAction } from '../../web/app/GameApp';
 import { createLegacyGameRuntime, progressionTelemetryForUpgrade } from '../../web/LegacyGameRuntime';
+import type { LegacyRuntimeTestSnapshot } from '../../web/LegacyGameRuntime';
 import { APP_STORAGE_KEYS } from '../../web/app/AppStateRepository';
 import { defaultSave } from '../../src/save/SaveRepository';
+import { TIDE_BEAST_ARCHIVE_IDS } from '../../src/domain/collection/TidalArchiveSystem';
+import { SKILL_VARIANT_IDS } from '../../src/domain/skill/SkillProgressionTypes';
 import { getBattleUpgradeDefinition } from '../../web/battle/BattleUpgradeCatalog';
 import type { BattleEngine } from '../../web/battle/BattleEngine';
 import { createWaveSchedule } from '../../web/battle/WaveScheduler';
+import { getTidalArchiveEnemyDiscovery } from '../../web/battle/TidalArchiveDiscoveryPresentation';
 
 function installCanvas2DStub(): () => void {
   const original = HTMLCanvasElement.prototype.getContext;
@@ -97,6 +101,13 @@ describe('LegacyGameRuntime E2E snapshots', () => {
     document.body.append(app);
     const storage = window.localStorage;
     storage.clear();
+    const firstScheduledEnemyKind = createWaveSchedule(
+      17,
+      'drift-suburb',
+    )[0]?.kind;
+    expect(firstScheduledEnemyKind).toBeTruthy();
+    if (!firstScheduledEnemyKind) throw new Error('Normal schedule has no enemy');
+    const expectedNewVariantId = 'undertow-eye' as const;
     const seededSave = {
       ...defaultSave(),
       gears: 321,
@@ -105,6 +116,16 @@ describe('LegacyGameRuntime E2E snapshots', () => {
       selectedCaptainId: 'captain-tide-female' as const,
     };
     storage.setItem(APP_STORAGE_KEYS.player, JSON.stringify(seededSave));
+    storage.setItem(APP_STORAGE_KEYS.tidalArchive, JSON.stringify({
+      version: 2,
+      discoveredEnemyKinds: TIDE_BEAST_ARCHIVE_IDS.filter(
+        (kind) => kind !== firstScheduledEnemyKind,
+      ),
+      discoveredSkillVariantIds: SKILL_VARIANT_IDS.filter(
+        (variantId) => variantId !== expectedNewVariantId,
+      ),
+      unreadEntryKeys: [],
+    }));
     storage.setItem(APP_STORAGE_KEYS.firstRunBattleTutorial, JSON.stringify({
       version: 1,
       completedStepIds: ['aim', 'skill', 'upgrade'],
@@ -117,6 +138,7 @@ describe('LegacyGameRuntime E2E snapshots', () => {
     let getBattleInput: () => ReturnType<BattleEngine['inputForTest']> | undefined = (
       () => undefined
     );
+    const runtimeSnapshots: LegacyRuntimeTestSnapshot[] = [];
     let battleEngineCreatedCount = 0;
     const audio = new Proxy({}, { get: () => () => undefined }) as never;
     const runtime = createLegacyGameRuntime(app, storage, true, audio, {
@@ -125,6 +147,7 @@ describe('LegacyGameRuntime E2E snapshots', () => {
     }, {
       prepareStationRun: async () => ({ status: 'ready', assets: { failedIds: [], get: () => null } }),
       onTelemetryEvent: (event) => telemetryEvents.push(event),
+      onTestSnapshot: (snapshot) => runtimeSnapshots.push(snapshot),
       onBattleEngineCreated: (engine) => {
         battleEngineCreatedCount += 1;
         getBattleInput = () => engine.inputForTest();
@@ -137,7 +160,9 @@ describe('LegacyGameRuntime E2E snapshots', () => {
       restoreCanvas();
     });
     await runtime.start();
-    expect(storage.getItem(APP_STORAGE_KEYS.tidalArchive)).toBeNull();
+    expect(JSON.parse(
+      storage.getItem(APP_STORAGE_KEYS.tidalArchive) ?? '{}',
+    ).unreadEntryKeys).toEqual([]);
     await runtime.e2eStartNormalBattle();
     const startingBattle = runtime.e2eSnapshot().battle;
     expect(startingBattle).not.toBeNull();
@@ -146,15 +171,27 @@ describe('LegacyGameRuntime E2E snapshots', () => {
       getBattleInput(),
     );
     expect(startingBattleInput).toBeTruthy();
+    const playerAfterBattleStart = JSON.parse(
+      storage.getItem(APP_STORAGE_KEYS.player) ?? '{}',
+    );
+    const discoveryTicket = app.querySelector<HTMLElement>(
+      '[data-archive-discovery]',
+    );
+    expect(discoveryTicket).not.toBeNull();
+    expect(discoveryTicket?.hidden).toBe(true);
+    expect(runtimeSnapshots.at(-1)?.activeRunArchiveDiscoveries).toEqual([]);
 
     for (let index = 0; index < 20; index += 1) {
       if ((runtime.e2eSnapshot().battle?.enemies.length ?? 0) > 0) break;
-      expect(storage.getItem(APP_STORAGE_KEYS.tidalArchive)).toBeNull();
+      expect(JSON.parse(
+        storage.getItem(APP_STORAGE_KEYS.tidalArchive) ?? '{}',
+      ).unreadEntryKeys).toEqual([]);
       runtime.e2eAdvanceBattle(250);
     }
     const firstEnemyFrame = runtime.e2eSnapshot().battle;
     const firstEnemyKind = firstEnemyFrame?.enemies[0]?.kind;
     expect(firstEnemyKind).toBeTruthy();
+    expect(firstEnemyKind).toBe(firstScheduledEnemyKind);
     expect(firstEnemyFrame).toMatchObject({
       maxTrainHp: startingBattle?.maxTrainHp,
       runLevel: startingBattle?.runLevel,
@@ -164,9 +201,18 @@ describe('LegacyGameRuntime E2E snapshots', () => {
     expect(structuredClone(getBattleInput())).toEqual(
       startingBattleInput,
     );
-    expect(JSON.parse(
+    const archiveAfterFirstSpawn = JSON.parse(
       storage.getItem(APP_STORAGE_KEYS.tidalArchive) ?? '{}',
-    ).discoveredEnemyKinds).toEqual([firstEnemyKind]);
+    );
+    expect(archiveAfterFirstSpawn.unreadEntryKeys).toEqual([
+      `enemy:${firstEnemyKind}`,
+    ]);
+    expect(discoveryTicket?.hidden).toBe(false);
+    expect(discoveryTicket?.querySelector(
+      '[data-archive-discovery-name]',
+    )?.textContent).toBe(
+      getTidalArchiveEnemyDiscovery(firstScheduledEnemyKind).name,
+    );
 
     let selectedVariantId: string | null = null;
     for (let index = 0; index < 300; index += 1) {
@@ -191,9 +237,13 @@ describe('LegacyGameRuntime E2E snapshots', () => {
           getBattleUpgradeDefinition(upgradeId).kind === 'skill-variant'
         ));
         expect(offeredVariant).toBeTruthy();
+        expect(offeredVariant).toBe(expectedNewVariantId);
         expect(JSON.parse(
           storage.getItem(APP_STORAGE_KEYS.tidalArchive) ?? '{}',
-        ).discoveredSkillVariantIds).toEqual([]);
+        ).discoveredSkillVariantIds).not.toContain(offeredVariant);
+        expect(JSON.parse(
+          storage.getItem(APP_STORAGE_KEYS.tidalArchive) ?? '{}',
+        ).unreadEntryKeys).toEqual([`enemy:${firstEnemyKind}`]);
         expect(telemetryEvents.filter((event) => (
           event.name === 'tidal_archive_entry_discovered'
           && event.payload.entryType === 'skill-variant'
@@ -220,7 +270,11 @@ describe('LegacyGameRuntime E2E snapshots', () => {
     const storedArchive = JSON.parse(
       storage.getItem(APP_STORAGE_KEYS.tidalArchive) ?? '{}',
     );
-    expect(storedArchive.discoveredSkillVariantIds).toEqual([selectedVariantId]);
+    expect(storedArchive.discoveredSkillVariantIds).toContain(selectedVariantId);
+    expect(storedArchive.unreadEntryKeys).toEqual([
+      `enemy:${firstEnemyKind}`,
+      `skill-variant:${selectedVariantId}`,
+    ]);
     expect(storedArchive.discoveredEnemyKinds.filter(
       (kind: string) => kind === firstEnemyKind,
     )).toHaveLength(1);
@@ -231,16 +285,7 @@ describe('LegacyGameRuntime E2E snapshots', () => {
     const savedAfterDiscoveries = JSON.parse(
       storage.getItem(APP_STORAGE_KEYS.player) ?? '{}',
     );
-    expect(savedAfterDiscoveries).toMatchObject({
-      gears: seededSave.gears,
-      routeMarks: seededSave.routeMarks,
-      starTickets: seededSave.starTickets,
-      equipmentInventory: seededSave.equipmentInventory,
-      equippedEquipmentIds: seededSave.equippedEquipmentIds,
-      equipmentFragments: seededSave.equipmentFragments,
-      ownedSkinIds: seededSave.ownedSkinIds,
-      skillMasteryXp: seededSave.skillMasteryXp,
-    });
+    expect(savedAfterDiscoveries).toEqual(playerAfterBattleStart);
 
     const discoveryKeys = telemetryEvents
       .filter((event) => event.name === 'tidal_archive_entry_discovered')
@@ -249,23 +294,71 @@ describe('LegacyGameRuntime E2E snapshots', () => {
     expect(discoveryKeys.filter((key) => key === `enemy:${firstEnemyKind}`)).toHaveLength(1);
     expect(discoveryKeys.filter((key) => key === `skill-variant:${selectedVariantId}`)).toHaveLength(1);
 
+    for (let index = 0; index < 700; index += 1) {
+      const battle = runtime.e2eSnapshot().battle;
+      if (battle?.status === 'defeat' || battle?.status === 'victory') break;
+      if (battle?.status === 'upgrade') {
+        expect(runtime.e2eChooseFirstUpgrade()).toBe(true);
+        await runtime.e2eRequestResume();
+        continue;
+      }
+      runtime.e2eAdvanceBattle(1_000);
+    }
+    const terminalBattle = runtime.e2eSnapshot().battle;
+    expect(['defeat', 'victory']).toContain(terminalBattle?.status);
+    if (terminalBattle?.status === 'defeat') {
+      const giveUp = app.querySelector<HTMLButtonElement>(
+        '[data-battle-action="give-up"]',
+      );
+      expect(giveUp).not.toBeNull();
+      giveUp?.click();
+    }
+    await vi.waitFor(() => {
+      expect(
+        runtimeSnapshots.at(-1)?.activeBattleSettlement?.archiveDiscoveries
+          .map((entry) => entry.key),
+      ).toEqual([
+        `enemy:${firstEnemyKind}`,
+        `skill-variant:${selectedVariantId}`,
+      ]);
+    });
+    const settlementDiscoveries = runtimeSnapshots.at(-1)
+      ?.activeBattleSettlement?.archiveDiscoveries;
+    expect(Object.isFrozen(settlementDiscoveries)).toBe(true);
+    expect(Object.isFrozen(runtimeSnapshots.at(-1)?.activeBattleSettlement)).toBe(true);
+
     await runtime.e2eReturnToStation();
     await runtime.e2eNavigate('equipment');
     const archiveTab = app.querySelector<HTMLButtonElement>(
       '[data-action="show-tidal-archive"]',
     );
     expect(archiveTab).not.toBeNull();
+    expect(archiveTab?.textContent).toContain('NEW 2');
+    const economyEventsBeforeArchiveVisit = telemetryEvents.filter(
+      (event) => event.name === 'economy_reward_granted',
+    ).length;
     archiveTab?.click();
     await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(JSON.parse(
+      storage.getItem(APP_STORAGE_KEYS.tidalArchive) ?? '{}',
+    ).unreadEntryKeys).toEqual([]);
+    const readEvents = telemetryEvents.filter(
+      (event) => event.name === 'tidal_archive_entries_read',
+    );
+    expect(readEvents).toHaveLength(1);
+    expect(readEvents[0]?.payload).toEqual({ count: 2 });
+    expect(telemetryEvents.filter(
+      (event) => event.name === 'economy_reward_granted',
+    )).toHaveLength(economyEventsBeforeArchiveVisit);
     expect(app.querySelector('.tidal-archive-carriage')).not.toBeNull();
     expect(app.querySelector(
       '[data-action="show-tidal-archive"]',
     )?.getAttribute('aria-pressed')).toBe('true');
     expect(app.querySelector(
-      `[data-archive-enemy="${firstEnemyKind}"].is-discovered`,
+      `[data-archive-enemy="${firstEnemyKind}"].is-discovered.is-new`,
     )).not.toBeNull();
     expect(app.querySelector(
-      `[data-archive-variant="${selectedVariantId}"].is-discovered`,
+      `[data-archive-variant="${selectedVariantId}"].is-discovered.is-new`,
     )).not.toBeNull();
 
     app.querySelector<HTMLButtonElement>(
@@ -273,16 +366,28 @@ describe('LegacyGameRuntime E2E snapshots', () => {
     )?.click();
     await new Promise((resolve) => setTimeout(resolve, 0));
     app.querySelector<HTMLButtonElement>(
+      '[data-nav-scene="station"]',
+    )?.click();
+    await runtime.e2eNavigate('station');
+    await runtime.e2eNavigate('equipment');
+    expect(app.querySelector(
+      '[data-action="show-tidal-archive"]',
+    )?.textContent).not.toContain('NEW');
+    app.querySelector<HTMLButtonElement>(
       '[data-action="show-tidal-archive"]',
     )?.click();
     await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(app.querySelectorAll('.archive-card.is-new')).toHaveLength(0);
+    expect(telemetryEvents.filter(
+      (event) => event.name === 'tidal_archive_entries_read',
+    )).toHaveLength(1);
     const viewedEvents = telemetryEvents.filter(
       (event) => event.name === 'tidal_archive_viewed',
     );
     expect(viewedEvents).toHaveLength(1);
     expect(viewedEvents[0].payload).toEqual({
-      enemyCount: 3,
-      skillVariantCount: 1,
+      enemyCount: 8,
+      skillVariantCount: 12,
       equipmentCount: 4,
     });
     const discoveryKeysAfterRerender = telemetryEvents
@@ -290,7 +395,7 @@ describe('LegacyGameRuntime E2E snapshots', () => {
       .map((event) => `${event.payload.entryType}:${event.payload.entryId}`);
     expect(discoveryKeysAfterRerender).toEqual(discoveryKeys);
 
-  });
+  }, 15_000);
 
   it('records idempotent enemy discoveries from a real daily-trial departure without changing player assets', async () => {
     const restoreCanvas = installCanvas2DStub();
@@ -315,6 +420,7 @@ describe('LegacyGameRuntime E2E snapshots', () => {
     let getBattleInput: () => ReturnType<BattleEngine['inputForTest']> | undefined = (
       () => undefined
     );
+    const runtimeSnapshots: LegacyRuntimeTestSnapshot[] = [];
     const audio = new Proxy({}, { get: () => () => undefined }) as never;
     const runtime = createLegacyGameRuntime(app, storage, true, audio, {
       getSettings: () => ({ version: 2, musicEnabled: false, sfxEnabled: false, reducedMotion: true, qualityPreference: 'auto', preferredBattleSpeed: 1 }),
@@ -322,6 +428,7 @@ describe('LegacyGameRuntime E2E snapshots', () => {
     }, {
       prepareStationRun: async () => ({ status: 'ready', assets: { failedIds: [], get: () => null } }),
       onTelemetryEvent: (event) => telemetryEvents.push(event),
+      onTestSnapshot: (snapshot) => runtimeSnapshots.push(snapshot),
       onBattleEngineCreated: (engine) => {
         getBattleInput = () => engine.inputForTest();
       },
@@ -350,6 +457,12 @@ describe('LegacyGameRuntime E2E snapshots', () => {
       enemies: [],
     });
     expect(storage.getItem(APP_STORAGE_KEYS.tidalArchive)).toBeNull();
+    expect(app.querySelector<HTMLElement>(
+      '[data-archive-discovery]',
+    )?.hidden).toBe(true);
+    const playerAfterBattleStart = JSON.parse(
+      storage.getItem(APP_STORAGE_KEYS.player) ?? '{}',
+    );
 
     runtime.e2eAdvanceBattle(17);
     const firstEnemyKind = runtime.e2eSnapshot().battle?.enemies[0]?.kind;
@@ -358,6 +471,16 @@ describe('LegacyGameRuntime E2E snapshots', () => {
       storage.getItem(APP_STORAGE_KEYS.tidalArchive) ?? '{}',
     );
     expect(archiveAfterFirstSpawn.discoveredEnemyKinds).toEqual([firstEnemyKind]);
+    expect(archiveAfterFirstSpawn.unreadEntryKeys).toEqual([
+      `enemy:${firstEnemyKind}`,
+    ]);
+    expect(app.querySelector<HTMLElement>(
+      '[data-archive-discovery]',
+    )?.hidden).toBe(false);
+    if (!firstEnemyKind) throw new Error('Daily-trial first enemy missing');
+    expect(app.querySelector(
+      '[data-archive-discovery-name]',
+    )?.textContent).toBe(getTidalArchiveEnemyDiscovery(firstEnemyKind).name);
     const discoveryEventsForFirstKind = () => telemetryEvents.filter((event) => (
       event.name === 'tidal_archive_entry_discovered'
       && event.payload.entryType === 'enemy'
@@ -395,22 +518,19 @@ describe('LegacyGameRuntime E2E snapshots', () => {
     expect(archiveAfterDuplicateSpawn.discoveredEnemyKinds.filter(
       (kind: string) => kind === firstEnemyKind,
     )).toHaveLength(1);
+    expect(archiveAfterDuplicateSpawn.unreadEntryKeys.filter(
+      (key: string) => key === `enemy:${firstEnemyKind}`,
+    )).toHaveLength(1);
     expect(structuredClone(getBattleInput())).toEqual(startingBattleInput);
 
     const savedAfterDiscoveries = JSON.parse(
       storage.getItem(APP_STORAGE_KEYS.player) ?? '{}',
     );
-    expect(savedAfterDiscoveries).toMatchObject({
-      gears: seededSave.gears,
-      routeMarks: seededSave.routeMarks,
-      starTickets: seededSave.starTickets,
-      equipmentInventory: seededSave.equipmentInventory,
-      equippedEquipmentIds: seededSave.equippedEquipmentIds,
-      equipmentFragments: seededSave.equipmentFragments,
-      ownedSkinIds: seededSave.ownedSkinIds,
-      equippedSkinIds: seededSave.equippedSkinIds,
-      skillMasteryXp: seededSave.skillMasteryXp,
-    });
+    expect(savedAfterDiscoveries).toEqual(playerAfterBattleStart);
+    await runtime.e2eReturnToStation();
+    expect(runtimeSnapshots.at(-1)?.activeRunArchiveDiscoveries.filter(
+      (entry) => entry.key === `enemy:${firstEnemyKind}`,
+    )).toHaveLength(1);
   });
 
   it('deep-copies progression variant arrays so mutations cannot affect the engine or later snapshots', async () => {

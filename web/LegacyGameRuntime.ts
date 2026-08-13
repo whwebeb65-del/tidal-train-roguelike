@@ -111,7 +111,10 @@ import {
 import {
   discoverSkillVariant,
   discoverTideBeast,
+  markTidalArchiveRead,
+  type TidalArchiveEntryKey,
   type TidalArchiveState,
+  type TideBeastArchiveId,
 } from '../src/domain/collection/TidalArchiveSystem';
 import type { SkillVariantId } from '../src/domain/skill/SkillProgressionTypes';
 import {
@@ -183,6 +186,10 @@ import { BATTLE_INTERACTIONS } from './battle/BattleInteractionSchedule';
 import { BattleEngine } from './battle/BattleEngine';
 import { BattleDiagnostics } from './battle/BattleDiagnostics';
 import { getBattleUpgradeDefinition } from './battle/BattleUpgradeCatalog';
+import {
+  getTidalArchiveEnemyDiscovery,
+  getTidalArchiveSkillVariantDiscovery,
+} from './battle/TidalArchiveDiscoveryPresentation';
 import type {
   BattleE2EController,
   BattleE2ESnapshot,
@@ -278,6 +285,8 @@ export interface LegacyRuntimeTestSnapshot {
   readonly staminaUpdatedAtMs: number;
   readonly accountXp: number;
   readonly activeRunStaminaSpent: number;
+  readonly activeRunArchiveDiscoveries: readonly TidalArchiveDiscoveryPresentation[];
+  readonly activeBattleSettlement: BattleSettlementPresentation | null;
   readonly preparedBattleScene: boolean;
 }
 
@@ -370,6 +379,7 @@ let wardrobeViewTracked = false;
 let equipmentViewTracked = false;
 let equipmentPanel: EquipmentPanel = 'workshop';
 let archiveViewTracked = false;
+let archiveVisitNewKeys: readonly TidalArchiveEntryKey[] = [];
 let runMode: 'normal' | 'daily-trial' = 'normal';
 let e2ePrecisionWeakPointHits = 0;
 let currentMapId: MapId = initialState.selectedMapId;
@@ -407,6 +417,7 @@ let preparedBattleAccountLevel: number | null = null;
 let preparedBattleSpeed: { initial: BattleSpeed; available: readonly BattleSpeed[] } | null = null;
 let activeRunAccountStart = save.accountLevel;
 let activeRunStaminaSpent = 0;
+let activeRunArchiveDiscoveries: TidalArchiveDiscoveryPresentation[] = [];
 let activeBattleSpeed: BattleSpeed = 1;
 let trackedSkillRanks: Readonly<Record<string, number>> = {};
 let trackedSkillVariants: Readonly<Record<string, readonly string[]>> = {};
@@ -869,13 +880,18 @@ function track(name: PrototypeEventName, payload: Record<string, string | number
 
 function commitArchiveDiscovery(
   entryType: 'enemy' | 'skill-variant',
-  entryId: string,
+  entryId: TideBeastArchiveId | SkillVariantId,
   next: TidalArchiveState,
-): void {
-  if (next === tidalArchiveState) return;
+): TidalArchiveDiscoveryPresentation | null {
+  if (next === tidalArchiveState) return null;
   tidalArchiveState = next;
   appStateRepository.saveTidalArchive(next);
   track('tidal_archive_entry_discovered', { entryType, entryId });
+  const presentation = entryType === 'enemy'
+    ? getTidalArchiveEnemyDiscovery(entryId as TideBeastArchiveId)
+    : getTidalArchiveSkillVariantDiscovery(entryId as SkillVariantId);
+  activeRunArchiveDiscoveries.push(presentation);
+  return presentation;
 }
 
 function commitFirstRunTutorialStep(
@@ -917,24 +933,27 @@ function skipCurrentFirstRunTutorial(): void {
 function trackBattleEvents(
   events: readonly BattleEvent[],
 ): readonly TidalArchiveDiscoveryPresentation[] {
+  const presentations: TidalArchiveDiscoveryPresentation[] = [];
   for (const event of events) {
     if (event.type === 'enemy-spawned') {
-      commitArchiveDiscovery(
+      const presentation = commitArchiveDiscovery(
         'enemy',
         event.kind,
         discoverTideBeast(tidalArchiveState, event.kind),
       );
+      if (presentation) presentations.push(presentation);
     }
     if (
       event.type === 'upgrade-selected'
       && getBattleUpgradeDefinition(event.upgradeId).kind === 'skill-variant'
     ) {
       const variantId = event.upgradeId as SkillVariantId;
-      commitArchiveDiscovery(
+      const presentation = commitArchiveDiscovery(
         'skill-variant',
         variantId,
         discoverSkillVariant(tidalArchiveState, variantId),
       );
+      if (presentation) presentations.push(presentation);
     }
     if (event.type === 'run-level-reached') {
       track('run_level_reached', { runLevel: event.runLevel });
@@ -964,7 +983,7 @@ function trackBattleEvents(
     }
     if (event.type === 'boss-weakpoint-hit') e2ePrecisionWeakPointHits += 1;
   }
-  return [];
+  return Object.freeze(presentations);
 }
 
 function trackAdOfferOnce(placement: RewardedPlacement): void {
@@ -1162,6 +1181,7 @@ function renderEquipmentScreen(): string {
     archive: tidalArchiveState,
     equipmentInventory: save.equipmentInventory,
     skillMasteryXp: save.skillMasteryXp,
+    newEntryKeys: archiveVisitNewKeys,
   });
   if (equipmentPanel === 'archive' && !archiveViewTracked) {
     track('tidal_archive_viewed', {
@@ -1175,6 +1195,7 @@ function renderEquipmentScreen(): string {
     state: getEquipmentStateFromSave(),
     panel: equipmentPanel,
     archive,
+    archiveUnreadCount: tidalArchiveState.unreadEntryKeys.length,
   });
 }
 
@@ -1361,14 +1382,7 @@ async function syncView(): Promise<void> {
 
   if (router.currentSceneId === targetScene) {
     if (targetScene !== 'battle') await router.refresh();
-    dependencies.onTestSnapshot?.({
-      phase,
-      stamina: save.stamina,
-      staminaUpdatedAtMs: save.staminaUpdatedAtMs,
-      accountXp: save.accountXp,
-      activeRunStaminaSpent,
-      preparedBattleScene: preparedBattleScene !== null,
-    });
+    emitTestSnapshot();
     return;
   }
 
@@ -1378,12 +1392,20 @@ async function syncView(): Promise<void> {
       ? 'back'
       : 'forward';
   await router.go(targetScene, direction);
+  emitTestSnapshot();
+}
+
+function emitTestSnapshot(): void {
   dependencies.onTestSnapshot?.({
     phase,
     stamina: save.stamina,
     staminaUpdatedAtMs: save.staminaUpdatedAtMs,
     accountXp: save.accountXp,
     activeRunStaminaSpent,
+    activeRunArchiveDiscoveries: Object.freeze([
+      ...activeRunArchiveDiscoveries,
+    ]),
+    activeBattleSettlement,
     preparedBattleScene: preparedBattleScene !== null,
   });
 }
@@ -1546,6 +1568,8 @@ async function startRun(
     if (currentBattleAssets.failedIds.length > 0) {
       notice += ` ${currentBattleAssets.failedIds.length} 项美术资源将使用安全替代图形。`;
     }
+    activeRunArchiveDiscoveries = [];
+    emitTestSnapshot();
   } catch (error) {
     departure.cancel();
     console.error(error);
@@ -1594,7 +1618,7 @@ function settleBattleOutcome(
 }
 
 function settledBattlePresentation(outcome: BattleOutcome): BattleSettlementPresentation {
-  return {
+  return withArchiveDiscoveries({
     title: outcome.victory ? '本局已结算' : '本局已结算',
     description: '该战斗结果已写入存档，不会重复发放奖励。',
     rewards: { gears: 0, routeMarks: 0, starTickets: 0 },
@@ -1606,7 +1630,7 @@ function settledBattlePresentation(outcome: BattleOutcome): BattleSettlementPres
     doubled: false,
     accountProgression: emptyAccountProgression(),
     skillMastery: {},
-  };
+  });
 }
 
 function settleDynamicDailyTrial(
@@ -1638,7 +1662,7 @@ function settleDynamicDailyTrial(
     ? `每日试炼成绩已提交：${result.score} 分。`
     : '本局每日试炼已经提交过，不会重复计分。';
   render();
-  return {
+  return withArchiveDiscoveries({
     title: outcome.victory ? '每日试炼完成' : '本次试炼结束',
     description: outcome.adReviveUsed
       ? '已按广告复活辅助局规则计分，本局不发放普通通关货币。'
@@ -1652,7 +1676,7 @@ function settleDynamicDailyTrial(
     doubled: false,
     accountProgression: emptyAccountProgression(),
     skillMastery: {},
-  };
+  });
 }
 
 function settleDynamicNormalRun(
@@ -1663,7 +1687,7 @@ function settleDynamicNormalRun(
     accountLevelStart: activeRunAccountStart,
     gearMultiplier: (activeBattleProgression ?? getProgressionSnapshot()).gearsMultiplier,
   });
-  if (!persisted.accepted) return persisted.presentation;
+  if (!persisted.accepted) return withArchiveDiscoveries(persisted.presentation);
   // The transaction above is the sole owner of normal-run rewards and progression.
   // Commit its complete save exactly once before any non-save side effects.
   commit(persisted.save);
@@ -1716,7 +1740,16 @@ function settleDynamicNormalRun(
     notice = '列车已撤回车站；本局互动奖励保留，通关奖励未发放。';
   }
   render();
-  return presentation;
+  return withArchiveDiscoveries(presentation);
+}
+
+function withArchiveDiscoveries(
+  presentation: BattleSettlementPresentation,
+): BattleSettlementPresentation {
+  return Object.freeze({
+    ...presentation,
+    archiveDiscoveries: Object.freeze([...activeRunArchiveDiscoveries]),
+  });
 }
 
 function emptyAccountProgression(): BattleSettlementPresentation['accountProgression'] {
@@ -1999,7 +2032,7 @@ async function requestBattleDoubleSettlement(
 
 function exitBattle(): void {
   phase = 'station';
-  hubView = 'station';
+  setHubView('station');
   activeBattleEngine = null;
   activeBattleProgression = null;
   activeBattleSettlement = null;
@@ -2360,7 +2393,7 @@ const onClick = async (event: Event): Promise<void> => {
   if (navigation?.dataset.navScene && phase === 'station') {
     cancelActiveStationDeparture();
     audio.playSound('ui-tap');
-    hubView = navigation.dataset.navScene as HubView;
+    setHubView(navigation.dataset.navScene as HubView);
     render();
     return;
   }
@@ -2414,7 +2447,7 @@ const onClick = async (event: Event): Promise<void> => {
       return;
     }
     if (['captain', 'equipment', 'legion'].includes(destination)) {
-      hubView = destination as HubView;
+      setHubView(destination as HubView);
       render();
     }
     return;
@@ -2424,7 +2457,7 @@ const onClick = async (event: Event): Promise<void> => {
     commit({ ...save, ...profile });
     track('captain_selected', { captainId: button.dataset.captainId });
     captainSelectionTracked = false;
-    hubView = 'station';
+    setHubView('station');
     notice = '列车长已就位，潮汐列车准备出发。';
     render();
     return;
@@ -2438,11 +2471,22 @@ const onClick = async (event: Event): Promise<void> => {
     return;
   }
   if (action === 'show-equipment-workshop') {
+    archiveVisitNewKeys = [];
     equipmentPanel = 'workshop';
     render();
     return;
   }
   if (action === 'show-tidal-archive') {
+    archiveVisitNewKeys = Object.freeze([
+      ...tidalArchiveState.unreadEntryKeys,
+    ]);
+    const next = markTidalArchiveRead(tidalArchiveState);
+    if (next !== tidalArchiveState) {
+      const count = tidalArchiveState.unreadEntryKeys.length;
+      tidalArchiveState = next;
+      appStateRepository.saveTidalArchive(next);
+      track('tidal_archive_entries_read', { count });
+    }
     equipmentPanel = 'archive';
     render();
     return;
@@ -2597,9 +2641,14 @@ async function e2eNavigate(sceneId: HubView): Promise<void> {
     activeBattleSettlement = null;
     activeBattleScene = null;
   }
-  hubView = sceneId;
+  setHubView(sceneId);
   render();
   await renderQueue;
+}
+
+function setHubView(next: HubView): void {
+  if (next !== 'equipment') archiveVisitNewKeys = [];
+  hubView = next;
 }
 
 async function e2eStartBattle(
