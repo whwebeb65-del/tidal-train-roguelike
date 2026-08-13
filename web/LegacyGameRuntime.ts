@@ -163,6 +163,7 @@ import {
 import type {
   BattleSettlementPresentation,
   SceneId,
+  TidalArchiveDiscoveryPresentation,
 } from './app/AppTypes';
 import type {
   GameSettings,
@@ -913,7 +914,9 @@ function skipCurrentFirstRunTutorial(): void {
   track('first_run_tutorial_skipped', { stepId: prompt.stepId });
 }
 
-function trackBattleEvents(events: readonly BattleEvent[]): void {
+function trackBattleEvents(
+  events: readonly BattleEvent[],
+): readonly TidalArchiveDiscoveryPresentation[] {
   for (const event of events) {
     if (event.type === 'enemy-spawned') {
       commitArchiveDiscovery(
@@ -961,6 +964,7 @@ function trackBattleEvents(events: readonly BattleEvent[]): void {
     }
     if (event.type === 'boss-weakpoint-hit') e2ePrecisionWeakPointHits += 1;
   }
+  return [];
 }
 
 function trackAdOfferOnce(placement: RewardedPlacement): void {

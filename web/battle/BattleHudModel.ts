@@ -1,6 +1,7 @@
 import type {
   BattleSettlementPresentation,
   RunMode,
+  TidalArchiveDiscoveryPresentation,
 } from '../app/AppTypes';
 export type {
   BattleSettlementPresentation,
@@ -83,6 +84,7 @@ export interface BattleHudModel {
   readonly doubleSettlementVisible: boolean;
   readonly pendingActions: ReadonlySet<string>;
   readonly firstRunTutorialPrompt: FirstRunBattleTutorialPrompt | null;
+  readonly archiveDiscovery: TidalArchiveDiscoveryPresentation | null;
 }
 
 export interface BattleHudModelOptions {
@@ -98,6 +100,7 @@ export interface BattleHudModelOptions {
   readonly battleSpeed?: BattleSpeed;
   readonly availableBattleSpeeds?: readonly BattleSpeed[];
   readonly firstRunTutorialPrompt?: FirstRunBattleTutorialPrompt | null;
+  readonly archiveDiscovery?: TidalArchiveDiscoveryPresentation | null;
 }
 
 const SKILL_COPY: Readonly<Record<BattleSkillId, {
@@ -142,6 +145,14 @@ export function createBattleHudModel(
   const visibilityResumeRequired =
     options.visibilityResumeRequired ?? false;
   const availableBattleSpeeds = options.availableBattleSpeeds ?? [1];
+  const firstRunTutorialPrompt = options.firstRunTutorialPrompt ?? null;
+  const archiveDiscovery =
+    frame.status === 'running'
+    && !visibilityResumeRequired
+    && settlement === null
+    && firstRunTutorialPrompt === null
+      ? options.archiveDiscovery ?? null
+      : null;
 
   return {
     status: frame.status,
@@ -211,7 +222,8 @@ export function createBattleHudModel(
       && settlement?.doubleSettlementAvailable === true
       && settlement.doubled === false,
     pendingActions,
-    firstRunTutorialPrompt: options.firstRunTutorialPrompt ?? null,
+    firstRunTutorialPrompt,
+    archiveDiscovery,
   };
 }
 

@@ -55,6 +55,10 @@ interface HudNodes {
   readonly skillButtons: ReadonlyMap<BattleSkillId, HTMLButtonElement>;
   readonly speedButton: HTMLButtonElement;
   readonly tutorialPanels: readonly TutorialPanelNodes[];
+  readonly archiveDiscovery: HTMLElement;
+  readonly archiveDiscoveryArt: HTMLImageElement;
+  readonly archiveDiscoveryType: HTMLElement;
+  readonly archiveDiscoveryName: HTMLElement;
   readonly upgradeOverlay: HTMLElement;
   readonly upgradeDialog: HTMLElement;
   readonly upgradeOptions: HTMLElement;
@@ -131,6 +135,13 @@ export function renderBattleHudShell(): string {
         <strong>领取</strong>
       </button>
       <p data-interaction-notice></p>
+    </aside>
+
+    <aside class="battle-archive-discovery" data-archive-discovery aria-live="polite" aria-atomic="true" hidden>
+      <img data-archive-discovery-art alt="" />
+      <span>NEW ARCHIVE ENTRY</span>
+      <small data-archive-discovery-type></small>
+      <b data-archive-discovery-name></b>
     </aside>
 
     ${tutorialTicket('battle')}
@@ -337,6 +348,21 @@ export class BattleHUD {
     setText(nodes.combo, model.comboLabel);
     setText(nodes.experienceLabel, model.experienceLabel);
     setWidth(nodes.experienceFill, model.experiencePercent);
+
+    const archiveDiscovery = model.archiveDiscovery;
+    nodes.archiveDiscovery.hidden = archiveDiscovery === null;
+    if (archiveDiscovery) {
+      if (nodes.archiveDiscoveryArt.getAttribute('src') !== archiveDiscovery.artUrl) {
+        nodes.archiveDiscoveryArt.src = archiveDiscovery.artUrl;
+      }
+      setText(
+        nodes.archiveDiscoveryType,
+        archiveDiscovery.entryType === 'enemy'
+          ? '首次目击已装订'
+          : '新进化标本已归档',
+      );
+      setText(nodes.archiveDiscoveryName, archiveDiscovery.name);
+    }
 
     for (const panel of nodes.tutorialPanels) {
       const prompt = model.firstRunTutorialPrompt;
@@ -633,6 +659,19 @@ function collectNodes(host: HTMLElement): HudNodes {
     skillButtons,
     speedButton: requireElement(host, '[data-battle-action="speed"]'),
     tutorialPanels,
+    archiveDiscovery: requireElement(host, '[data-archive-discovery]'),
+    archiveDiscoveryArt: requireElement<HTMLImageElement>(
+      host,
+      '[data-archive-discovery-art]',
+    ),
+    archiveDiscoveryType: requireElement(
+      host,
+      '[data-archive-discovery-type]',
+    ),
+    archiveDiscoveryName: requireElement(
+      host,
+      '[data-archive-discovery-name]',
+    ),
     upgradeOverlay: requireElement(host, '[data-upgrade-overlay]'),
     upgradeDialog: requireElement(host, '.battle-dialog--upgrade'),
     upgradeOptions: requireElement(host, '[data-upgrade-options]'),

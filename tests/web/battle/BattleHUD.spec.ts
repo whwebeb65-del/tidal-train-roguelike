@@ -13,6 +13,15 @@ import {
   createFrameFixture,
   createHudModelOptionsFixture,
 } from './helpers/BattleFixtures';
+import type { TidalArchiveDiscoveryPresentation } from '../../../web/app/AppTypes';
+
+const ARCHIVE_DISCOVERY: TidalArchiveDiscoveryPresentation = Object.freeze({
+  key: 'enemy:bubble-fin',
+  entryType: 'enemy',
+  entryId: 'bubble-fin',
+  name: '泡鳍兽',
+  artUrl: '/archive/bubble-fin.webp',
+});
 
 const battleHudCss = readFileSync(
   resolve(process.cwd(), 'web/styles/battle-hud.css'),
@@ -64,6 +73,60 @@ describe('BattleHUD', () => {
     expect(html).not.toContain('✦');
     expect(html).not.toContain('data-boss-bar');
     expect(html).not.toContain('data-boss-label');
+  });
+
+  it('renders one noninteractive polite archive ticket and updates its hidden state and copy', () => {
+    const hud = new BattleHUD(createCallbacks(), window);
+    const host = document.createElement('div');
+    document.body.append(host);
+    hud.mount(host);
+
+    const ticket = host.querySelector<HTMLElement>('[data-archive-discovery]');
+    expect(host.querySelectorAll('[data-archive-discovery]')).toHaveLength(1);
+    expect(ticket?.getAttribute('aria-live')).toBe('polite');
+    expect(ticket?.getAttribute('aria-atomic')).toBe('true');
+    expect(ticket?.hidden).toBe(true);
+    expect(ticket?.querySelectorAll('button, a, [tabindex]')).toHaveLength(0);
+    expect(ticket?.querySelector('[data-battle-action]')).toBeNull();
+
+    hud.update(createBattleHudModel(createFrameFixture(), {
+      ...createHudModelOptionsFixture(),
+      archiveDiscovery: ARCHIVE_DISCOVERY,
+    }));
+
+    const art = ticket?.querySelector<HTMLImageElement>(
+      '[data-archive-discovery-art]',
+    );
+    expect(ticket?.hidden).toBe(false);
+    expect(ticket?.textContent).toContain('NEW ARCHIVE ENTRY');
+    expect(ticket?.querySelector('[data-archive-discovery-type]')?.textContent)
+      .toBe('首次目击已装订');
+    expect(ticket?.querySelector('[data-archive-discovery-name]')?.textContent)
+      .toBe('泡鳍兽');
+    expect(art?.getAttribute('src')).toBe('/archive/bubble-fin.webp');
+    expect(art?.getAttribute('alt')).toBe('');
+
+    hud.update(createBattleHudModel(createFrameFixture(), {
+      ...createHudModelOptionsFixture(),
+      archiveDiscovery: null,
+    }));
+    expect(ticket?.hidden).toBe(true);
+
+    hud.update(createBattleHudModel(createFrameFixture(), {
+      ...createHudModelOptionsFixture(),
+      archiveDiscovery: {
+        key: 'skill-variant:split-tide-arrow',
+        entryType: 'skill-variant',
+        entryId: 'split-tide-arrow',
+        name: '分潮箭',
+        artUrl: '/archive/split-tide-arrow.webp',
+      },
+    }));
+    expect(ticket?.querySelector('[data-archive-discovery-type]')?.textContent)
+      .toBe('新进化标本已归档');
+
+    hud.dispose();
+    host.remove();
   });
 
   it('moves first-run direction between battle and upgrade tickets and forwards skip', () => {

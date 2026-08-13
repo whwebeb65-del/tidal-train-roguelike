@@ -63,6 +63,8 @@ import type {
   FirstRunBattleTutorialPrompt,
   FirstRunBattleTutorialStepId,
 } from '../../src/domain/onboarding/FirstRunBattleTutorial';
+import { BattleArchiveDiscoveryQueue } from '../battle/BattleArchiveDiscoveryQueue';
+import type { TidalArchiveDiscoveryPresentation } from '../app/AppTypes';
 
 export interface FrameScheduler {
   request(callback: FrameRequestCallback): number;
@@ -155,7 +157,9 @@ export interface BattleSceneDependencies {
   readonly initialBattleSpeed: BattleSpeed;
   readonly availableBattleSpeeds: readonly BattleSpeed[];
   readonly onBattleSpeedChanged: (speed: BattleSpeed) => void;
-  readonly onBattleEvents: (events: readonly BattleEvent[]) => void;
+  readonly onBattleEvents: (
+    events: readonly BattleEvent[],
+  ) => readonly TidalArchiveDiscoveryPresentation[];
   readonly monotonicNowMs?: () => number;
   readonly getFirstRunTutorialPrompt?: () => FirstRunBattleTutorialPrompt | null;
   readonly onFirstRunTutorialStep?: (
@@ -198,6 +202,8 @@ export class BattleScene implements GameScene {
   private readonly maxDevicePixelRatio: number;
   private readonly pendingActions = new Set<string>();
   private readonly interactionClaims: Record<string, number> = {};
+  private readonly archiveDiscoveryQueue =
+    new BattleArchiveDiscoveryQueue(2400);
   private host: HTMLElement | null = null;
   private canvas: HTMLCanvasElement | null = null;
   private canvasHost: HTMLElement | null = null;
@@ -250,6 +256,10 @@ export class BattleScene implements GameScene {
       }
     }
     this.lastFrameTimeMs = timeMs;
+    if (this.archiveDiscoveryClockResetPending) {
+      this.archiveDiscoveryQueue.update(timeMs, false);
+      this.archiveDiscoveryClockResetPending = false;
+    }
     this.loop.frame(timeMs);
     if (this.host && !this.frameLoopPaused) {
       this.frameRequestId = this.scheduler.request(this.frameCallback);
@@ -261,6 +271,7 @@ export class BattleScene implements GameScene {
   };
 
   private activeAimPointerId: number | null = null;
+  private archiveDiscoveryClockResetPending = false;
 
   private readonly onCanvasPointerDown = (event: PointerEvent): void => {
     if (
@@ -328,6 +339,7 @@ export class BattleScene implements GameScene {
     if (this.host) this.unmount();
     this.lifecycleVersion += 1;
     this.host = host;
+    this.archiveDiscoveryQueue.reset();
     this.pendingActions.clear();
     for (const actionId of Object.keys(this.interactionClaims)) {
       delete this.interactionClaims[actionId];
@@ -346,6 +358,7 @@ export class BattleScene implements GameScene {
       MAX_CATCH_UP_STEPS,
     );
     this.frameLoopPaused = false;
+    this.archiveDiscoveryClockResetPending = false;
     this.exitRequested = false;
     this.motion.reset(this.dependencies.engine.frame);
     host.innerHTML = `<section class="game-scene game-scene--battle">
@@ -599,6 +612,7 @@ export class BattleScene implements GameScene {
       this.diagnosticsListenerActive = false;
     }
     this.hud?.dispose();
+    this.archiveDiscoveryQueue.reset();
     this.dependencies.effects.reset();
     this.sound.dispose();
     this.host.replaceChildren();
@@ -634,9 +648,10 @@ export class BattleScene implements GameScene {
         events,
         this.dependencies.engine.frame,
       );
-      this.dependencies.onBattleEvents(
+      const presentations = this.dependencies.onBattleEvents(
         Object.freeze(events.map((event) => deepFreeze(structuredClone(event)))),
       );
+      this.archiveDiscoveryQueue.enqueue(presentations);
       this.handleEvents(events);
     }
     this.dependencies.effects.update(stepMs);
@@ -695,6 +710,17 @@ export class BattleScene implements GameScene {
       renderBudget: this.renderBudget,
       trainMotion: this.motion.view,
     });
+    const firstRunTutorialPrompt =
+      this.dependencies.getFirstRunTutorialPrompt?.() ?? null;
+    const archiveDiscoveryEligible =
+      this.dependencies.engine.frame.status === 'running'
+      && !this.visibilityPaused
+      && this.settlement === null
+      && firstRunTutorialPrompt === null;
+    const archiveDiscovery = this.archiveDiscoveryQueue.update(
+      this.lastFrameTimeMs,
+      archiveDiscoveryEligible,
+    );
     this.hud.update(createBattleHudModel(
       this.dependencies.engine.frame,
       {
@@ -711,8 +737,8 @@ export class BattleScene implements GameScene {
         visibilityResumeRequired: this.visibilityPaused,
         battleSpeed: this.battleSpeed,
         availableBattleSpeeds: this.availableBattleSpeeds,
-        firstRunTutorialPrompt:
-          this.dependencies.getFirstRunTutorialPrompt?.() ?? null,
+        firstRunTutorialPrompt,
+        archiveDiscovery,
       },
     ));
     this.updateDiagnostics(false);
@@ -766,6 +792,7 @@ export class BattleScene implements GameScene {
       return;
     }
     this.frameLoopPaused = false;
+    this.archiveDiscoveryClockResetPending = true;
     this.loop.start();
     this.lastFrameTimeMs = 0;
     this.lastQualityFrameTimeMs = null;
