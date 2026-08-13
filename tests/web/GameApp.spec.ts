@@ -207,6 +207,7 @@ describe('LegacyGameRuntime E2E snapshots', () => {
 
   it('keeps the battle-engine inspection seam behind the exact e2e=1 gate', async () => {
     window.history.replaceState({}, '', '/');
+    expect(window.__TIDAL_TRAIN_E2E__).toBeUndefined();
     const app = document.createElement('div');
     const storage = window.localStorage;
     storage.clear();
@@ -238,6 +239,7 @@ describe('LegacyGameRuntime E2E snapshots', () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(onBattleEngineCreated).not.toHaveBeenCalled();
+    expect(window.__TIDAL_TRAIN_E2E__).toBeUndefined();
   });
 
   it('keeps a frame-zero discovery through animation, settlement, and a failed next mount', async () => {
@@ -943,6 +945,89 @@ describe('LegacyGameRuntime E2E snapshots', () => {
     expect(second.battle?.skillVariants['tidal-volley']).not.toContain('corrupt-battle');
     runtime.destroy();
   });
+
+  it('exposes frozen current effect kinds after a real deterministic evolution choice and skill click', async () => {
+    const restoreCanvas = installCanvas2DStub();
+    window.history.replaceState({}, '', '/?e2e=1&e2eSeed=17');
+    const app = document.createElement('div');
+    document.body.append(app);
+    const storage = window.localStorage;
+    storage.clear();
+    storage.setItem(APP_STORAGE_KEYS.player, JSON.stringify({
+      ...defaultSave(),
+      stamina: 20,
+      selectedCaptainId: 'captain-tide-female',
+      skillMasteryXp: {
+        'tidal-volley': 92,
+        'bubble-barrier': 92,
+        'extreme-tide': 92,
+      },
+    }));
+    storage.setItem(APP_STORAGE_KEYS.firstRunBattleTutorial, JSON.stringify({
+      version: 1,
+      completedStepIds: ['aim', 'skill', 'upgrade'],
+      skipped: false,
+    }));
+    const audio = new Proxy({}, { get: () => () => undefined }) as never;
+    const runtime = createLegacyGameRuntime(app, storage, false, audio, {
+      getSettings: () => ({ version: 2, musicEnabled: false, sfxEnabled: false, reducedMotion: false, qualityPreference: 'auto', preferredBattleSpeed: 1 }),
+      updateSettings: () => ({ version: 2, musicEnabled: false, sfxEnabled: false, reducedMotion: false, qualityPreference: 'auto', preferredBattleSpeed: 1 }),
+    }, {
+      prepareStationRun: async () => ({ status: 'ready', assets: { failedIds: [], get: () => null } }),
+    });
+    onTestFinished(() => {
+      runtime.destroy();
+      app.remove();
+      restoreCanvas();
+    });
+
+    await runtime.start();
+    await runtime.e2eStartNormalBattle();
+    let selected = false;
+    for (let index = 0; index < 1_200; index += 1) {
+      const battle = runtime.e2eSnapshot().battle;
+      expect(battle?.status).not.toBe('defeat');
+      expect(battle?.status).not.toBe('victory');
+      if (battle?.status === 'upgrade') {
+        const expected = battle.offeredUpgradeIds.find(
+          (upgradeId) => upgradeId === 'split-tide-arrow',
+        );
+        if (expected) {
+          const choice = app.querySelector<HTMLButtonElement>(
+            '[data-upgrade-id="split-tide-arrow"]',
+          );
+          expect(choice).not.toBeNull();
+          choice?.click();
+          await runtime.e2eRequestResume();
+          selected = true;
+          break;
+        }
+        expect(runtime.e2eChooseFirstUpgrade()).toBe(true);
+        await runtime.e2eRequestResume();
+        continue;
+      }
+      runtime.e2eAdvanceBattle(250);
+    }
+    expect(selected).toBe(true);
+    expect(runtime.e2eSnapshot().progression.variants['tidal-volley'])
+      .toContain('split-tide-arrow');
+    runtime.e2eAdvanceBattle(0);
+
+    const realSkill = app.querySelector<HTMLButtonElement>(
+      '[data-battle-skill="tidal-volley"]',
+    );
+    expect(realSkill).not.toBeNull();
+    expect(realSkill?.disabled).toBe(false);
+    expect(runtime.e2eSnapshot().battle?.cooldowns['tidal-volley']).toBe(0);
+    realSkill?.click();
+    expect(runtime.e2eSnapshot().battle?.cooldowns['tidal-volley'])
+      .toBeGreaterThan(0);
+    runtime.e2eAdvanceBattle(17);
+    const effectKinds = runtime.e2eSnapshot().verification.effectKinds;
+    expect(effectKinds).toContain('split-chevron');
+    expect(effectKinds).toEqual([...new Set(effectKinds)]);
+    expect(Object.isFrozen(effectKinds)).toBe(true);
+  }, 15_000);
 
   it('persists the three real first-run battle actions and emits each tutorial event once', async () => {
     const restoreCanvas = installCanvas2DStub();

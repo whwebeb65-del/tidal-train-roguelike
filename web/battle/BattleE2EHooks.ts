@@ -50,6 +50,7 @@ export interface BattleE2ESnapshot {
     readonly precisionWeakPointHits: number;
     readonly musicIntensity: BattleMusicIntensity;
     readonly firstRunTutorialStep: FirstRunBattleTutorialStepId | null;
+    readonly effectKinds: readonly string[];
   };
   readonly progression: {
     readonly runLevel: number;

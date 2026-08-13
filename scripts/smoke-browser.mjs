@@ -106,6 +106,7 @@ async function waitForEvaluation(
 }
 
 const hookExpression = 'window.__TIDAL_TRAIN_E2E__';
+const playerSaveStorageKey = 'tidal-train-prototype-save-v1';
 const tidalArchiveStorageKey = 'tidal-train-tidal-archive-v1';
 const firstRunBattleTutorialStorageKey =
   'tidal-train-first-run-battle-tutorial-v1';
@@ -2765,6 +2766,366 @@ async function clickBattleButton(client, selector) {
   );
 }
 
+async function reloadWithSkillEvolutionFixture(client) {
+  await navigateScene(client, 'station');
+  await resetSaveBetweenViewports(client);
+  const installed = await evaluate(client, `(() => {
+    const exactE2EGate = new URLSearchParams(location.search).get('e2e') === '1'
+      && Boolean(${hookExpression});
+    if (!exactE2EGate) return false;
+    const save = JSON.parse(localStorage.getItem(
+      ${JSON.stringify(playerSaveStorageKey)}
+    ) ?? '{}');
+    localStorage.setItem(
+      ${JSON.stringify(playerSaveStorageKey)},
+      JSON.stringify({
+        ...save,
+        stamina: 30,
+        selectedCaptainId: 'captain-tide-female',
+        skillMasteryXp: {
+          'tidal-volley': 1,
+          'bubble-barrier': 1,
+          'extreme-tide': 1,
+        },
+      })
+    );
+    localStorage.setItem(
+      ${JSON.stringify(tidalArchiveStorageKey)},
+      ${JSON.stringify(JSON.stringify(createTidalArchiveFixture()))}
+    );
+    localStorage.setItem(
+      ${JSON.stringify(firstRunBattleTutorialStorageKey)},
+      ${JSON.stringify(JSON.stringify(completedFirstRunBattleTutorialFixture))}
+    );
+    return true;
+  })()`);
+  assert.equal(
+    installed,
+    true,
+    'skill evolution fixture requires the exact e2e=1 gate',
+  );
+  await client.send('Page.reload', { ignoreCache: true });
+  await waitForEvaluation(
+    client,
+    `Boolean(${hookExpression})
+      && ${hookExpression}.snapshot().sceneId === 'station'
+      && ${hookExpression}.snapshot().progression.stamina === 30`,
+    { label: 'authoritative mastery save reload' },
+  );
+}
+
+function signaturePixelRegion(signature) {
+  if (signature.skillId === 'tidal-volley') {
+    return { name: signature.effectKind, x: 145, y: 600, width: 100, height: 100 };
+  }
+  if (signature.skillId === 'bubble-barrier') {
+    return { name: signature.effectKind, x: 145, y: 640, width: 100, height: 100 };
+  }
+  return { name: signature.effectKind, x: 125, y: 360, width: 140, height: 140 };
+}
+
+function pixelDifference(before, after) {
+  const beforeRegion = before.regions[0];
+  const afterRegion = after.regions[0];
+  assert.ok(beforeRegion && afterRegion, 'signature pixel regions must exist');
+  return [...beforeRegion.meanColor, ...beforeRegion.shapeProfile]
+    .reduce((total, value, index) => (
+      total + Math.abs(value - [
+        ...afterRegion.meanColor,
+        ...afterRegion.shapeProfile,
+      ][index])
+    ), 0);
+}
+
+async function chooseEvolutionThroughRealProgression(client, signature, label) {
+  for (let iteration = 0; iteration < 2_000; iteration += 1) {
+    const state = await snapshot(client);
+    const battle = state.battle;
+    assert.ok(battle, `${label} must retain a battle snapshot`);
+    assert.notEqual(battle.status, 'defeat', `${label} must survive to its evolution`);
+    assert.notEqual(battle.status, 'victory', `${label} must choose its evolution before victory`);
+    if (battle.status === 'upgrade') {
+      if (battle.offeredUpgradeIds.includes(signature.variantId)) {
+        const card = await evaluate(client, `(() => {
+          const button = document.querySelector(
+            '[data-upgrade-id=${JSON.stringify(signature.variantId)}]'
+          );
+          return button instanceof HTMLButtonElement ? {
+            enabled: !button.disabled && !button.hidden,
+            evolution: button.classList.contains('is-evolution'),
+            text: button.textContent?.trim() ?? '',
+          } : null;
+        })()`);
+        assert.ok(card?.enabled, `${label} real evolution card must be enabled`);
+        assert.equal(card.evolution, true, `${label} evolution card styling`);
+        assert.ok(card.text.length > 0, `${label} evolution card must name its choice`);
+        assert.equal(
+          await clickBattleButton(
+            client,
+            `[data-upgrade-id="${signature.variantId}"]`,
+          ),
+          true,
+          `${label} evolution card must accept a real click`,
+        );
+        await callHook(client, 'await hook.requestResume(); return true;');
+        await advanceBattle(client, 0);
+        const selected = await snapshot(client);
+        assert.ok(
+          selected.progression.variants[signature.skillId]
+            .includes(signature.variantId),
+          `${label} selected variant must come from authoritative progression`,
+        );
+        const glyph = await evaluate(client, `(() => {
+          const button = document.querySelector(
+            '[data-battle-skill=${JSON.stringify(signature.skillId)}]'
+          );
+          const image = button?.querySelector(
+            '[data-skill-variant][alt=${JSON.stringify(signature.variantId)}]'
+          );
+          return image instanceof HTMLImageElement ? {
+            visible: !image.hidden,
+            loaded: image.complete && image.naturalWidth > 0,
+            src: image.currentSrc || image.src,
+          } : null;
+        })()`);
+        assert.equal(glyph?.visible, true, `${label} skill button variant glyph`);
+        assert.equal(glyph?.loaded, true, `${label} skill button glyph must load`);
+        assert.ok(glyph?.src, `${label} skill button glyph source`);
+        return;
+      }
+      assert.equal(
+        await callHook(client, 'return hook.chooseFirstUpgrade();'),
+        true,
+        `${label} deterministic real upgrade choice`,
+      );
+      await callHook(client, 'await hook.requestResume(); return true;');
+      await advanceBattle(client, 0);
+      continue;
+    }
+    if (battle.status === 'paused') {
+      await callHook(client, 'await hook.requestResume(); return true;');
+      continue;
+    }
+    await advanceBattle(client, 500);
+  }
+  assert.fail(`${label} never selected ${signature.variantId}`);
+}
+
+async function waitUntilSkillCanCast(client, signature, label) {
+  for (let iteration = 0; iteration < 800; iteration += 1) {
+    const state = await snapshot(client);
+    const battle = state.battle;
+    assert.ok(battle, `${label} cast preparation must retain battle`);
+    if (battle.status === 'upgrade') {
+      assert.equal(await callHook(client, 'return hook.chooseFirstUpgrade();'), true);
+      await callHook(client, 'await hook.requestResume(); return true;');
+      await advanceBattle(client, 0);
+      continue;
+    }
+    if (battle.status === 'running') {
+      const enoughEnergy = signature.skillId !== 'extreme-tide'
+        || battle.energy >= 100;
+      if (battle.cooldowns[signature.skillId] <= 0 && enoughEnergy) return battle;
+      await advanceBattle(client, 100);
+      continue;
+    }
+    assert.fail(`${label} reached ${battle.status} before its real skill cast`);
+  }
+  assert.fail(`${label} skill never became castable`);
+}
+
+async function assertSignatureAvoidsProtectedControls(client, signature, label) {
+  const overlaps = await evaluate(client, `(() => {
+    const state = ${hookExpression}.snapshot();
+    const particle = state.effects?.particles.find(
+      (entry) => entry.kind === ${JSON.stringify(signature.effectKind)}
+    );
+    const canvas = document.querySelector('[data-battle-canvas]');
+    if (!particle || !(canvas instanceof HTMLCanvasElement)) return null;
+    const canvasRect = canvas.getBoundingClientRect();
+    const scaleX = canvasRect.width / 390;
+    const scaleY = canvasRect.height / 844;
+    const radius = Math.max(3, particle.size) * Math.max(scaleX, scaleY);
+    const particleRect = {
+      left: canvasRect.left + particle.x * scaleX - radius,
+      right: canvasRect.left + particle.x * scaleX + radius,
+      top: canvasRect.top + particle.y * scaleY - radius,
+      bottom: canvasRect.top + particle.y * scaleY + radius,
+    };
+    const intersects = (rect) => particleRect.left < rect.right
+      && particleRect.right > rect.left
+      && particleRect.top < rect.bottom
+      && particleRect.bottom > rect.top;
+    const selectors = [
+      '.battle-hud__tide-log',
+      '[data-battle-action="claim-interaction"]:not([hidden])',
+      '[data-battle-skill]:not([data-battle-skill='
+        + ${JSON.stringify(signature.skillId)} + '])',
+    ];
+    return selectors.flatMap((selector) => (
+      [...document.querySelectorAll(selector)]
+        .filter((node) => node instanceof HTMLElement && !node.hidden)
+        .filter((node) => intersects(node.getBoundingClientRect()))
+        .map(() => selector)
+    ));
+  })()`);
+  assert.deepEqual(overlaps, [], `${label} signature overlaps protected controls`);
+}
+
+async function castAndObserveSignature(client, signature, label, reducedMotion) {
+  const castable = await waitUntilSkillCanCast(client, signature, label);
+  const pixelRegion = signaturePixelRegion(signature);
+  const beforePixels = await inspectBattleCanvasRegions(client, [pixelRegion]);
+  const beforeElapsedMs = castable.elapsedMs;
+  assert.equal(
+    await clickBattleButton(
+      client,
+      `[data-battle-skill="${signature.skillId}"]`,
+    ),
+    true,
+    `${label} real skill button click`,
+  );
+
+  let evidence = null;
+  for (let iteration = 0; iteration < 800; iteration += 1) {
+    await advanceBattle(client, iteration === 0 ? 17 : 100);
+    const state = await snapshot(client);
+    if (state.battle?.status === 'upgrade') {
+      assert.equal(await callHook(client, 'return hook.chooseFirstUpgrade();'), true);
+      await callHook(client, 'await hook.requestResume(); return true;');
+      await advanceBattle(client, 0);
+      continue;
+    }
+    if (reducedMotion) {
+      if (state.verification.effectKinds.includes('static-skill-silhouette')) {
+        evidence = state;
+        break;
+      }
+    } else if (state.verification.effectKinds.includes(signature.effectKind)) {
+      evidence = state;
+      break;
+    }
+    assert.ok(
+      state.battle?.status === 'running' || state.battle?.status === 'boss-intro',
+      `${label} must present its signature before battle termination`,
+    );
+  }
+  assert.ok(evidence, `${label} signature evidence is missing`);
+  assert.equal(
+    new Set(evidence.verification.effectKinds).size,
+    evidence.verification.effectKinds.length,
+    `${label} effectKinds must be deduplicated`,
+  );
+
+  if (reducedMotion) {
+    assert.ok(
+      evidence.verification.effectKinds.includes('static-skill-silhouette'),
+      `${label} reduced motion must retain a static-skill-silhouette`,
+    );
+    assert.equal(
+      evidence.verification.effectKinds.includes(signature.effectKind),
+      false,
+      `${label} reduced motion must remove moving signature particles`,
+    );
+    assert.deepEqual(
+      {
+        offsetX: evidence.trainMotion?.offsetX,
+        offsetY: evidence.trainMotion?.offsetY,
+        rotation: evidence.trainMotion?.rotation,
+        cannonRecoil: evidence.trainMotion?.cannonRecoil,
+        surge: evidence.trainMotion?.surge,
+        damagePulse: evidence.trainMotion?.damagePulse,
+      },
+      {
+        offsetX: 0,
+        offsetY: 0,
+        rotation: 0,
+        cannonRecoil: 0,
+        surge: 0,
+        damagePulse: 0,
+      },
+      `${label} reduced motion must suppress camera-driving motion`,
+    );
+  } else {
+    assert.ok(
+      evidence.verification.effectKinds.includes(signature.effectKind),
+      `${label} current effectKinds must contain ${signature.effectKind}`,
+    );
+    await assertSignatureAvoidsProtectedControls(client, signature, label);
+    const afterPixels = await inspectBattleCanvasRegions(client, [pixelRegion]);
+    assert.ok(
+      pixelDifference(beforePixels, afterPixels) > 0.001,
+      `${label} signature must produce a nonempty protected Canvas pixel diff`,
+    );
+  }
+  assert.ok(
+    (evidence.battle?.elapsedMs ?? 0) > beforeElapsedMs,
+    `${label} battle must continue progressing through the cast`,
+  );
+}
+
+async function assertSkillEvolutionSignatures(client, viewport) {
+  const emergencyBarrierSignatureKind = 'emergency-beacon';
+  const signatures = [
+    {
+      skillId: 'tidal-volley',
+      variantId: 'split-tide-arrow',
+      effectKind: 'split-chevron',
+    },
+    {
+      skillId: 'bubble-barrier',
+      variantId: 'bursting-bubble',
+      effectKind: 'bubble-fracture',
+      excludedKind: emergencyBarrierSignatureKind,
+    },
+    {
+      skillId: 'extreme-tide',
+      variantId: 'undertow-eye',
+      effectKind: 'undertow-eye',
+    },
+  ];
+
+  try {
+    for (const reducedMotion of [false, true]) {
+      await client.send('Emulation.setEmulatedMedia', {
+        media: 'screen',
+        features: [{
+          name: 'prefers-reduced-motion',
+          value: reducedMotion ? 'reduce' : 'no-preference',
+        }],
+      });
+      for (const signature of signatures) {
+        await reloadWithSkillEvolutionFixture(client);
+        const baseline = await snapshot(client);
+        await startNormalBattle(client);
+        const label = `${viewport.width}x${viewport.height} ${signature.variantId}`
+          + (reducedMotion ? ' reduced-motion' : ' animated');
+        await chooseEvolutionThroughRealProgression(client, signature, label);
+        await castAndObserveSignature(
+          client,
+          signature,
+          label,
+          reducedMotion,
+        );
+        if (signature.excludedKind) {
+          assert.equal(
+            (await snapshot(client)).verification.effectKinds
+              .includes(signature.excludedKind),
+            false,
+            `${label} must not substitute ${signature.excludedKind}`,
+          );
+        }
+        await returnToStation(client, baseline.diagnostics.activeListeners);
+      }
+    }
+  } finally {
+    await client.send('Emulation.setEmulatedMedia', {
+      media: 'screen',
+      features: [{ name: 'prefers-reduced-motion', value: 'no-preference' }],
+    });
+  }
+}
+
 // Exercise the real card controls with a stable defensive/offensive priority;
 // this avoids treating the generated card order as player strategy.
 async function chooseStrategicUpgrade(client, offeredUpgradeIds) {
@@ -3408,6 +3769,9 @@ async function runViewport(client, viewport, smokeId, browserErrors) {
     await assertReducedMotionResilience(client, label);
     await resetSaveBetweenViewports(client);
     await ensureCaptainSelected(client);
+    await assertSkillEvolutionSignatures(client, viewport);
+    await resetSaveBetweenViewports(client);
+    await ensureCaptainSelected(client);
   }
   const stationPose = await measureStationDeparturePose(client, label);
 
@@ -3420,7 +3784,7 @@ async function runViewport(client, viewport, smokeId, browserErrors) {
       ['victory', 'victory'],
       `${label} later full battles must both finish in victory`,
     );
-    detail = `two runs ${first.terminalStatus}/${second.terminalStatus}`;
+    detail = `two runs victory/victory`;
   } else {
     const brief = await runBriefBattle(client, label);
     detail = `auto-fire ${brief.fire.maxProjectiles} projectile(s)`;

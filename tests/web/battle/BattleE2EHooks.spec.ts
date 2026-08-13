@@ -32,6 +32,7 @@ function createController(): BattleE2EController {
         precisionWeakPointHits: 0,
         musicIntensity: 0,
         firstRunTutorialStep: 'aim',
+        effectKinds: Object.freeze([]),
       },
       progression: {
         runLevel: 1,
@@ -90,6 +91,9 @@ describe('BattleE2EHooks', () => {
     expect(target.__TIDAL_TRAIN_E2E__?.setMainCannonAim(195, 320)).toBe(true);
     expect(controller.e2eSetMainCannonAim).toHaveBeenCalledWith(195, 320);
     expect(target.__TIDAL_TRAIN_E2E__?.snapshot().trainMotion).toBeNull();
+    expect(Object.isFrozen(
+      target.__TIDAL_TRAIN_E2E__?.snapshot().verification.effectKinds,
+    )).toBe(true);
     expect(target.__TIDAL_TRAIN_E2E__?.snapshot().progression).toEqual({
       runLevel: 1,
       ranks: { 'tidal-volley': 1 },

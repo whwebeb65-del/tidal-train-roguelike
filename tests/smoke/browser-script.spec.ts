@@ -160,6 +160,20 @@ describe('browser smoke script', () => {
     );
   });
 
+  it('guards three real skill-evolution signatures without a build mutation hook', () => {
+    const source = readFileSync('scripts/smoke-browser.mjs', 'utf8');
+
+    expect(source).toContain('assertSkillEvolutionSignatures');
+    expect(source).toContain('effectKinds');
+    expect(source).toContain('split-chevron');
+    expect(source).toContain('emergency-beacon');
+    expect(source).toContain('undertow-eye');
+    expect(source).toContain('victory/victory');
+    expect(source).not.toContain('e2eApplySkillVariant');
+    expect(source).not.toContain('forceSkillVariant');
+    expect(source).not.toMatch(/hook[^\n]*skillVariants[^\n]*=/);
+  });
+
   it('guards the complete tidal archive discovery feedback lifecycle', () => {
     const source = readFileSync('scripts/smoke-browser.mjs', 'utf8');
 

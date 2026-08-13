@@ -413,6 +413,7 @@ let activeBattleEngine: BattleEngine | null = null;
 let activeBattleProgression: ProgressionSnapshot | null = null;
 let activeBattleSettlement: BattleSettlementPresentation | null = null;
 let activeBattleScene: BattleScene | null = null;
+let activeBattleEffects: EffectSystem | null = null;
 let preparedBattleScene: BattleScene | null = null;
 let preparedBattleAccountLevel: number | null = null;
 let preparedBattleSpeed: { initial: BattleSpeed; available: readonly BattleSpeed[] } | null = null;
@@ -519,13 +520,15 @@ function createBattleScene(
   engine: BattleEngine,
   assets: BattleAssetSet<BattleArtId>,
 ): BattleScene {
+  const effects = new EffectSystem({
+    particleLimit: 200,
+    damageNumberLimit: 18,
+    reducedMotion: effectiveReducedMotion,
+  });
+  activeBattleEffects = effects;
   return new BattleScene({
     engine,
-    effects: new EffectSystem({
-      particleLimit: 200,
-      damageNumberLimit: 18,
-      reducedMotion: effectiveReducedMotion,
-    }),
+    effects,
     assets,
     callbacks: {
       onOutcome: settleBattleOutcome,
@@ -2624,6 +2627,13 @@ function e2eSnapshot(): BattleE2ESnapshot {
   const sceneId = router.currentSceneId
     ?? (phase === 'combat' ? 'battle' : hubView);
   const snapshot = diagnostics.snapshot();
+  const effectView = activeBattleScene ? activeBattleEffects?.view : null;
+  const effectKinds = Object.freeze(effectView
+    ? [...new Set([
+        ...effectView.particles.map((particle) => particle.kind),
+        ...effectView.rings.map((ring) => ring.kind ?? 'impact-ring'),
+      ])]
+    : []);
   return {
     sceneId,
     battle: activeBattleEngine
@@ -2646,6 +2656,7 @@ function e2eSnapshot(): BattleE2ESnapshot {
             firstRunBattleTutorialState,
           )?.stepId ?? null
           : null,
+      effectKinds,
     },
     progression: {
       runLevel: activeBattleEngine?.frame.runLevel ?? 1,
