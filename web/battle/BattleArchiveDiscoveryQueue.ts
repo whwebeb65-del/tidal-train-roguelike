@@ -28,7 +28,7 @@ export class BattleArchiveDiscoveryQueue {
     if (this.lastTimestampMs === null) {
       this.lastTimestampMs = nowMs;
     } else if (nowMs < this.lastTimestampMs) {
-      this.lastTimestampMs = null;
+      this.lastTimestampMs = nowMs;
     } else {
       elapsedMs = nowMs - this.lastTimestampMs;
       this.lastTimestampMs = nowMs;

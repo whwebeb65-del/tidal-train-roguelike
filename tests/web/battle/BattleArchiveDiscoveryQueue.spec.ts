@@ -90,9 +90,8 @@ describe('BattleArchiveDiscoveryQueue', () => {
     expect(queue.update(10_000, true)).toBe(A);
     expect(queue.update(11_000, true)).toBe(A);
     expect(queue.update(500, true)).toBe(A);
-    expect(queue.update(1_900, true)).toBe(A);
-    expect(queue.update(3_299, true)).toBe(A);
-    expect(queue.update(3_300, true)).toBeNull();
+    expect(queue.update(1_899, true)).toBe(A);
+    expect(queue.update(1_900, true)).toBeNull();
   });
 
   it('suppresses duplicate active and queued keys but permits a later enqueue after expiry', () => {

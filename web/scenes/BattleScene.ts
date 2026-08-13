@@ -715,6 +715,7 @@ export class BattleScene implements GameScene {
     const archiveDiscoveryEligible =
       this.dependencies.engine.frame.status === 'running'
       && !this.visibilityPaused
+      && !this.archiveDiscoveryClockResetPending
       && this.settlement === null
       && firstRunTutorialPrompt === null;
     const archiveDiscovery = this.archiveDiscoveryQueue.update(
