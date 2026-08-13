@@ -162,8 +162,18 @@ describe('browser smoke script', () => {
 
   it('guards three real skill-evolution signatures without a build mutation hook', () => {
     const source = readFileSync('scripts/smoke-browser.mjs', 'utf8');
+    const castStart = source.indexOf(
+      'async function castAndObserveSignature',
+    );
+    const castEnd = source.indexOf(
+      'async function assertSkillEvolutionSignatures',
+      castStart,
+    );
+    const castSource = source.slice(castStart, castEnd);
 
     expect(source).toContain('assertSkillEvolutionSignatures');
+    expect(source).toContain('assertApprovedE2EHookSurface');
+    expect(source).toContain('approvedE2EHookKeys');
     expect(source).toContain('effectKinds');
     expect(source).toContain('split-chevron');
     expect(source).toContain('emergency-beacon');
@@ -172,6 +182,29 @@ describe('browser smoke script', () => {
     expect(source).not.toContain('e2eApplySkillVariant');
     expect(source).not.toContain('forceSkillVariant');
     expect(source).not.toMatch(/hook[^\n]*skillVariants[^\n]*=/);
+    expect(source).not.toMatch(
+      /(?:\.skillVariants|\[['"]skillVariants['"]\])(?:\s*\[[^\]]+\])*\s*=/s,
+    );
+    expect(castSource).toContain('effects?.camera');
+    expect(castSource).not.toContain('trainMotion');
+    expect(castSource).toContain('static-skill-silhouette');
+    expect(castSource).toContain('stableStaticRing');
+    expect(castSource).toContain('secondaryColor');
+    expect(castSource).toContain('sampleSignaturePixels');
+    expect(castSource).toContain('captureSignaturePixelBaseline');
+    expect(source).toContain('baselinePrimaryMatches');
+    expect(source).toContain('newPrimaryMatches');
+    expect(source).toContain('primaryMatchIncrease');
+    expect(source).toContain('signatureMotifBounds');
+    expect(source).toContain("querySelectorAll('[data-battle-skill]')");
+    expect(castSource).not.toContain('pixelDifference');
+    expect(source).not.toContain('primaryDistance <= 160');
+    expect(source).toContain('#59e9ff');
+    expect(source).toContain('#f1ffff');
+    expect(source).toContain('#ff735f');
+    expect(source).toContain('#ffd58a');
+    expect(source).toContain('#456fe8');
+    expect(source).toContain('#78e8ff');
   });
 
   it('guards the complete tidal archive discovery feedback lifecycle', () => {

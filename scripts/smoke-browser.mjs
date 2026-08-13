@@ -106,6 +106,20 @@ async function waitForEvaluation(
 }
 
 const hookExpression = 'window.__TIDAL_TRAIN_E2E__';
+const approvedE2EHookKeys = Object.freeze([
+  'advanceBattle',
+  'chooseFirstUpgrade',
+  'navigate',
+  'requestPause',
+  'requestResume',
+  'returnToStation',
+  'setBattleSpeed',
+  'setMainCannonAim',
+  'snapshot',
+  'startDailyTrial',
+  'startNormalBattle',
+  'useSkill',
+]);
 const playerSaveStorageKey = 'tidal-train-prototype-save-v1';
 const tidalArchiveStorageKey = 'tidal-train-tidal-archive-v1';
 const firstRunBattleTutorialStorageKey =
@@ -136,6 +150,18 @@ function createTidalArchiveFixture({ unread = false } = {}) {
 
 async function snapshot(client) {
   return evaluate(client, `${hookExpression}.snapshot()`);
+}
+
+async function assertApprovedE2EHookSurface(client) {
+  const actualKeys = await evaluate(
+    client,
+    `Object.keys(${hookExpression} ?? {}).sort()`,
+  );
+  assert.deepEqual(
+    actualKeys,
+    [...approvedE2EHookKeys].sort(),
+    'E2E hook must expose only the approved lifecycle surface',
+  );
 }
 
 async function callHook(client, body) {
@@ -2814,27 +2840,265 @@ async function reloadWithSkillEvolutionFixture(client) {
   );
 }
 
-function signaturePixelRegion(signature) {
-  if (signature.skillId === 'tidal-volley') {
-    return { name: signature.effectKind, x: 145, y: 600, width: 100, height: 100 };
-  }
-  if (signature.skillId === 'bubble-barrier') {
-    return { name: signature.effectKind, x: 145, y: 640, width: 100, height: 100 };
-  }
-  return { name: signature.effectKind, x: 125, y: 360, width: 140, height: 140 };
+function parseHexRgb(color) {
+  const match = /^#([0-9a-f]{6})$/i.exec(color);
+  assert.ok(match, `expected a six-digit catalog color, received ${color}`);
+  const value = Number.parseInt(match[1], 16);
+  return [(value >> 16) & 255, (value >> 8) & 255, value & 255];
 }
 
-function pixelDifference(before, after) {
-  const beforeRegion = before.regions[0];
-  const afterRegion = after.regions[0];
-  assert.ok(beforeRegion && afterRegion, 'signature pixel regions must exist');
-  return [...beforeRegion.meanColor, ...beforeRegion.shapeProfile]
-    .reduce((total, value, index) => (
-      total + Math.abs(value - [
-        ...afterRegion.meanColor,
-        ...afterRegion.shapeProfile,
-      ][index])
-    ), 0);
+function transformByEffectCamera(point, camera) {
+  const cosine = Math.cos(camera.rotation);
+  const sine = Math.sin(camera.rotation);
+  const offsetX = point.x - 195;
+  const offsetY = point.y - 422;
+  return {
+    x: 195 + camera.x + offsetX * cosine - offsetY * sine,
+    y: 422 + camera.y + offsetX * sine + offsetY * cosine,
+  };
+}
+
+function signatureMotifBounds(particle, camera) {
+  const motifScale = 0.9 + particle.progress * 0.2;
+  const extentMultiplier = particle.kind === 'split-chevron'
+    ? 2.2
+    : particle.kind === 'bubble-fracture'
+      ? 2.6
+      : 3.2;
+  const radius = Math.max(2.5, particle.size * motifScale * extentMultiplier);
+  const center = transformByEffectCamera(particle, camera);
+  return {
+    x: center.x - radius,
+    y: center.y - radius,
+    width: radius * 2,
+    height: radius * 2,
+  };
+}
+
+function assertZeroEffectCamera(camera, label) {
+  assert.deepEqual(
+    camera,
+    { x: 0, y: 0, rotation: 0, amplitude: 0 },
+    `${label} reduced motion must zero the real effect camera`,
+  );
+}
+
+function animatedSignatureParticle(effects, signature, label) {
+  const matches = effects?.particles.filter((particle) => (
+    particle.kind === signature.effectKind
+    && particle.color === signature.primary
+    && particle.layer === 'front-effects'
+    && particle.alpha > 0
+  )) ?? [];
+  assert.equal(
+    matches.length,
+    1,
+    `${label} must expose one current target particle: ${JSON.stringify(matches)}`,
+  );
+  return matches[0];
+}
+
+function stableStaticRing(effects, signature, label) {
+  const matches = effects?.rings.filter((ring) => (
+    ring.kind === 'static-skill-silhouette'
+    && ring.color === signature.primary
+    && ring.secondaryColor === signature.secondary
+    && Math.abs(ring.x - signature.staticRing.x) < 0.001
+    && Math.abs(ring.y - signature.staticRing.y) < 0.001
+    && Math.abs(ring.radius - signature.staticRing.radius) < 0.001
+    && ring.alpha > 0
+  )) ?? [];
+  assert.equal(
+    matches.length,
+    1,
+    `${label} must expose one catalog-bound static ring: ${JSON.stringify(matches)}`,
+  );
+  return matches[0];
+}
+
+async function captureSignaturePixelBaseline(client) {
+  const baseline = await evaluate(client, `(() => {
+    const canvas = document.querySelector('[data-battle-canvas]');
+    if (!(canvas instanceof HTMLCanvasElement)) return null;
+    const context = canvas.getContext('2d');
+    if (!context) return null;
+    const image = context.getImageData(0, 0, canvas.width, canvas.height);
+    Object.defineProperty(canvas, '__signaturePixelBaseline', {
+      configurable: true,
+      value: {
+        width: canvas.width,
+        height: canvas.height,
+        pixels: new Uint8ClampedArray(image.data),
+      },
+    });
+    return { width: canvas.width, height: canvas.height };
+  })()`);
+  assert.ok(
+    baseline?.width > 0 && baseline?.height > 0,
+    'signature Canvas baseline must be readable',
+  );
+}
+
+async function sampleSignaturePixels(
+  client,
+  evidence,
+  signature,
+  geometry,
+) {
+  const bounds = geometry.type === 'particle'
+    ? signatureMotifBounds(geometry.particle, evidence.effects.camera)
+    : {
+        x: geometry.ring.x - geometry.ring.radius - 3,
+        y: geometry.ring.y - geometry.ring.radius * 0.72 - 3,
+        width: geometry.ring.radius * 2 + 6,
+        height: geometry.ring.radius * 1.44 + 6,
+      };
+  const sample = await evaluate(client, `(() => {
+    const canvas = document.querySelector('[data-battle-canvas]');
+    if (!(canvas instanceof HTMLCanvasElement)) return null;
+    const context = canvas.getContext('2d');
+    if (!context) return null;
+    const baseline = canvas.__signaturePixelBaseline;
+    if (
+      !baseline
+      || baseline.width !== canvas.width
+      || baseline.height !== canvas.height
+    ) return null;
+    const cssWidth = Number.parseFloat(canvas.style.width);
+    const cssHeight = Number.parseFloat(canvas.style.height);
+    const scale = Math.min(cssWidth / 390, cssHeight / 844);
+    const offsetX = (cssWidth - 390 * scale) / 2;
+    const offsetY = (cssHeight - 844 * scale) / 2;
+    const pixelRatio = canvas.width / cssWidth;
+    const logicalBounds = ${JSON.stringify(bounds)};
+    const x = Math.max(0, Math.floor(
+      (offsetX + logicalBounds.x * scale) * pixelRatio
+    ));
+    const y = Math.max(0, Math.floor(
+      (offsetY + logicalBounds.y * scale) * pixelRatio
+    ));
+    const width = Math.max(1, Math.min(
+      canvas.width - x,
+      Math.ceil(logicalBounds.width * scale * pixelRatio)
+    ));
+    const height = Math.max(1, Math.min(
+      canvas.height - y,
+      Math.ceil(logicalBounds.height * scale * pixelRatio)
+    ));
+    const pixels = context.getImageData(x, y, width, height).data;
+    const primary = ${JSON.stringify(parseHexRgb(signature.primary))};
+    const secondary = ${JSON.stringify(parseHexRgb(signature.secondary))};
+    const distance = (red, green, blue, expected) => Math.hypot(
+      red - expected[0], green - expected[1], blue - expected[2]
+    );
+    const matchesCatalogColor = (red, green, blue, alpha, expected) => {
+      if (alpha <= 0) return false;
+      const expectedChroma = Math.max(...expected) - Math.min(...expected);
+      const actualChroma = Math.max(red, green, blue) - Math.min(red, green, blue);
+      if (expectedChroma >= 40 && actualChroma < expectedChroma * 0.45) {
+        return false;
+      }
+      return distance(red, green, blue, expected) <= 100;
+    };
+    let primaryMatches = 0;
+    let baselinePrimaryMatches = 0;
+    let newPrimaryMatches = 0;
+    let secondaryMatches = 0;
+    let baselineSecondaryMatches = 0;
+    let newSecondaryMatches = 0;
+    let closestPrimary = Infinity;
+    let closestSecondary = Infinity;
+    let closestPrimaryPixel = null;
+    for (let index = 0; index < pixels.length; index += 4) {
+      const pixelNumber = index / 4;
+      const row = Math.floor(pixelNumber / width);
+      const column = pixelNumber % width;
+      const baselineIndex = ((y + row) * canvas.width + x + column) * 4;
+      const red = pixels[index];
+      const green = pixels[index + 1];
+      const blue = pixels[index + 2];
+      const alpha = pixels[index + 3];
+      const baselineRed = baseline.pixels[baselineIndex];
+      const baselineGreen = baseline.pixels[baselineIndex + 1];
+      const baselineBlue = baseline.pixels[baselineIndex + 2];
+      const baselineAlpha = baseline.pixels[baselineIndex + 3];
+      const primaryDistance = distance(red, green, blue, primary);
+      const secondaryDistance = distance(red, green, blue, secondary);
+      const baselinePrimaryDistance = distance(
+        baselineRed, baselineGreen, baselineBlue, primary
+      );
+      const baselineSecondaryDistance = distance(
+        baselineRed, baselineGreen, baselineBlue, secondary
+      );
+      if (primaryDistance < closestPrimary) {
+        closestPrimary = primaryDistance;
+        closestPrimaryPixel = [red, green, blue, pixels[index + 3]];
+      }
+      closestSecondary = Math.min(closestSecondary, secondaryDistance);
+      const primaryAfter = matchesCatalogColor(red, green, blue, alpha, primary);
+      const primaryBefore = matchesCatalogColor(
+        baselineRed, baselineGreen, baselineBlue, baselineAlpha, primary
+      );
+      if (primaryAfter) primaryMatches += 1;
+      if (primaryBefore) baselinePrimaryMatches += 1;
+      if (primaryAfter && (
+        !primaryBefore || primaryDistance + 12 <= baselinePrimaryDistance
+      )) {
+        newPrimaryMatches += 1;
+      }
+      if (${JSON.stringify(geometry.type)} !== 'ring') continue;
+      const secondaryAfter = matchesCatalogColor(
+        red, green, blue, alpha, secondary
+      );
+      const secondaryBefore = matchesCatalogColor(
+        baselineRed, baselineGreen, baselineBlue, baselineAlpha, secondary
+      );
+      if (secondaryAfter) secondaryMatches += 1;
+      if (secondaryBefore) baselineSecondaryMatches += 1;
+      if (secondaryAfter && (
+        !secondaryBefore || secondaryDistance + 12 <= baselineSecondaryDistance
+      )) {
+        newSecondaryMatches += 1;
+      }
+    }
+    return {
+      bounds: logicalBounds,
+      width,
+      height,
+      primaryMatches,
+      baselinePrimaryMatches,
+      primaryMatchIncrease: newPrimaryMatches,
+      newPrimaryMatches,
+      secondaryMatches,
+      baselineSecondaryMatches,
+      secondaryMatchIncrease: newSecondaryMatches,
+      newSecondaryMatches,
+      closestPrimary,
+      closestSecondary,
+      closestPrimaryPixel,
+    };
+  })()`);
+  assert.ok(sample, 'signature Canvas sample must be readable');
+  const minimumPrimaryMatches = geometry.type === 'ring' ? 6 : 3;
+  assert.ok(
+    sample.primaryMatches >= minimumPrimaryMatches,
+    `${signature.variantId} renderer lacks catalog-primary pixels: ${JSON.stringify(sample)}`,
+  );
+  assert.ok(
+    sample.primaryMatchIncrease >= 3 && sample.newPrimaryMatches >= 3,
+    `${signature.variantId} renderer lacks baseline-to-target primary-color evidence: ${JSON.stringify(sample)}`,
+  );
+  if (geometry.type === 'ring') {
+    assert.ok(
+      sample.secondaryMatches >= 6,
+      `${signature.variantId} static renderer lacks catalog-secondary pixels: ${JSON.stringify(sample)}`,
+    );
+    assert.ok(
+      sample.secondaryMatchIncrease >= 3 && sample.newSecondaryMatches >= 4,
+      `${signature.variantId} static renderer lacks baseline-to-target secondary-color evidence: ${JSON.stringify(sample)}`,
+    );
+  }
+  return { bounds, sample };
 }
 
 async function chooseEvolutionThroughRealProgression(client, signature, label) {
@@ -2875,12 +3139,23 @@ async function chooseEvolutionThroughRealProgression(client, signature, label) {
             .includes(signature.variantId),
           `${label} selected variant must come from authoritative progression`,
         );
-        const glyph = await evaluate(client, `(() => {
+        await waitForEvaluation(client, `(() => {
           const button = document.querySelector(
             '[data-battle-skill=${JSON.stringify(signature.skillId)}]'
           );
           const image = button?.querySelector(
             '[data-skill-variant][alt=${JSON.stringify(signature.variantId)}]'
+          );
+          return image instanceof HTMLImageElement
+            && !image.hidden
+            && image.complete
+            && image.naturalWidth > 0
+            && Boolean(image.currentSrc || image.src);
+        })()`, { label: `${label} loaded skill button variant glyph` });
+        const glyph = await evaluate(client, `(() => {
+          const image = document.querySelector(
+            '[data-battle-skill=${JSON.stringify(signature.skillId)}] '
+              + '[data-skill-variant][alt=${JSON.stringify(signature.variantId)}]'
           );
           return image instanceof HTMLImageElement ? {
             visible: !image.hidden,
@@ -2934,49 +3209,105 @@ async function waitUntilSkillCanCast(client, signature, label) {
   assert.fail(`${label} skill never became castable`);
 }
 
-async function assertSignatureAvoidsProtectedControls(client, signature, label) {
-  const overlaps = await evaluate(client, `(() => {
-    const state = ${hookExpression}.snapshot();
-    const particle = state.effects?.particles.find(
-      (entry) => entry.kind === ${JSON.stringify(signature.effectKind)}
-    );
+async function assertSignatureAvoidsProtectedControls(
+  client,
+  signature,
+  label,
+  logicalBounds,
+) {
+  const geometry = await evaluate(client, `(() => {
     const canvas = document.querySelector('[data-battle-canvas]');
-    if (!particle || !(canvas instanceof HTMLCanvasElement)) return null;
+    if (!(canvas instanceof HTMLCanvasElement)) return null;
     const canvasRect = canvas.getBoundingClientRect();
-    const scaleX = canvasRect.width / 390;
-    const scaleY = canvasRect.height / 844;
-    const radius = Math.max(3, particle.size) * Math.max(scaleX, scaleY);
-    const particleRect = {
-      left: canvasRect.left + particle.x * scaleX - radius,
-      right: canvasRect.left + particle.x * scaleX + radius,
-      top: canvasRect.top + particle.y * scaleY - radius,
-      bottom: canvasRect.top + particle.y * scaleY + radius,
+    const scale = Math.min(canvasRect.width / 390, canvasRect.height / 844);
+    const offsetX = (canvasRect.width - 390 * scale) / 2;
+    const offsetY = (canvasRect.height - 844 * scale) / 2;
+    const bounds = ${JSON.stringify(logicalBounds)};
+    const motifRect = {
+      left: canvasRect.left + offsetX + bounds.x * scale,
+      right: canvasRect.left + offsetX + (bounds.x + bounds.width) * scale,
+      top: canvasRect.top + offsetY + bounds.y * scale,
+      bottom: canvasRect.top + offsetY + (bounds.y + bounds.height) * scale,
     };
-    const intersects = (rect) => particleRect.left < rect.right
-      && particleRect.right > rect.left
-      && particleRect.top < rect.bottom
-      && particleRect.bottom > rect.top;
-    const selectors = [
-      '.battle-hud__tide-log',
-      '[data-battle-action="claim-interaction"]:not([hidden])',
-      '[data-battle-skill]:not([data-battle-skill='
-        + ${JSON.stringify(signature.skillId)} + '])',
-    ];
-    return selectors.flatMap((selector) => (
-      [...document.querySelectorAll(selector)]
-        .filter((node) => node instanceof HTMLElement && !node.hidden)
-        .filter((node) => intersects(node.getBoundingClientRect()))
-        .map(() => selector)
-    ));
+    const intersects = (rect) => motifRect.left < rect.right
+      && motifRect.right > rect.left
+      && motifRect.top < rect.bottom
+      && motifRect.bottom > rect.top;
+    const controls = [
+      ...document.querySelectorAll('.battle-hud__tide-log'),
+      ...document.querySelectorAll(
+        '[data-battle-action="claim-interaction"]:not([hidden])'
+      ),
+      ...document.querySelectorAll('[data-battle-skill]'),
+    ].filter((node) => {
+      if (!(node instanceof HTMLElement) || node.hidden) return false;
+      const style = getComputedStyle(node);
+      const rect = node.getBoundingClientRect();
+      return style.display !== 'none'
+        && style.visibility === 'visible'
+        && Number.parseFloat(style.opacity) > 0
+        && rect.width > 0
+        && rect.height > 0;
+    });
+    const targetButton = document.querySelector(
+      '[data-battle-skill=${JSON.stringify(signature.skillId)}]'
+    );
+    const targetRect = targetButton?.getBoundingClientRect();
+    const topNode = targetRect
+      ? document.elementFromPoint(
+          targetRect.left + targetRect.width / 2,
+          targetRect.top + targetRect.height / 2
+        )
+      : null;
+    return {
+      canvasRect: {
+        left: canvasRect.left,
+        right: canvasRect.right,
+        top: canvasRect.top,
+        bottom: canvasRect.bottom,
+      },
+      motifRect,
+      overlaps: controls.filter((node) => intersects(node.getBoundingClientRect()))
+        .map((node) => ({
+          selector: node.hasAttribute('data-battle-skill')
+            ? '[data-battle-skill="'
+              + node.getAttribute('data-battle-skill') + '"]'
+            : node.className || node.getAttribute('data-battle-action'),
+          rect: (() => {
+            const rect = node.getBoundingClientRect();
+            return { left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom };
+          })(),
+        })),
+      targetButton: targetButton instanceof HTMLButtonElement && targetRect ? {
+        visible: targetRect.width > 0 && targetRect.height > 0,
+        width: targetRect.width,
+        height: targetRect.height,
+        topNodeOwned: topNode !== null && targetButton.contains(topNode),
+      } : null,
+    };
   })()`);
-  assert.deepEqual(overlaps, [], `${label} signature overlaps protected controls`);
+  assert.ok(geometry, `${label} signature geometry is unavailable`);
+  assert.deepEqual(
+    geometry.overlaps,
+    [],
+    `${label} renderer motif overlaps protected controls: ${JSON.stringify(geometry)}`,
+  );
+  assert.ok(geometry.targetButton?.visible, `${label} target skill remains visible`);
+  assert.ok(
+    geometry.targetButton.width >= 44 && geometry.targetButton.height >= 44,
+    `${label} target skill loses its touch target`,
+  );
+  assert.equal(
+    geometry.targetButton.topNodeOwned,
+    true,
+    `${label} Canvas must not cover the target skill DOM control`,
+  );
 }
 
 async function castAndObserveSignature(client, signature, label, reducedMotion) {
   const castable = await waitUntilSkillCanCast(client, signature, label);
-  const pixelRegion = signaturePixelRegion(signature);
-  const beforePixels = await inspectBattleCanvasRegions(client, [pixelRegion]);
   const beforeElapsedMs = castable.elapsedMs;
+  await captureSignaturePixelBaseline(client);
   assert.equal(
     await clickBattleButton(
       client,
@@ -2997,11 +3328,26 @@ async function castAndObserveSignature(client, signature, label, reducedMotion) 
       continue;
     }
     if (reducedMotion) {
-      if (state.verification.effectKinds.includes('static-skill-silhouette')) {
+      if (
+        state.verification.effectKinds.includes('static-skill-silhouette')
+        && state.effects?.rings.some((ring) => (
+          ring.kind === 'static-skill-silhouette'
+          && ring.color === signature.primary
+          && ring.secondaryColor === signature.secondary
+          && ring.alpha >= 0.65
+        ))
+      ) {
         evidence = state;
         break;
       }
-    } else if (state.verification.effectKinds.includes(signature.effectKind)) {
+    } else if (
+      state.verification.effectKinds.includes(signature.effectKind)
+      && state.effects?.particles.some((particle) => (
+        particle.kind === signature.effectKind
+        && particle.color === signature.primary
+        && particle.alpha >= 0.65
+      ))
+    ) {
       evidence = state;
       break;
     }
@@ -3027,35 +3373,74 @@ async function castAndObserveSignature(client, signature, label, reducedMotion) 
       false,
       `${label} reduced motion must remove moving signature particles`,
     );
+    assertZeroEffectCamera(evidence.effects?.camera, label);
+    const firstRing = stableStaticRing(evidence.effects, signature, label);
+    await sampleSignaturePixels(client, evidence, signature, {
+      type: 'ring',
+      ring: firstRing,
+    });
+    await advanceBattle(client, 17);
+    const stableStaticRingFrame = await snapshot(client);
+    assertZeroEffectCamera(stableStaticRingFrame.effects?.camera, label);
+    assert.equal(
+      stableStaticRingFrame.effects?.particles.some((particle) => (
+        particle.kind === signature.effectKind
+      )),
+      false,
+      `${label} second reduced frame must still omit moving target particles`,
+    );
+    const secondRing = stableStaticRing(
+      stableStaticRingFrame.effects,
+      signature,
+      `${label} second frame`,
+    );
     assert.deepEqual(
       {
-        offsetX: evidence.trainMotion?.offsetX,
-        offsetY: evidence.trainMotion?.offsetY,
-        rotation: evidence.trainMotion?.rotation,
-        cannonRecoil: evidence.trainMotion?.cannonRecoil,
-        surge: evidence.trainMotion?.surge,
-        damagePulse: evidence.trainMotion?.damagePulse,
+        id: secondRing.id,
+        kind: secondRing.kind,
+        x: secondRing.x,
+        y: secondRing.y,
+        radius: secondRing.radius,
+        color: secondRing.color,
+        secondaryColor: secondRing.secondaryColor,
       },
       {
-        offsetX: 0,
-        offsetY: 0,
-        rotation: 0,
-        cannonRecoil: 0,
-        surge: 0,
-        damagePulse: 0,
+        id: firstRing.id,
+        kind: firstRing.kind,
+        x: firstRing.x,
+        y: firstRing.y,
+        radius: firstRing.radius,
+        color: firstRing.color,
+        secondaryColor: firstRing.secondaryColor,
       },
-      `${label} reduced motion must suppress camera-driving motion`,
+      `${label} static-skill-silhouette geometry must remain stable across real frames`,
     );
   } else {
     assert.ok(
       evidence.verification.effectKinds.includes(signature.effectKind),
       `${label} current effectKinds must contain ${signature.effectKind}`,
     );
-    await assertSignatureAvoidsProtectedControls(client, signature, label);
-    const afterPixels = await inspectBattleCanvasRegions(client, [pixelRegion]);
+    const particle = animatedSignatureParticle(
+      evidence.effects,
+      signature,
+      label,
+    );
+    const causalPixels = await sampleSignaturePixels(
+      client,
+      evidence,
+      signature,
+      { type: 'particle', particle },
+    );
+    await assertSignatureAvoidsProtectedControls(
+      client,
+      signature,
+      label,
+      causalPixels.bounds,
+    );
     assert.ok(
-      pixelDifference(beforePixels, afterPixels) > 0.001,
-      `${label} signature must produce a nonempty protected Canvas pixel diff`,
+      evidence.battle.cooldowns[signature.skillId] > 0
+        || signature.skillId === 'extreme-tide',
+      `${label} real cast must authoritatively consume its cooldown`,
     );
   }
   assert.ok(
@@ -3071,17 +3456,26 @@ async function assertSkillEvolutionSignatures(client, viewport) {
       skillId: 'tidal-volley',
       variantId: 'split-tide-arrow',
       effectKind: 'split-chevron',
+      primary: '#59e9ff',
+      secondary: '#f1ffff',
+      staticRing: { x: 195, y: 650, radius: 38 },
     },
     {
       skillId: 'bubble-barrier',
       variantId: 'bursting-bubble',
       effectKind: 'bubble-fracture',
+      primary: '#ff735f',
+      secondary: '#ffd58a',
+      staticRing: { x: 195, y: 690, radius: 54 },
       excludedKind: emergencyBarrierSignatureKind,
     },
     {
       skillId: 'extreme-tide',
       variantId: 'undertow-eye',
       effectKind: 'undertow-eye',
+      primary: '#456fe8',
+      secondary: '#78e8ff',
+      staticRing: { x: 195, y: 430, radius: 70 },
     },
   ];
 
@@ -3684,6 +4078,7 @@ async function loadViewport(client, viewport, smokeId) {
       && Boolean(${hookExpression})`,
     { label: `${viewport.width}x${viewport.height} E2E hook` },
   );
+  await assertApprovedE2EHookSurface(client);
   await ensureCaptainSelected(client);
   if (!viewport.full) {
     await reloadWithE2EArchiveFixture(client, { unread: true });

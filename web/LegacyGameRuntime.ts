@@ -2628,6 +2628,51 @@ function e2eSnapshot(): BattleE2ESnapshot {
     ?? (phase === 'combat' ? 'battle' : hubView);
   const snapshot = diagnostics.snapshot();
   const effectView = activeBattleScene ? activeBattleEffects?.view : null;
+  const effects = effectView
+    ? Object.freeze({
+        particles: Object.freeze(effectView.particles.map((particle) => (
+          Object.freeze({
+            id: particle.id,
+            kind: particle.kind,
+            layer: particle.layer,
+            x: particle.x,
+            y: particle.y,
+            size: particle.size,
+            color: particle.color,
+            alpha: particle.alpha,
+            rotation: particle.rotation,
+            progress: particle.progress,
+            sourceEnemyId: particle.sourceEnemyId,
+            originX: particle.originX,
+            originY: particle.originY,
+          })
+        ))),
+        damageNumbers: Object.freeze(effectView.damageNumbers.map((number) => (
+          Object.freeze({
+            id: number.id,
+            x: number.x,
+            y: number.y,
+            critical: number.critical,
+          })
+        ))),
+        rings: Object.freeze(effectView.rings.map((ring) => Object.freeze({
+          id: ring.id,
+          kind: ring.kind ?? 'impact-ring',
+          x: ring.x,
+          y: ring.y,
+          radius: ring.radius,
+          color: ring.color,
+          alpha: ring.alpha,
+          secondaryColor: ring.secondaryColor,
+        }))),
+        camera: Object.freeze({
+          x: effectView.camera.x,
+          y: effectView.camera.y,
+          rotation: effectView.camera.rotation,
+          amplitude: effectView.camera.amplitude,
+        }),
+      })
+    : null;
   const effectKinds = Object.freeze(effectView
     ? [...new Set([
         ...effectView.particles.map((particle) => particle.kind),
@@ -2642,9 +2687,7 @@ function e2eSnapshot(): BattleE2ESnapshot {
     trainMotion: activeBattleScene
       ? activeBattleScene.snapshotTrainMotion()
       : null,
-    effects: activeBattleScene
-      ? activeBattleScene.snapshotEffectGeometry()
-      : null,
+    effects,
     diagnostics: snapshot,
     settlementCount: snapshot.settledBattleCount,
     verification: {

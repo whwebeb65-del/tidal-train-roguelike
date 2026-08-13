@@ -775,6 +775,33 @@ describe('EffectSystem', () => {
     },
   );
 
+  it('keeps every bubble evolution motif above the 390px skill-button protection line', () => {
+    const effects = createEffectsForQuality('high');
+    const ids = [
+      'bursting-bubble',
+      'reflective-spines',
+      'overflow-membrane',
+    ] as const;
+    effects.consume([
+      { type: 'skill-used', skillId: 'bubble-barrier' },
+      { type: 'barrier-burst' },
+    ], createVariantFrame(ids));
+
+    const bubbleMotifs = effects.view.particles.filter((particle) => (
+      ids.some((id) => (
+        getSkillEvolutionVisualSignature(id).particleKind === particle.kind
+      ))
+    ));
+    expect(bubbleMotifs).toHaveLength(ids.length);
+    for (const particle of bubbleMotifs) {
+      const maximumRendererMotifScale = 1.1;
+      const conservativeRendererExtent = 3.2;
+      const motifBottom = particle.y
+        + particle.size * maximumRendererMotifScale * conservativeRendererExtent;
+      expect(motifBottom).toBeLessThanOrEqual(688);
+    }
+  });
+
   it.each(['high', 'medium', 'low'] as const)(
     'keeps every selected motif while respecting the %s signature budget',
     (quality) => {

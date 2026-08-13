@@ -7,7 +7,10 @@ import type {
   BattleDiagnosticsSnapshot,
 } from './BattleDiagnostics';
 import type { TrainMotionFrameView } from './TrainMotionTypes';
-import type { EffectParticleKind } from './EffectSystem';
+import type {
+  EffectParticleKind,
+  ImpactRingView,
+} from './EffectSystem';
 import type { BattleSpeed } from '../../src/domain/progression/AccountProgressionSystem';
 import type { BattleMusicIntensity } from '../audio/BattleMusicDirector';
 import type { FirstRunBattleTutorialStepId } from '../../src/domain/onboarding/FirstRunBattleTutorial';
@@ -16,9 +19,12 @@ export interface BattleE2EEffectGeometry {
   readonly particles: readonly {
     readonly id: number;
     readonly kind: EffectParticleKind;
+    readonly layer: 'enemies' | 'front-effects';
     readonly x: number;
     readonly y: number;
     readonly size: number;
+    readonly color: string;
+    readonly alpha: number;
     readonly rotation: number;
     readonly progress: number;
     readonly sourceEnemyId?: number | null;
@@ -33,10 +39,20 @@ export interface BattleE2EEffectGeometry {
   }[];
   readonly rings: readonly {
     readonly id: number;
+    readonly kind: NonNullable<ImpactRingView['kind']>;
     readonly x: number;
     readonly y: number;
     readonly radius: number;
+    readonly color: string;
+    readonly alpha: number;
+    readonly secondaryColor?: string;
   }[];
+  readonly camera: Readonly<{
+    readonly x: number;
+    readonly y: number;
+    readonly rotation: number;
+    readonly amplitude: number;
+  }>;
 }
 
 export interface BattleE2ESnapshot {

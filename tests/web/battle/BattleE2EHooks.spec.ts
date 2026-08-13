@@ -13,7 +13,17 @@ function createController(): BattleE2EController {
       sceneId: 'station',
       battle: null,
       trainMotion: null,
-      effects: null,
+      effects: Object.freeze({
+        particles: Object.freeze([]),
+        damageNumbers: Object.freeze([]),
+        rings: Object.freeze([]),
+        camera: Object.freeze({
+          x: 0,
+          y: 0,
+          rotation: 0,
+          amplitude: 0,
+        }),
+      }),
       diagnostics: {
         activeFrameLoops: 0,
         activeListeners: 0,
@@ -91,6 +101,12 @@ describe('BattleE2EHooks', () => {
     expect(target.__TIDAL_TRAIN_E2E__?.setMainCannonAim(195, 320)).toBe(true);
     expect(controller.e2eSetMainCannonAim).toHaveBeenCalledWith(195, 320);
     expect(target.__TIDAL_TRAIN_E2E__?.snapshot().trainMotion).toBeNull();
+    expect(target.__TIDAL_TRAIN_E2E__?.snapshot().effects?.camera).toEqual({
+      x: 0,
+      y: 0,
+      rotation: 0,
+      amplitude: 0,
+    });
     expect(Object.isFrozen(
       target.__TIDAL_TRAIN_E2E__?.snapshot().verification.effectKinds,
     )).toBe(true);

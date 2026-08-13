@@ -1023,10 +1023,30 @@ describe('LegacyGameRuntime E2E snapshots', () => {
     expect(runtime.e2eSnapshot().battle?.cooldowns['tidal-volley'])
       .toBeGreaterThan(0);
     runtime.e2eAdvanceBattle(17);
-    const effectKinds = runtime.e2eSnapshot().verification.effectKinds;
+    const signatureSnapshot = runtime.e2eSnapshot();
+    const effectKinds = signatureSnapshot.verification.effectKinds;
     expect(effectKinds).toContain('split-chevron');
     expect(effectKinds).toEqual([...new Set(effectKinds)]);
     expect(Object.isFrozen(effectKinds)).toBe(true);
+    expect(signatureSnapshot.effects?.camera).toEqual({
+      x: expect.any(Number),
+      y: expect.any(Number),
+      rotation: expect.any(Number),
+      amplitude: expect.any(Number),
+    });
+    const signatureParticle = signatureSnapshot.effects?.particles.find(
+      (particle) => particle.kind === 'split-chevron',
+    );
+    expect(signatureParticle).toMatchObject({
+      kind: 'split-chevron',
+      layer: 'front-effects',
+      color: '#59e9ff',
+      alpha: expect.any(Number),
+    });
+    expect(Object.isFrozen(signatureSnapshot.effects)).toBe(true);
+    expect(Object.isFrozen(signatureSnapshot.effects?.camera)).toBe(true);
+    expect(Object.isFrozen(signatureSnapshot.effects?.particles)).toBe(true);
+    expect(Object.isFrozen(signatureParticle)).toBe(true);
   }, 15_000);
 
   it('persists the three real first-run battle actions and emits each tutorial event once', async () => {

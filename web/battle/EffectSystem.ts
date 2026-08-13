@@ -376,7 +376,7 @@ export class EffectSystem {
         const y = signature.skillId === 'tidal-volley'
           ? 650
           : signature.skillId === 'bubble-barrier'
-            ? 690
+            ? 665
             : 430;
         this.spawnEvolutionSignature(
           id,
