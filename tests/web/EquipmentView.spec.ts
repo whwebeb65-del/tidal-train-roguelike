@@ -31,6 +31,28 @@ describe('EquipmentView', () => {
     expect(html).toContain('maintenance-tag');
     expect(html).toContain('data-action="show-equipment-workshop" aria-pressed="true"');
     expect(html).toContain('data-action="show-tidal-archive" aria-pressed="false"');
+    expect(html).not.toContain('archive-unread-seal');
+  });
+
+  it('renders a clamped unread seal inside the archive tab only when positive', () => {
+    const starter = createStarterEquipmentState();
+    const unreadHtml = renderEquipment({
+      state: starter,
+      archiveUnreadCount: 2.9,
+    });
+    const archiveTab = unreadHtml.match(
+      /<button data-action="show-tidal-archive"[^>]*>([\s\S]*?)<\/button>/,
+    )?.[1] ?? '';
+
+    expect(archiveTab).toContain(
+      '<span class="archive-unread-seal" aria-label="2 条未读档案">NEW 2</span>',
+    );
+    expect(unreadHtml.match(/archive-unread-seal/g)).toHaveLength(1);
+
+    const zeroHtml = renderEquipment({ state: starter, archiveUnreadCount: 0 });
+    const negativeHtml = renderEquipment({ state: starter, archiveUnreadCount: -3 });
+    expect(zeroHtml).not.toContain('archive-unread-seal');
+    expect(negativeHtml).not.toContain('archive-unread-seal');
   });
 
   it('renders the archive panel without equipment mutation actions', () => {

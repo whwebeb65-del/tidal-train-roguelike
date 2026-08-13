@@ -1,4 +1,7 @@
-import type { TidalArchiveState } from '../../src/domain/collection/TidalArchiveSystem';
+import type {
+  TidalArchiveEntryKey,
+  TidalArchiveState,
+} from '../../src/domain/collection/TidalArchiveSystem';
 import type { EquipmentInstance } from '../../src/domain/equipment/EquipmentSystem';
 import type { SkillMasteryXp } from '../../src/domain/progression/SkillMasterySystem';
 import {
@@ -14,8 +17,8 @@ export interface TidalArchiveViewModel {
   readonly enemySummary: { readonly discovered: number; readonly total: 8 };
   readonly variantSummary: { readonly discovered: number; readonly total: 12 };
   readonly equipmentSummary: { readonly discovered: number; readonly total: 8 };
-  readonly enemies: readonly TidalArchiveEnemyCard[];
-  readonly variants: readonly TidalArchiveVariantCard[];
+  readonly enemies: readonly (TidalArchiveEnemyCard & { readonly isNew: boolean })[];
+  readonly variants: readonly (TidalArchiveVariantCard & { readonly isNew: boolean })[];
   readonly equipment: readonly TidalArchiveEquipmentCard[];
 }
 
@@ -23,17 +26,20 @@ export interface TidalArchiveViewModelInput {
   readonly archive: TidalArchiveState;
   readonly equipmentInventory: readonly EquipmentInstance[];
   readonly skillMasteryXp: Readonly<SkillMasteryXp>;
+  readonly newEntryKeys?: readonly TidalArchiveEntryKey[];
 }
 
 export function buildTidalArchiveViewModel(
   input: TidalArchiveViewModelInput,
 ): TidalArchiveViewModel {
   const discoveredEnemies = new Set(input.archive.discoveredEnemyKinds);
+  const newEntryKeys = new Set(input.newEntryKeys ?? []);
   const enemies = TIDAL_ARCHIVE_ENEMIES.map((entry) => {
     const discovered = discoveredEnemies.has(entry.id);
     return {
       ...entry,
       discovered,
+      isNew: newEntryKeys.has(`enemy:${entry.id}`),
       name: discovered ? entry.name : '未记录潮兽',
       role: discovered ? entry.role : '战场记录尚未解密',
       counter: discovered ? entry.counter : '应对记录尚未解密',
@@ -42,7 +48,10 @@ export function buildTidalArchiveViewModel(
   const variants = buildTidalArchiveVariantCards(
     input.archive.discoveredSkillVariantIds,
     input.skillMasteryXp,
-  );
+  ).map((entry) => ({
+    ...entry,
+    isNew: newEntryKeys.has(`skill-variant:${entry.id}`),
+  }));
   const equipment = buildTidalArchiveEquipmentCards(input.equipmentInventory);
 
   return {
@@ -72,17 +81,21 @@ function archiveImage(
   return `<img src="${artUrl}" alt="${discovered ? name : ''}" ${discovered ? '' : 'aria-hidden="true"'} loading="lazy" />`;
 }
 
-function renderEnemyCard(entry: TidalArchiveEnemyCard): string {
-  return `<article class="archive-card archive-card--enemy ${entry.discovered ? 'is-discovered' : 'is-locked'}" data-archive-enemy="${entry.id}">
+function renderEnemyCard(
+  entry: TidalArchiveEnemyCard & { readonly isNew: boolean },
+): string {
+  return `<article class="archive-card archive-card--enemy ${entry.discovered ? 'is-discovered' : 'is-locked'}${entry.isNew ? ' is-new' : ''}" data-archive-enemy="${entry.id}">
     ${archiveImage(entry.artUrl, entry.name, entry.discovered)}
-    <div class="archive-card__copy"><small>${entry.source}</small><h3>${entry.name}</h3><p>${entry.role}</p><p>${entry.counter}</p></div>
+    <div class="archive-card__copy">${entry.isNew ? '<span class="archive-new-stamp" aria-label="新档案">NEW</span>' : ''}<small>${entry.source}</small><h3>${entry.name}</h3><p>${entry.role}</p><p>${entry.counter}</p></div>
   </article>`;
 }
 
-function renderVariantCard(entry: TidalArchiveVariantCard): string {
-  return `<article class="archive-card archive-card--variant ${entry.discovered ? 'is-discovered' : 'is-locked'}" data-archive-variant="${entry.id}">
+function renderVariantCard(
+  entry: TidalArchiveVariantCard & { readonly isNew: boolean },
+): string {
+  return `<article class="archive-card archive-card--variant ${entry.discovered ? 'is-discovered' : 'is-locked'}${entry.isNew ? ' is-new' : ''}" data-archive-variant="${entry.id}">
     ${archiveImage(entry.artUrl, entry.name, entry.discovered)}
-    <div class="archive-card__copy"><small>${entry.skillName} · 精通 Lv.${entry.requiredMasteryLevel}</small><h3>${entry.name}</h3><p>${entry.effect}</p><p>${entry.synergy}</p><p class="archive-card__source">来源：${entry.source}</p></div>
+    <div class="archive-card__copy">${entry.isNew ? '<span class="archive-new-stamp" aria-label="新档案">NEW</span>' : ''}<small>${entry.skillName} · 精通 Lv.${entry.requiredMasteryLevel}</small><h3>${entry.name}</h3><p>${entry.effect}</p><p>${entry.synergy}</p><p class="archive-card__source">来源：${entry.source}</p></div>
   </article>`;
 }
 

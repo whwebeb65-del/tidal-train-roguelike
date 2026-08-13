@@ -26,6 +26,7 @@ export interface EquipmentViewModel {
   readonly state: EquipmentState;
   readonly panel?: EquipmentPanel;
   readonly archive?: TidalArchiveViewModel;
+  readonly archiveUnreadCount?: number;
 }
 
 export type EquipmentPanel = 'workshop' | 'archive';
@@ -79,6 +80,12 @@ function renderEquipmentCard(instance: EquipmentInstance, state: EquipmentState)
 export function renderEquipment(model: EquipmentViewModel): string {
   const { state } = model;
   const panel = model.panel ?? 'workshop';
+  const archiveUnreadCount = Number.isFinite(model.archiveUnreadCount)
+    ? Math.max(0, Math.floor(model.archiveUnreadCount ?? 0))
+    : 0;
+  const archiveUnreadSeal = archiveUnreadCount > 0
+    ? `<span class="archive-unread-seal" aria-label="${archiveUnreadCount} 条未读档案">NEW ${archiveUnreadCount}</span>`
+    : '';
   const equippedInstances = new Set(Object.values(state.equippedEquipmentIds).filter(Boolean));
   const setCounts = new Map<EquipmentSetId, number>();
   for (const instance of state.inventory) {
@@ -131,7 +138,7 @@ export function renderEquipment(model: EquipmentViewModel): string {
     <div class="run-heading workshop-sign"><div><span class="eyebrow">OTTER MAINTENANCE BAY</span><h1>海獭维修工坊</h1><p>工具墙、零件箱和工作台都已就位。装备、强化、升星和定向重铸遵循同一套成长规则。</p></div><button class="secondary" data-nav-scene="captain">返回角色</button></div>
     <div class="workshop-tabs" aria-label="工坊区域">
       <button data-action="show-equipment-workshop" aria-pressed="${panel === 'workshop'}">维修工作台</button>
-      <button data-action="show-tidal-archive" aria-pressed="${panel === 'archive'}">潮汐档案</button>
+      <button data-action="show-tidal-archive" aria-pressed="${panel === 'archive'}">潮汐档案${archiveUnreadSeal}</button>
     </div>
     ${content}
   </section>`;

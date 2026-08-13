@@ -166,6 +166,7 @@ describe('BattleHUD', () => {
       rewards: { gears: 400, routeMarks: 10, starTickets: 3 },
       expeditionPoints: 8,
       dailyTrialScore: null,
+      archiveDiscoveries: [],
       doubleSettlementAvailable: false,
       doubled: false,
       firstClear: true,
@@ -248,6 +249,7 @@ describe('BattleHUD', () => {
         rewards: { gears: 80, routeMarks: 2, starTickets: 0 },
         expeditionPoints: 0,
         dailyTrialScore: null,
+        archiveDiscoveries: [],
         doubleSettlementAvailable: false,
         doubled: false,
         accountProgression: {
@@ -530,6 +532,7 @@ describe('BattleHUD', () => {
       rewards: { gears: 80, routeMarks: 2, starTickets: 0 },
       expeditionPoints: 8,
       dailyTrialScore: null,
+      archiveDiscoveries: [],
       doubleSettlementAvailable: true,
       doubled: false,
     };

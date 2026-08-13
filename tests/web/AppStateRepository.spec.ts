@@ -77,10 +77,20 @@ describe('AppStateRepository', () => {
       version: 2,
       discoveredEnemyKinds: ['bubble-fin'],
       discoveredSkillVariantIds: ['split-tide-arrow'],
-      unreadEntryKeys: [],
+      unreadEntryKeys: [
+        'enemy:bubble-fin',
+        'skill-variant:split-tide-arrow',
+      ],
     });
-    expect(repository.load().tidalArchive.discoveredEnemyKinds)
-      .toEqual(['bubble-fin']);
+    expect(repository.load().tidalArchive).toEqual({
+      version: 2,
+      discoveredEnemyKinds: ['bubble-fin'],
+      discoveredSkillVariantIds: ['split-tide-arrow'],
+      unreadEntryKeys: [
+        'enemy:bubble-fin',
+        'skill-variant:split-tide-arrow',
+      ],
+    });
 
     repository.clear();
     expect(storage.getItem('unrelated')).toBe('keep');
@@ -153,5 +163,44 @@ describe('AppStateRepository', () => {
       unreadEntryKeys: [],
     });
     expect(repository.load().save).toEqual(defaultSave());
+  });
+
+  it('migrates version 1 archive storage without marking old discoveries unread', () => {
+    const storage = new MemoryStorage();
+    storage.setItem(APP_STORAGE_KEYS.tidalArchive, JSON.stringify({
+      version: 1,
+      discoveredEnemyKinds: ['bubble-fin'],
+      discoveredSkillVariantIds: ['split-tide-arrow'],
+    }));
+    const repository = createBrowserAppStateRepository(storage);
+
+    expect(repository.load().tidalArchive).toEqual({
+      version: 2,
+      discoveredEnemyKinds: ['bubble-fin'],
+      discoveredSkillVariantIds: ['split-tide-arrow'],
+      unreadEntryKeys: [],
+    });
+  });
+
+  it('filters unread archive keys that do not belong to discovered entries', () => {
+    const storage = new MemoryStorage();
+    storage.setItem(APP_STORAGE_KEYS.tidalArchive, JSON.stringify({
+      version: 2,
+      discoveredEnemyKinds: ['bubble-fin'],
+      discoveredSkillVariantIds: ['split-tide-arrow'],
+      unreadEntryKeys: [
+        'skill-variant:double-crest',
+        'enemy:needle-jelly',
+        'enemy:bubble-fin',
+        'unknown',
+        'skill-variant:split-tide-arrow',
+      ],
+    }));
+    const repository = createBrowserAppStateRepository(storage);
+
+    expect(repository.load().tidalArchive.unreadEntryKeys).toEqual([
+      'enemy:bubble-fin',
+      'skill-variant:split-tide-arrow',
+    ]);
   });
 });

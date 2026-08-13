@@ -6,7 +6,10 @@ import type { MapId } from '../../src/domain/station/MapProgression';
 import type { PlayerSave } from '../../src/save/SaveRepository';
 import type { CaptainGuidebookState } from '../../src/domain/retention/CaptainGuidebookSystem';
 import type { FirstRunBattleTutorialState } from '../../src/domain/onboarding/FirstRunBattleTutorial';
-import type { TidalArchiveState } from '../../src/domain/collection/TidalArchiveSystem';
+import type {
+  TidalArchiveEntryKey,
+  TidalArchiveState,
+} from '../../src/domain/collection/TidalArchiveSystem';
 
 export type SceneId =
   | 'station'
@@ -35,6 +38,14 @@ export interface StartBattleRequest {
   readonly mapId: MapId;
 }
 
+export interface TidalArchiveDiscoveryPresentation {
+  readonly key: TidalArchiveEntryKey;
+  readonly entryType: 'enemy' | 'skill-variant';
+  readonly entryId: string;
+  readonly name: string;
+  readonly artUrl: string;
+}
+
 export interface BattleSettlementPresentation {
   readonly title: string;
   readonly description: string;
@@ -46,6 +57,7 @@ export interface BattleSettlementPresentation {
   readonly expeditionPoints: number;
   readonly dailyTrialScore: number | null;
   readonly firstClear?: boolean | null;
+  readonly archiveDiscoveries: readonly TidalArchiveDiscoveryPresentation[];
   readonly doubleSettlementAvailable: boolean;
   readonly doubled: boolean;
   readonly accountProgression?: {

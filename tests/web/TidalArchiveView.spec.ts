@@ -100,5 +100,50 @@ describe('TidalArchiveView', () => {
     expect(lockedImage?.alt).toBe('');
     expect(lockedImage?.getAttribute('aria-hidden')).toBe('true');
   });
+
+  it('marks only visit-level enemy and variant discoveries as new', () => {
+    const model = buildTidalArchiveViewModel({
+      archive: {
+        version: 2,
+        discoveredEnemyKinds: ['bubble-fin', 'needle-jelly'],
+        discoveredSkillVariantIds: ['split-tide-arrow', 'reef-piercer'],
+        unreadEntryKeys: [],
+      },
+      newEntryKeys: [
+        'enemy:bubble-fin',
+        'skill-variant:split-tide-arrow',
+      ],
+      equipmentInventory: createStarterEquipmentState().inventory,
+      skillMasteryXp: createSkillMasteryXp(),
+    });
+    const host = document.createElement('div');
+    host.innerHTML = renderTidalArchive(model);
+
+    expect(model.enemies.find((entry) => entry.id === 'bubble-fin')?.isNew)
+      .toBe(true);
+    expect(model.enemies.find((entry) => entry.id === 'needle-jelly')?.isNew)
+      .toBe(false);
+    expect(model.variants.find((entry) => entry.id === 'split-tide-arrow')?.isNew)
+      .toBe(true);
+    expect(model.variants.find((entry) => entry.id === 'reef-piercer')?.isNew)
+      .toBe(false);
+
+    const newEnemy = host.querySelector('[data-archive-enemy="bubble-fin"]');
+    const oldEnemy = host.querySelector('[data-archive-enemy="needle-jelly"]');
+    const newVariant = host.querySelector('[data-archive-variant="split-tide-arrow"]');
+    const oldVariant = host.querySelector('[data-archive-variant="reef-piercer"]');
+    expect(newEnemy?.classList.contains('is-new')).toBe(true);
+    expect(newEnemy?.querySelector('.archive-new-stamp')?.textContent).toBe('NEW');
+    expect(newEnemy?.querySelector('.archive-new-stamp')?.getAttribute('aria-label'))
+      .toBe('新档案');
+    expect(oldEnemy?.classList.contains('is-new')).toBe(false);
+    expect(oldEnemy?.querySelector('.archive-new-stamp')).toBeNull();
+    expect(newVariant?.classList.contains('is-new')).toBe(true);
+    expect(newVariant?.querySelector('.archive-new-stamp')?.textContent).toBe('NEW');
+    expect(oldVariant?.classList.contains('is-new')).toBe(false);
+    expect(oldVariant?.querySelector('.archive-new-stamp')).toBeNull();
+    expect(host.querySelector('[data-archive-equipment] .archive-new-stamp'))
+      .toBeNull();
+  });
 });
 // @vitest-environment jsdom
