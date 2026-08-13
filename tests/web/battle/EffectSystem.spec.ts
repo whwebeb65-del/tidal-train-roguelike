@@ -347,6 +347,24 @@ describe('EffectSystem', () => {
     expect(effects.view.camera.amplitude).toBe(0);
   });
 
+  it('clears moving particles and camera state when reduced motion is enabled at runtime', () => {
+    const effects = createEffectsForQuality('high');
+    effects.consume([{ type: 'skill-used', skillId: 'extreme-tide' }], createFrameFixture({
+      skillRanks: { 'tidal-volley': 1, 'bubble-barrier': 1, 'extreme-tide': 5 },
+    }));
+    effects.update(80);
+    expect(effects.view.particles.length).toBeGreaterThan(0);
+    expect(effects.view.camera.amplitude).toBeGreaterThan(0);
+
+    effects.setReducedMotion(true);
+
+    expect(effects.view.particles).toEqual([]);
+    expect(effects.view.camera).toEqual({ x: 0, y: 0, rotation: 0, amplitude: 0 });
+    effects.update(120);
+    expect(effects.view.particles).toEqual([]);
+    expect(effects.view.camera).toEqual({ x: 0, y: 0, rotation: 0, amplitude: 0 });
+  });
+
   it('keeps new impact semantics deterministic while reduced motion suppresses camera shake', () => {
     const animated = new EffectSystem({
       particleLimit: 32,
@@ -478,6 +496,35 @@ describe('EffectSystem', () => {
     expect(effects.view.rings).toHaveLength(0);
   });
 
+  it('replays an identical deterministic view after reset', () => {
+    const effects = createEffectsForQuality('high');
+    const events = [
+      {
+        type: 'projectile-hit' as const,
+        enemyId: 999,
+        damage: 50,
+        critical: true,
+        source: 'main' as const,
+      },
+      {
+        type: 'enemy-killed' as const,
+        enemyId: 999,
+        kind: 'bubble-fin' as const,
+        x: 120,
+        y: 260,
+      },
+    ];
+    const frame = createFrameFixture();
+
+    effects.consume(events, frame);
+    const first = effects.view;
+    effects.update(120);
+    effects.reset();
+    effects.consume(events, frame);
+
+    expect(effects.view).toEqual(first);
+  });
+
   it('reduces effect acquisition immediately when the render budget drops', () => {
     const effects = new EffectSystem({
       particleLimit: 200,
@@ -523,6 +570,42 @@ describe('EffectSystem', () => {
     expect(layerCounts('bubble-barrier', 'barrier-membrane')).toEqual([1, 2, 3, 4, 5]);
     expect(layerCounts('extreme-tide', 'extreme-radial-stroke')).toEqual([8, 10, 12, 14, 16]);
   });
+
+  it.each(['medium', 'low'] as const)(
+    'keeps all five ranks strictly layered within the %s particle budget',
+    (quality) => {
+      const particleBudget = quality === 'medium' ? 20 : 12;
+      for (const skillId of [
+        'tidal-volley',
+        'bubble-barrier',
+        'extreme-tide',
+      ] as const) {
+        const layers = ([1, 2, 3, 4, 5] as const).map((rank) => {
+          const effects = createEffectsForQuality(quality);
+          effects.consume([{ type: 'skill-used', skillId }], createFrameFixture({
+            skillRanks: {
+              'tidal-volley': skillId === 'tidal-volley' ? rank : 1,
+              'bubble-barrier': skillId === 'bubble-barrier' ? rank : 1,
+              'extreme-tide': skillId === 'extreme-tide' ? rank : 1,
+            },
+          }));
+          expect(effects.view.particles.length).toBeLessThanOrEqual(particleBudget);
+          if (skillId === 'bubble-barrier') {
+            return effects.view.rings.find(
+              (item) => item.kind === 'barrier-membrane',
+            )!.radius;
+          }
+          const kind = skillId === 'tidal-volley'
+            ? 'rank-volley-trail'
+            : 'extreme-radial-stroke';
+          return effects.view.particles.find((item) => item.kind === kind)!.size;
+        });
+        expect(layers.every((layer, index) => (
+          index === 0 || layer > layers[index - 1]!
+        ))).toBe(true);
+      }
+    },
+  );
 
   it.each(SKILL_VARIANT_IDS)(
     'maps the authoritative event for %s to its catalog motif and color',
@@ -596,6 +679,28 @@ describe('EffectSystem', () => {
     expect(new Set(silhouettes.map((item) => item.color))).toEqual(
       new Set(SKILL_VARIANT_IDS.map((id) => getSkillEvolutionVisualSignature(id).primary)),
     );
+  });
+
+  it('retains all twelve low-quality reduced-motion signatures for 320–480ms', () => {
+    const effects = createEffectsForQuality('low', true);
+    effects.consume(allSkillUseEvents(), createVariantFrame(SKILL_VARIANT_IDS));
+
+    const signatures = () => effects.view.rings.filter(
+      (item) => item.kind === 'static-skill-silhouette',
+    );
+    expect(signatures()).toHaveLength(SKILL_VARIANT_IDS.length);
+    expect(new Set(signatures().map((item) => item.radius)).size)
+      .toBe(SKILL_VARIANT_IDS.length);
+    expect(new Set(signatures().map((item) => item.color))).toEqual(
+      new Set(SKILL_VARIANT_IDS.map((id) => (
+        getSkillEvolutionVisualSignature(id).primary
+      ))),
+    );
+
+    effects.update(319);
+    expect(signatures()).toHaveLength(SKILL_VARIANT_IDS.length);
+    effects.update(161);
+    expect(signatures()).toHaveLength(0);
   });
 
   it('keeps variant cues identifiable while low quality and reduced motion use static bounded fallbacks', () => {

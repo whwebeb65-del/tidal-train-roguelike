@@ -239,10 +239,16 @@ export class EffectSystem {
   }
 
   public setReducedMotion(reducedMotion: boolean): void {
+    const enteringReducedMotion = reducedMotion && !this.reducedMotion;
     this.reducedMotion = reducedMotion;
     if (reducedMotion) {
       this.cameraAmplitude = 0;
       this.cameraRemainingMs = 0;
+    }
+    if (enteringReducedMotion) {
+      this.particlePool.releaseAll();
+      this.particles.length = 0;
+      this.activeSkillParticleBudget = null;
     }
   }
 
@@ -306,11 +312,15 @@ export class EffectSystem {
         };
       }),
       camera: {
-        x: Math.sin(this.clockMs * 0.087) * cameraStrength,
-        y: Math.cos(this.clockMs * 0.113) * cameraStrength * 0.72,
-        rotation: Math.sin(this.clockMs * 0.053)
-          * cameraStrength
-          * 0.0018,
+        x: cameraStrength === 0
+          ? 0
+          : Math.sin(this.clockMs * 0.087) * cameraStrength,
+        y: cameraStrength === 0
+          ? 0
+          : Math.cos(this.clockMs * 0.113) * cameraStrength * 0.72,
+        rotation: cameraStrength === 0
+          ? 0
+          : Math.sin(this.clockMs * 0.053) * cameraStrength * 0.0018,
         amplitude: cameraStrength,
       },
       cinematic: {
@@ -587,14 +597,14 @@ export class EffectSystem {
         if (this.reducedMotion) {
           // Variant silhouettes are allocated before all animated rank layers.
         } else if (event.skillId === 'tidal-volley') {
-          this.spawnSkillBurst(195, 680, this.rankCount(rank, 3, 5, 7), '#65edff', 'rank-volley-trail', 480, 5, 'front-effects');
+          this.spawnRankBurst(195, 680, this.rankCount(rank, 3, 5, 7), '#65edff', 'rank-volley-trail', 480, 5, rank);
         } else if (event.skillId === 'bubble-barrier') {
           const rings = this.rankCount(rank, 1, 3, 5);
           for (let index = 0; index < rings; index += 1) {
-            this.addRing(195, 700, 26 + index * 10, 68 + index * 14, '#74f5cf', 6, '#e7c66e', 'barrier-membrane');
+            this.addRing(195, 700, 22 + rank * 4 + index * 10, 54 + rank * 8 + index * 14, '#74f5cf', 6, '#e7c66e', 'barrier-membrane');
           }
         } else {
-          this.spawnSkillBurst(195, 470, this.rankCount(rank, 8, 12, 16), '#ffd793', 'extreme-radial-stroke', 720, 5, 'front-effects');
+          this.spawnRankBurst(195, 470, this.rankCount(rank, 8, 12, 16), '#ffd793', 'extreme-radial-stroke', 720, 5, rank);
         }
         if (!this.reducedMotion && !this.isLowQuality()) {
           this.spawnSkillBurst(
@@ -725,6 +735,13 @@ export class EffectSystem {
     this.darken = 0;
     this.darkenRemainingMs = 0;
     this.slowMotionRemainingMs = 0;
+    this.nextId = 1;
+    this.clockMs = 0;
+    this.cameraDurationMs = 1;
+    this.lastShakeAtMs = -Infinity;
+    this.lastEventX = 195;
+    this.lastEventY = 360;
+    this.activeSkillParticleBudget = null;
   }
 
   private spawnBurst(
@@ -800,6 +817,37 @@ export class EffectSystem {
         0,
         this.activeSkillParticleBudget - spawned,
       );
+    }
+  }
+
+  private spawnRankBurst(
+    x: number,
+    y: number,
+    count: number,
+    color: string,
+    kind: EffectParticleKind,
+    lifetimeMs: number,
+    priority: number,
+    rank: number,
+  ): void {
+    const firstParticleIndex = this.particles.length;
+    this.spawnSkillBurst(
+      x,
+      y,
+      count,
+      color,
+      kind,
+      lifetimeMs,
+      priority,
+      'front-effects',
+    );
+    for (
+      let index = firstParticleIndex;
+      index < this.particles.length;
+      index += 1
+    ) {
+      const particle = this.particles[index];
+      if (particle) particle.size += (rank - 1) * 0.6;
     }
   }
 
@@ -1018,7 +1066,12 @@ export class EffectSystem {
     }
     trimByPriority(
       this.rings,
-      this.impactLimit,
+      Math.max(
+        this.impactLimit,
+        this.rings.filter((ring) => (
+          ring.kind === 'static-skill-silhouette'
+        )).length,
+      ),
       this.ringPool,
     );
   }
