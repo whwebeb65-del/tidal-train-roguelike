@@ -69,7 +69,7 @@ export const SKILL_EVOLUTION_VISUAL_SIGNATURES:
   Readonly<Record<SkillVariantId, SkillEvolutionVisualSignature>>;
 ```
 
-`SkillEvolutionParticleKind` 也在该文件中定义为十二种进化共用的九类视觉 motif 联合类型；`EffectParticleKind` 通过类型导入并入该联合类型，避免目录反向依赖 `EffectSystem` 形成运行时循环。目录必须完整覆盖 `SKILL_VARIANT_IDS`。颜色和粒子类型由唯一目录维护，`EffectSystem` 与测试不得复制第二套映射。
+`SkillEvolutionParticleKind` 也在该文件中定义为十二种进化各自对应的十二类视觉 motif 联合类型；`EffectParticleKind` 通过类型导入并入该联合类型，避免目录反向依赖 `EffectSystem` 形成运行时循环。目录必须完整覆盖 `SKILL_VARIANT_IDS`。颜色和粒子类型由唯一目录维护，`EffectSystem` 与测试不得复制第二套映射。
 
 ### 事件与效果系统
 
@@ -122,15 +122,16 @@ export const SKILL_EVOLUTION_VISUAL_SIGNATURES:
 
 ### 渲染与像素证据
 
-- `RecordingPainter` 验证九类新增 Canvas 命令具有正确层级、形状数量和非零边界。
+- `RecordingPainter` 验证十二类专属 Canvas 命令具有正确层级、形状数量和非零边界，其中已有四类继续使用稳定命令名并强化形状契约。
 - 像素证据至少覆盖分汐 V 形、回潮弧、暴雨扇面、破泡碎片、双膜、救援灯、潮眼和双峰，拒绝实心矩形或越界大面积覆盖。
 - 360／390／412／430 宽度不出现横向溢出，签名不遮挡顶部 HUD、速度／暂停、奖励互动或底部技能。
 
 ### 真实 Chrome
 
-- 仅在精确 `e2e=1` 下构造三个隔离战斗：齐射四进化、屏障四进化、极潮四进化；真实点击对应技能后核对 Canvas 像素差异、技能按钮进化图标和战斗仍可继续。
-- 390×844 运行一局正常构筑路径，至少真实选择一个进化并验证选择前后签名变化；终局仍为胜利。
-- 减少动态媒体模拟下重跑三个技能，验证静态轮廓仍可辨识、镜头不移动、DOM 控件与文本不消失。
+- 仅在精确 `e2e=1` 下通过权威精通存档、固定种子和真实升级选择，分别在三个隔离战斗中取得齐射、屏障、极潮各一个代表进化；不增加直接改写局内构筑的测试后门。
+- 真实点击对应技能后，通过 Canvas 前后像素差异、技能按钮进化图标和 E2E 诊断中的真实效果 `kind` 核对签名，随后继续战斗。十二种完整矩阵由纯目录、效果系统、渲染命令和像素证据测试覆盖。
+- 390×844 至少完成其中一局正常构筑路径，验证选择前后签名变化且终局仍为胜利。
+- 减少动态媒体模拟下重跑三个代表技能，验证静态轮廓仍可辨识、镜头不移动、DOM 控件与文本不消失。
 - 普通 URL 不暴露任何 E2E 夹具；既有四视口、两局胜利、资源预算和经济断言继续通过。
 
 ## 本轮边界
