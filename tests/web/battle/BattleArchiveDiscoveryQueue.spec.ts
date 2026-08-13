@@ -1,12 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import type { TidalArchiveDiscoveryPresentation } from '../../../web/app/AppTypes';
 import { BattleArchiveDiscoveryQueue } from '../../../web/battle/BattleArchiveDiscoveryQueue';
+import { getAvailableBattleInteractions } from '../../../web/battle/BattleInteractionSchedule';
 
 const A: TidalArchiveDiscoveryPresentation = Object.freeze({
   key: 'enemy:bubble-fin',
   entryType: 'enemy',
   entryId: 'bubble-fin',
-  name: '泡鳍兽',
+  name: '泡鳍怪',
   artUrl: '/archive/bubble-fin.webp',
 });
 
@@ -55,8 +56,8 @@ describe('BattleArchiveDiscoveryQueue', () => {
 
     expect(queue.update(0, true)).toBe(A);
     expect(queue.update(1_000, true)).toBe(A);
-    expect(queue.update(1_000, false)).toBe(A);
-    expect(queue.update(9_000, false)).toBe(A);
+    expect(queue.update(1_000, false)).toBeNull();
+    expect(queue.update(9_000, false)).toBeNull();
     expect(queue.update(9_000, true)).toBe(A);
     expect(queue.update(10_399, true)).toBe(A);
     expect(queue.update(10_400, true)).toBeNull();
@@ -67,10 +68,33 @@ describe('BattleArchiveDiscoveryQueue', () => {
     queue.enqueue([A, B]);
 
     expect(queue.update(0, true)).toBe(A);
-    expect(queue.update(1_000, false)).toBe(A);
+    expect(queue.update(1_000, false)).toBeNull();
     expect(queue.update(9_000, true)).toBe(A);
     expect(queue.update(10_399, true)).toBe(A);
     expect(queue.update(10_400, true)).toBe(B);
+  });
+
+  it('pauses visible budget for a real normal interaction and resumes after its final claim', () => {
+    const queue = new BattleArchiveDiscoveryQueue(2400);
+    const isEligible = (
+      elapsedMs: number,
+      salvageClaims = 0,
+    ): boolean => getAvailableBattleInteractions(
+      elapsedMs,
+      { 'salvage-a': salvageClaims },
+      'normal',
+    ).length === 0;
+    queue.enqueue([A]);
+
+    expect(isEligible(17_999)).toBe(true);
+    expect(queue.update(0, isEligible(17_999))).toBe(A);
+    expect(getAvailableBattleInteractions(18_000, {}, 'normal')[0])
+      .toMatchObject({ actionId: 'salvage-a', attempt: 0 });
+    expect(queue.update(1_000, isEligible(18_000))).toBeNull();
+    expect(queue.update(9_000, isEligible(18_000, 1))).toBeNull();
+    expect(queue.update(9_000, isEligible(18_000, 2))).toBe(A);
+    expect(queue.update(10_399, true)).toBe(A);
+    expect(queue.update(10_400, true)).toBeNull();
   });
 
   it('does not carry long-frame overshoot into an entry that was not visible', () => {

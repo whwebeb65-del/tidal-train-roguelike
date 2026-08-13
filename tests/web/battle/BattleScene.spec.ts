@@ -36,7 +36,7 @@ const ARCHIVE_DISCOVERY: TidalArchiveDiscoveryPresentation = Object.freeze({
   key: 'enemy:bubble-fin',
   entryType: 'enemy',
   entryId: 'bubble-fin',
-  name: '泡鳍兽',
+  name: '泡鳍怪',
   artUrl: '/archive/bubble-fin.webp',
 });
 
@@ -701,7 +701,7 @@ describe('BattleScene', () => {
 
   it('queues returned discoveries for 2400ms of eligible HUD time and pauses for overlays', () => {
     const scheduler = new ManualFrameScheduler();
-    const engine = createEngine();
+    const engine = createEngine(createFrameFixture({ elapsedMs: 0 }));
     const hudUpdate = vi.fn();
     let tutorialVisible = false;
     const onBattleEvents = vi.fn(() => [ARCHIVE_DISCOVERY]);
@@ -745,12 +745,12 @@ describe('BattleScene', () => {
     expect(hudUpdate.mock.lastCall?.[0].archiveDiscovery)
       .toBe(ARCHIVE_DISCOVERY);
 
-    engine.setFrame(createFrameFixture({ status: 'upgrade' }));
+    engine.setFrame(createFrameFixture({ status: 'upgrade', elapsedMs: 0 }));
     scheduler.fire(1_017);
     scheduler.fire(9_017);
     expect(hudUpdate.mock.lastCall?.[0].archiveDiscovery).toBeNull();
 
-    engine.setFrame(createFrameFixture({ status: 'running' }));
+    engine.setFrame(createFrameFixture({ status: 'running', elapsedMs: 0 }));
     tutorialVisible = true;
     scheduler.fire(14_017);
     expect(hudUpdate.mock.lastCall?.[0].archiveDiscovery).toBeNull();
@@ -768,7 +768,7 @@ describe('BattleScene', () => {
 
   it('does not consume an active discovery across a stopped visibility frame loop', async () => {
     const scheduler = new ManualFrameScheduler();
-    const engine = createEngine();
+    const engine = createEngine(createFrameFixture({ elapsedMs: 0 }));
     const hudUpdate = vi.fn();
     const { host } = createHost();
     const scene = new BattleScene({
@@ -813,8 +813,80 @@ describe('BattleScene', () => {
     scene.unmount();
   });
 
+  it('pauses and hides discovery time while the authoritative normal interaction is available', () => {
+    const scheduler = new ManualFrameScheduler();
+    const engine = createEngine(createFrameFixture({
+      status: 'running',
+      elapsedMs: 17_999,
+      mode: 'normal',
+    }));
+    const hudUpdate = vi.fn();
+    const hudCallbacks: { current?: BattleHudCallbacks } = {};
+    const { host } = createHost();
+    const scene = new BattleScene({
+      ...TEST_BATTLE_SPEED_DEPENDENCIES,
+      engine,
+      effects: {
+        view: EMPTY_EFFECT_FRAME_VIEW,
+        consume: vi.fn(), update: vi.fn(), reset: vi.fn(),
+      },
+      assets: { failedIds: [], get: () => null },
+      callbacks: createCallbacks(),
+      createRenderer: () => ({ render: vi.fn() }),
+      createHud: (callbacks) => {
+        hudCallbacks.current = callbacks;
+        return { mount: vi.fn(), update: hudUpdate, dispose: vi.fn() };
+      },
+      captainArtId: 'captainFemaleBase',
+      reducedMotion: false,
+      scheduler,
+      eventTarget: new EventTarget(),
+      getDevicePixelRatio: () => 1,
+      onBattleEvents: () => [ARCHIVE_DISCOVERY],
+    });
+
+    scene.mount(host);
+    engine.events.push({
+      type: 'enemy-spawned',
+      enemyId: 1,
+      kind: 'bubble-fin',
+    });
+    scheduler.fire(0);
+    scheduler.fire(17);
+    expect(hudUpdate.mock.lastCall?.[0].archiveDiscovery)
+      .toBe(ARCHIVE_DISCOVERY);
+
+    engine.setFrame(createFrameFixture({
+      status: 'running',
+      elapsedMs: 18_000,
+      mode: 'normal',
+    }));
+    scheduler.fire(1_017);
+    expect(hudUpdate.mock.lastCall?.[0].interaction).toMatchObject({
+      actionId: 'salvage-a',
+      attempt: 0,
+    });
+    expect(hudUpdate.mock.lastCall?.[0].archiveDiscovery).toBeNull();
+    scheduler.fire(9_017);
+    expect(hudUpdate.mock.lastCall?.[0].archiveDiscovery).toBeNull();
+
+    hudCallbacks.current?.onClaimInteraction('salvage-a', 0);
+    hudCallbacks.current?.onClaimInteraction('salvage-a', 1);
+    scheduler.fire(9_018);
+    expect(hudUpdate.mock.lastCall?.[0].interaction).toBeNull();
+    expect(hudUpdate.mock.lastCall?.[0].archiveDiscovery)
+      .toBe(ARCHIVE_DISCOVERY);
+    scheduler.fire(10_417);
+    expect(hudUpdate.mock.lastCall?.[0].archiveDiscovery)
+      .toBe(ARCHIVE_DISCOVERY);
+    scheduler.fire(10_418);
+    expect(hudUpdate.mock.lastCall?.[0].archiveDiscovery).toBeNull();
+
+    scene.unmount();
+  });
+
   it('resets queued discovery presentation when the scene is remounted', () => {
-    const engine = createEngine();
+    const engine = createEngine(createFrameFixture({ elapsedMs: 0 }));
     const hudUpdate = vi.fn();
     const { host } = createHost();
     const scene = new BattleScene({

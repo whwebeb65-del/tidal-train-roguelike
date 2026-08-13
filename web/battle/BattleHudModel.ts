@@ -151,6 +151,7 @@ export function createBattleHudModel(
     && !visibilityResumeRequired
     && settlement === null
     && firstRunTutorialPrompt === null
+    && interaction === null
       ? options.archiveDiscovery ?? null
       : null;
 

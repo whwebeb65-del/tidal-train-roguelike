@@ -4,6 +4,7 @@ import type {
   TidalArchiveDiscoveryPresentation,
 } from '../../../web/app/AppTypes';
 import { createBattleHudModel } from '../../../web/battle/BattleHudModel';
+import { getAvailableBattleInteractions } from '../../../web/battle/BattleInteractionSchedule';
 import {
   createFrameFixture,
   createHudModelOptionsFixture,
@@ -13,7 +14,7 @@ const DISCOVERY: TidalArchiveDiscoveryPresentation = Object.freeze({
   key: 'enemy:bubble-fin',
   entryType: 'enemy',
   entryId: 'bubble-fin',
-  name: '泡鳍兽',
+  name: '泡鳍怪',
   artUrl: '/archive/bubble-fin.webp',
 });
 
@@ -31,7 +32,7 @@ const SETTLEMENT: BattleSettlementPresentation = Object.freeze({
 describe('createBattleHudModel archive discovery', () => {
   it('exposes a discovery while the battle is eligible', () => {
     const model = createBattleHudModel(
-      createFrameFixture({ status: 'running' }),
+      createFrameFixture({ status: 'running', elapsedMs: 0 }),
       {
         ...createHudModelOptionsFixture(),
         archiveDiscovery: DISCOVERY,
@@ -78,5 +79,34 @@ describe('createBattleHudModel archive discovery', () => {
         body: '点一下战场。',
       },
     }).archiveDiscovery).toBeNull();
+  });
+
+  it('hides a discovery behind the same real normal interaction exposed by the HUD', () => {
+    const frame = createFrameFixture({ status: 'running', elapsedMs: 18_000 });
+    const interaction = getAvailableBattleInteractions(
+      frame.elapsedMs,
+      {},
+      'normal',
+    )[0];
+    expect(interaction).toMatchObject({
+      actionId: 'salvage-a',
+      attempt: 0,
+    });
+
+    const blocked = createBattleHudModel(frame, {
+      ...createHudModelOptionsFixture(),
+      interactionClaims: {},
+      archiveDiscovery: DISCOVERY,
+    });
+    expect(blocked.interaction).toEqual(interaction);
+    expect(blocked.archiveDiscovery).toBeNull();
+
+    const resumed = createBattleHudModel(frame, {
+      ...createHudModelOptionsFixture(),
+      interactionClaims: { 'salvage-a': 2 },
+      archiveDiscovery: DISCOVERY,
+    });
+    expect(resumed.interaction).toBeNull();
+    expect(resumed.archiveDiscovery).toBe(DISCOVERY);
   });
 });

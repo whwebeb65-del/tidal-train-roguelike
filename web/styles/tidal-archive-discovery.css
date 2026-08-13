@@ -177,8 +177,32 @@
   border-color: rgb(143 57 53 / 38%);
 }
 
+.battle-overlay--settlement.battle-overlay.arrival-platform,
+.battle-overlay--settlement.battle-overlay.trial-record-board {
+  --settlement-safe-block-start: max(12px, env(safe-area-inset-top));
+  --settlement-safe-inline-end: max(12px, env(safe-area-inset-right));
+  --settlement-safe-block-end: max(12px, env(safe-area-inset-bottom));
+  --settlement-safe-inline-start: max(12px, env(safe-area-inset-left));
+  box-sizing: border-box;
+  min-height: 0;
+  height: 100%;
+  max-height: 100vh;
+  max-height: 100dvh;
+  padding: var(--settlement-safe-block-start) var(--settlement-safe-inline-end) var(--settlement-safe-block-end) var(--settlement-safe-inline-start);
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
 .battle-overlay--settlement .battle-dialog--settlement {
   max-height: calc(100dvh - 36px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.battle-overlay--settlement.battle-overlay.arrival-platform .battle-dialog--settlement,
+.battle-overlay--settlement.battle-overlay.trial-record-board .battle-dialog--settlement {
+  max-height: calc(100vh - var(--settlement-safe-block-start) - var(--settlement-safe-block-end));
+  max-height: calc(100dvh - var(--settlement-safe-block-start) - var(--settlement-safe-block-end));
   overflow-y: auto;
   overscroll-behavior: contain;
 }
@@ -303,6 +327,14 @@
     right: max(8px, env(safe-area-inset-right));
     width: min(212px, calc(100% - 16px - env(safe-area-inset-left) - env(safe-area-inset-right)));
     max-width: calc(100% - 16px - env(safe-area-inset-left) - env(safe-area-inset-right));
+  }
+
+  .battle-overlay--settlement.battle-overlay.arrival-platform,
+  .battle-overlay--settlement.battle-overlay.trial-record-board {
+    --settlement-safe-block-start: max(8px, env(safe-area-inset-top));
+    --settlement-safe-inline-end: max(8px, env(safe-area-inset-right));
+    --settlement-safe-block-end: max(10px, env(safe-area-inset-bottom));
+    --settlement-safe-inline-start: max(8px, env(safe-area-inset-left));
   }
 
   .battle-overlay--settlement [data-settlement-archive-entry] {

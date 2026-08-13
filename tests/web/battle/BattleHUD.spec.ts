@@ -91,6 +91,7 @@ describe('BattleHUD', () => {
 
     hud.update(createBattleHudModel(createFrameFixture(), {
       ...createHudModelOptionsFixture(),
+      interactionClaims: { 'salvage-a': 2 },
       archiveDiscovery: ARCHIVE_DISCOVERY,
     }));
 
@@ -109,12 +110,14 @@ describe('BattleHUD', () => {
 
     hud.update(createBattleHudModel(createFrameFixture(), {
       ...createHudModelOptionsFixture(),
+      interactionClaims: { 'salvage-a': 2 },
       archiveDiscovery: null,
     }));
     expect(ticket?.hidden).toBe(true);
 
     hud.update(createBattleHudModel(createFrameFixture(), {
       ...createHudModelOptionsFixture(),
+      interactionClaims: { 'salvage-a': 2 },
       archiveDiscovery: {
         key: 'skill-variant:split-tide-arrow',
         entryType: 'skill-variant',

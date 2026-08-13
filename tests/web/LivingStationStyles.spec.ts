@@ -53,6 +53,10 @@ describe('living station styles', () => {
     new URL('../../web/styles/battle-tutorial.css', import.meta.url),
     'utf8',
   );
+  const livingStationFlowCss = readFileSync(
+    new URL('../../web/styles/living-station-flow.css', import.meta.url),
+    'utf8',
+  );
 
   it('imports the scene language after generic progression styles', () => {
     const entry = readFileSync(new URL('../../web/styles.css', import.meta.url), 'utf8');
@@ -238,6 +242,37 @@ describe('living station styles', () => {
     );
     expect(discoveryCss).toMatch(
       /\.battle-overlay--settlement \.battle-dialog__actions\s*\{[^}]*position:\s*sticky;[^}]*bottom:\s*0;/s,
+    );
+  });
+
+  it('wins the later settlement flow cascade with a safe parent and real dialog scrollport', () => {
+    const entry = readFileSync(
+      new URL('../../web/styles.css', import.meta.url),
+      'utf8',
+    );
+    expect(entry.indexOf('tidal-archive-discovery.css')).toBeLessThan(
+      entry.indexOf('living-station-flow.css'),
+    );
+    expect(livingStationFlowCss).toMatch(
+      /\.battle-overlay\.arrival-platform,\s*\.battle-overlay\.trial-record-board\s*\{[^}]*overflow:\s*hidden;[^}]*padding:\s*clamp\(/s,
+    );
+    expect(discoveryCss).toMatch(
+      /\.battle-overlay--settlement\.battle-overlay\.arrival-platform,\s*\.battle-overlay--settlement\.battle-overlay\.trial-record-board\s*\{[^}]*--settlement-safe-block-start:\s*max\([^;]*safe-area-inset-top[^;]*\);[^}]*--settlement-safe-block-end:\s*max\([^;]*safe-area-inset-bottom[^;]*\);[^}]*box-sizing:\s*border-box;[^}]*min-height:\s*0;[^}]*height:\s*100%;[^}]*max-height:\s*100dvh;[^}]*padding:\s*var\(--settlement-safe-block-start\)[^;]*;[^}]*overflow-x:\s*hidden;[^}]*overflow-y:\s*auto;/s,
+    );
+    expect(discoveryCss).toMatch(
+      /\.battle-overlay--settlement\.battle-overlay\.arrival-platform \.battle-dialog--settlement,\s*\.battle-overlay--settlement\.battle-overlay\.trial-record-board \.battle-dialog--settlement\s*\{[^}]*max-height:\s*calc\(100dvh\s*-\s*var\(--settlement-safe-block-start\)\s*-\s*var\(--settlement-safe-block-end\)\);[^}]*overflow-y:\s*auto;/s,
+    );
+  });
+
+  it('keeps arrival and trial settlement geometry bounded on single-column mobile luggage', () => {
+    expect(livingStationFlowCss).toMatch(
+      /@media \(max-width:\s*760px\)[\s\S]*?\.battle-overlay\.arrival-platform,\s*\.battle-overlay\.trial-record-board\s*\{[^}]*padding:\s*30px 15px 42px;/s,
+    );
+    expect(discoveryCss).toMatch(
+      /@media \(max-width:\s*430px\)[\s\S]*?\.battle-overlay--settlement\.battle-overlay\.arrival-platform,\s*\.battle-overlay--settlement\.battle-overlay\.trial-record-board\s*\{[^}]*--settlement-safe-block-start:\s*max\([^;]*safe-area-inset-top[^;]*\);[^}]*--settlement-safe-block-end:\s*max\([^;]*safe-area-inset-bottom[^;]*\);/s,
+    );
+    expect(discoveryCss).toMatch(
+      /@media \(max-width:\s*430px\)[\s\S]*?\.battle-overlay--settlement \[data-settlement-archive-entry\]\s*\{[^}]*flex-basis:\s*100%;/s,
     );
   });
 

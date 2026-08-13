@@ -37,7 +37,7 @@ export class BattleArchiveDiscoveryQueue {
     if (this.priorEligible === true && this.active) this.consume(elapsedMs);
     if (eligible && !this.active) this.activateNext();
     this.priorEligible = eligible;
-    return this.active;
+    return eligible ? this.active : null;
   }
 
   public reset(): void {

@@ -64,6 +64,7 @@ import type {
   FirstRunBattleTutorialStepId,
 } from '../../src/domain/onboarding/FirstRunBattleTutorial';
 import { BattleArchiveDiscoveryQueue } from '../battle/BattleArchiveDiscoveryQueue';
+import { getAvailableBattleInteractions } from '../battle/BattleInteractionSchedule';
 import type { TidalArchiveDiscoveryPresentation } from '../app/AppTypes';
 
 export interface FrameScheduler {
@@ -712,12 +713,18 @@ export class BattleScene implements GameScene {
     });
     const firstRunTutorialPrompt =
       this.dependencies.getFirstRunTutorialPrompt?.() ?? null;
+    const interactionAvailable = getAvailableBattleInteractions(
+      this.dependencies.engine.frame.elapsedMs,
+      this.interactionClaims,
+      this.dependencies.engine.frame.mode,
+    ).length > 0;
     const archiveDiscoveryEligible =
       this.dependencies.engine.frame.status === 'running'
       && !this.visibilityPaused
       && !this.archiveDiscoveryClockResetPending
       && this.settlement === null
-      && firstRunTutorialPrompt === null;
+      && firstRunTutorialPrompt === null
+      && !interactionAvailable;
     const archiveDiscovery = this.archiveDiscoveryQueue.update(
       this.lastFrameTimeMs,
       archiveDiscoveryEligible,
