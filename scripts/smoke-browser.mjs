@@ -2875,6 +2875,15 @@ function signatureMotifBounds(particle, camera) {
   };
 }
 
+function staticSignatureRingBounds(ring) {
+  return {
+    x: ring.x - ring.radius - 3,
+    y: ring.y - ring.radius * 0.72 - 3,
+    width: ring.radius * 2 + 6,
+    height: ring.radius * 1.44 + 6,
+  };
+}
+
 function assertZeroEffectCamera(camera, label) {
   assert.deepEqual(
     camera,
@@ -2887,6 +2896,7 @@ function animatedSignatureParticle(effects, signature, label) {
   const matches = effects?.particles.filter((particle) => (
     particle.kind === signature.effectKind
     && particle.color === signature.primary
+    && particle.secondaryColor === signature.secondary
     && particle.layer === 'front-effects'
     && particle.alpha > 0
   )) ?? [];
@@ -3046,7 +3056,6 @@ async function sampleSignaturePixels(
       )) {
         newPrimaryMatches += 1;
       }
-      if (${JSON.stringify(geometry.type)} !== 'ring') continue;
       const secondaryAfter = matchesCatalogColor(
         red, green, blue, alpha, secondary
       );
@@ -3088,16 +3097,15 @@ async function sampleSignaturePixels(
     sample.primaryMatchIncrease >= 3 && sample.newPrimaryMatches >= 3,
     `${signature.variantId} renderer lacks baseline-to-target primary-color evidence: ${JSON.stringify(sample)}`,
   );
-  if (geometry.type === 'ring') {
-    assert.ok(
-      sample.secondaryMatches >= 6,
-      `${signature.variantId} static renderer lacks catalog-secondary pixels: ${JSON.stringify(sample)}`,
-    );
-    assert.ok(
-      sample.secondaryMatchIncrease >= 3 && sample.newSecondaryMatches >= 4,
-      `${signature.variantId} static renderer lacks baseline-to-target secondary-color evidence: ${JSON.stringify(sample)}`,
-    );
-  }
+  const minimumSecondaryMatches = geometry.type === 'ring' ? 6 : 3;
+  assert.ok(
+    sample.secondaryMatches >= minimumSecondaryMatches,
+    `${signature.variantId} renderer lacks catalog-secondary pixels: ${JSON.stringify(sample)}`,
+  );
+  assert.ok(
+    sample.secondaryMatchIncrease >= 3 && sample.newSecondaryMatches >= 3,
+    `${signature.variantId} renderer lacks baseline-to-target secondary-color evidence: ${JSON.stringify(sample)}`,
+  );
   return { bounds, sample };
 }
 
@@ -3169,17 +3177,24 @@ async function chooseEvolutionThroughRealProgression(client, signature, label) {
         return;
       }
       assert.equal(
-        await callHook(client, 'return hook.chooseFirstUpgrade();'),
+        Boolean(await chooseStrategicUpgrade(client, battle.offeredUpgradeIds)),
         true,
-        `${label} deterministic real upgrade choice`,
+        `${label} deterministic real strategic upgrade choice`,
       );
-      await callHook(client, 'await hook.requestResume(); return true;');
       await advanceBattle(client, 0);
       continue;
     }
     if (battle.status === 'paused') {
       await callHook(client, 'await hook.requestResume(); return true;');
       continue;
+    }
+    if (battle.status === 'running') {
+      if (battle.cooldowns['bubble-barrier'] <= 0) {
+        await callHook(client, `return hook.useSkill('bubble-barrier');`);
+      }
+      if (battle.cooldowns['extreme-tide'] <= 0 && battle.energy >= 100) {
+        await callHook(client, `return hook.useSkill('extreme-tide');`);
+      }
     }
     await advanceBattle(client, 500);
   }
@@ -3306,6 +3321,7 @@ async function assertSignatureAvoidsProtectedControls(
 
 async function castAndObserveSignature(client, signature, label, reducedMotion) {
   const castable = await waitUntilSkillCanCast(client, signature, label);
+  const verifiedBattleId = castable.battleId;
   const beforeElapsedMs = castable.elapsedMs;
   await captureSignaturePixelBaseline(client);
   assert.equal(
@@ -3343,8 +3359,9 @@ async function castAndObserveSignature(client, signature, label, reducedMotion) 
     } else if (
       state.verification.effectKinds.includes(signature.effectKind)
       && state.effects?.particles.some((particle) => (
-        particle.kind === signature.effectKind
-        && particle.color === signature.primary
+          particle.kind === signature.effectKind
+          && particle.color === signature.primary
+          && particle.secondaryColor === signature.secondary
         && particle.alpha >= 0.65
       ))
     ) {
@@ -3379,6 +3396,12 @@ async function castAndObserveSignature(client, signature, label, reducedMotion) 
       type: 'ring',
       ring: firstRing,
     });
+    await assertSignatureAvoidsProtectedControls(
+      client,
+      signature,
+      label,
+      staticSignatureRingBounds(firstRing),
+    );
     await advanceBattle(client, 17);
     const stableStaticRingFrame = await snapshot(client);
     assertZeroEffectCamera(stableStaticRingFrame.effects?.camera, label);
@@ -3447,6 +3470,12 @@ async function castAndObserveSignature(client, signature, label, reducedMotion) 
     (evidence.battle?.elapsedMs ?? 0) > beforeElapsedMs,
     `${label} battle must continue progressing through the cast`,
   );
+  assert.equal(
+    evidence.battle?.battleId,
+    verifiedBattleId,
+    `${label} signature evidence must remain in its originating battle`,
+  );
+  return { verifiedBattleId, evidence };
 }
 
 async function assertSkillEvolutionSignatures(client, viewport) {
@@ -3466,7 +3495,7 @@ async function assertSkillEvolutionSignatures(client, viewport) {
       effectKind: 'bubble-fracture',
       primary: '#ff735f',
       secondary: '#ffd58a',
-      staticRing: { x: 195, y: 690, radius: 54 },
+      staticRing: { x: 195, y: 638, radius: 54 },
       excludedKind: emergencyBarrierSignatureKind,
     },
     {
@@ -3495,7 +3524,7 @@ async function assertSkillEvolutionSignatures(client, viewport) {
         const label = `${viewport.width}x${viewport.height} ${signature.variantId}`
           + (reducedMotion ? ' reduced-motion' : ' animated');
         await chooseEvolutionThroughRealProgression(client, signature, label);
-        await castAndObserveSignature(
+        const verification = await castAndObserveSignature(
           client,
           signature,
           label,
@@ -3507,6 +3536,13 @@ async function assertSkillEvolutionSignatures(client, viewport) {
               .includes(signature.excludedKind),
             false,
             `${label} must not substitute ${signature.excludedKind}`,
+          );
+        }
+        if (!reducedMotion && signature.variantId === 'split-tide-arrow') {
+          await continueVerifiedSignatureBattle(
+            client,
+            verification.verifiedBattleId,
+            label,
           );
         }
         await returnToStation(client, baseline.diagnostics.activeListeners);
@@ -3538,6 +3574,76 @@ async function chooseStrategicUpgrade(client, offeredUpgradeIds) {
   );
   assert.equal(accepted, true, `upgrade ${upgradeId} should be clickable`);
   return upgradeId;
+}
+
+async function continueVerifiedSignatureBattle(
+  client,
+  verifiedBattleId,
+  label,
+) {
+  const before = await snapshot(client);
+  assert.equal(before.battle?.battleId, verifiedBattleId);
+  let terminalBattle = null;
+
+  for (let iteration = 0; iteration < 2_500; iteration += 1) {
+    const state = await snapshot(client);
+    const battle = state.battle;
+    assert.ok(battle, `${label} verified run must retain its battle snapshot`);
+    assert.equal(
+      battle.battleId,
+      verifiedBattleId,
+      `${label} must not reset while continuing the verified signature run`,
+    );
+
+    if (battle.status === 'victory' || battle.status === 'defeat') {
+      terminalBattle = battle;
+      break;
+    }
+    if (battle.status === 'upgrade') {
+      await chooseStrategicUpgrade(client, battle.offeredUpgradeIds);
+      await advanceBattle(client, 0);
+      continue;
+    }
+    if (battle.status === 'paused') {
+      await callHook(client, 'await hook.requestResume(); return true;');
+      continue;
+    }
+
+    const openBoss = battle.enemies.find((enemy) => (
+      enemy.kind === 'deep-echo-boss'
+      && enemy.alive
+      && enemy.behaviour?.weakPointOpen
+    ));
+    if (openBoss) {
+      await callHook(
+        client,
+        `return hook.setMainCannonAim(${openBoss.x}, ${openBoss.y + 9});`,
+      );
+    }
+    if (battle.cooldowns['tidal-volley'] <= 0) {
+      await callHook(client, `return hook.useSkill('tidal-volley');`);
+    }
+    if (battle.cooldowns['bubble-barrier'] <= 0) {
+      await callHook(client, `return hook.useSkill('bubble-barrier');`);
+    }
+    if (battle.cooldowns['extreme-tide'] <= 0 && battle.energy >= 100) {
+      await callHook(client, `return hook.useSkill('extreme-tide');`);
+    }
+    const stepMs = battle.elapsedMs >= 125_000 ? 250 : 1_000;
+    await advanceBattle(client, stepMs);
+  }
+
+  assert.ok(terminalBattle, `${label} verified signature run must terminate`);
+  assert.equal(terminalBattle.battleId, verifiedBattleId);
+  assert.equal(
+    terminalBattle.status,
+    'victory',
+    `${label} verified signature run must itself reach victory`,
+  );
+  const settled = await snapshot(client);
+  assert.equal(settled.battle?.battleId, verifiedBattleId);
+  assert.equal(settled.battle?.status, 'victory');
+  return { battleId: verifiedBattleId, terminalStatus: 'victory' };
 }
 
 async function claimRepeatedSalvage(client) {

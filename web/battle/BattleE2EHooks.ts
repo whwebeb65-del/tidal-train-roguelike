@@ -24,6 +24,7 @@ export interface BattleE2EEffectGeometry {
     readonly y: number;
     readonly size: number;
     readonly color: string;
+    readonly secondaryColor?: string;
     readonly alpha: number;
     readonly rotation: number;
     readonly progress: number;

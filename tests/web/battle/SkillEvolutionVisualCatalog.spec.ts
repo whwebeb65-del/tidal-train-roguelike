@@ -6,6 +6,7 @@ import {
 import {
   getSkillEvolutionVisualSignature,
   SKILL_EVOLUTION_VISUAL_SIGNATURES,
+  type SkillEvolutionVisualSignature,
 } from '../../../web/battle/SkillEvolutionVisualCatalog';
 
 type IfEquals<Left, Right, Equal = Left, Different = never> =
@@ -29,6 +30,11 @@ const catalogReadonlyContract: AssertNever<
 > = undefined as never;
 void catalogReadonlyContract;
 
+const signatureReadonlyContract: AssertNever<
+  WritableKeys<SkillEvolutionVisualSignature>
+> = undefined as never;
+void signatureReadonlyContract;
+
 describe('SkillEvolutionVisualCatalog', () => {
   it('maps every authoritative evolution once into a frozen signature', () => {
     expect(Object.keys(SKILL_EVOLUTION_VISUAL_SIGNATURES)).toEqual(SKILL_VARIANT_IDS);
@@ -39,7 +45,17 @@ describe('SkillEvolutionVisualCatalog', () => {
       expect(Object.isFrozen(signature)).toBe(true);
       expect(signature.primary).toMatch(/^#[0-9a-f]{6}$/i);
       expect(signature.secondary).toMatch(/^#[0-9a-f]{6}$/i);
+      expect(signature.reducedMotionRingKind).toBe('static-skill-silhouette');
       expect(SKILL_VARIANTS_BY_SKILL[signature.skillId]).toContain(id);
     }
+    expect(new Set(SKILL_VARIANT_IDS.map((id) => (
+      getSkillEvolutionVisualSignature(id).particleKind
+    ))).size).toBe(12);
+    expect(new Set(SKILL_VARIANT_IDS.map((id) => (
+      getSkillEvolutionVisualSignature(id).primary
+    ))).size).toBe(12);
+    expect(new Set(SKILL_VARIANT_IDS.map((id) => (
+      getSkillEvolutionVisualSignature(id).secondary
+    ))).size).toBe(12);
   });
 });

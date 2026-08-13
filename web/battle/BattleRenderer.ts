@@ -1116,16 +1116,20 @@ export class BattleRenderer {
         continue;
       }
       const motifSize = particle.size * (0.9 + particle.progress * 0.2);
+      const secondaryColor = particle.secondaryColor ?? particle.color;
       if (particle.kind === 'split-chevron') {
         const upper = evolutionMotifPoint(particle, -1.4 * motifSize, -1.1 * motifSize);
         const vertex = evolutionMotifPoint(particle, 0.8 * motifSize, 0);
         const lower = evolutionMotifPoint(particle, -1.4 * motifSize, 1.1 * motifSize);
-        for (const points of [[upper, vertex], [vertex, lower]]) {
+        for (const [points, color] of [
+          [[upper, vertex], particle.color],
+          [[vertex, lower], secondaryColor],
+        ] as const) {
           this.painter.line({
             kind: 'effect-split-chevron',
             layer,
             points,
-            stroke: particle.color,
+            stroke: color,
             lineWidth: particle.size * 0.34,
             lineCap: 'round',
             alpha: particle.alpha,
@@ -1144,23 +1148,29 @@ export class BattleRenderer {
           [1.65, 0.18],
           [2.5, 0.02],
         ] as const;
-        this.painter.line({
-          kind: 'effect-returning-arc',
-          layer,
-          points: arcProfile.map(([x, y]) => (
-            evolutionMotifPoint(particle, x * motifSize, y * motifSize)
-          )),
-          stroke: particle.color,
-          lineWidth: particle.size * 0.3,
-          lineCap: 'round',
-          alpha: particle.alpha,
-          blendMode: 'screen',
-        });
+        const points = arcProfile.map(([x, y]) => (
+          evolutionMotifPoint(particle, x * motifSize, y * motifSize)
+        ));
+        for (const [stroke, lineWidth] of [
+          [particle.color, particle.size * 0.3],
+          [secondaryColor, particle.size * 0.13],
+        ] as const) {
+          this.painter.line({
+            kind: 'effect-returning-arc',
+            layer,
+            points,
+            stroke,
+            lineWidth,
+            lineCap: 'round',
+            alpha: particle.alpha,
+            blendMode: 'screen',
+          });
+        }
         continue;
       }
       if (particle.kind === 'rainstorm-fin') {
         const origin = evolutionMotifPoint(particle, -0.6 * motifSize, 0.5 * motifSize);
-        for (const endpointY of [-1.6, 0.15, 1.5]) {
+        for (const [index, endpointY] of [-1.6, 0.15, 1.5].entries()) {
           this.painter.line({
             kind: 'effect-rainstorm-fin',
             layer,
@@ -1168,7 +1178,7 @@ export class BattleRenderer {
               origin,
               evolutionMotifPoint(particle, 2.1 * motifSize, endpointY * motifSize),
             ],
-            stroke: particle.color,
+            stroke: index === 1 ? secondaryColor : particle.color,
             lineWidth: particle.size * 0.28,
             lineCap: 'round',
             alpha: particle.alpha,
@@ -1178,7 +1188,12 @@ export class BattleRenderer {
         continue;
       }
       if (particle.kind === 'bubble-fracture') {
-        for (const angle of [0, Math.PI / 2, Math.PI, Math.PI * 1.5]) {
+        for (const [index, angle] of [
+          0,
+          Math.PI / 2,
+          Math.PI,
+          Math.PI * 1.5,
+        ].entries()) {
           this.painter.line({
             kind: 'effect-bubble-fracture',
             layer,
@@ -1194,7 +1209,7 @@ export class BattleRenderer {
                 Math.sin(angle) * motifSize * 2.25,
               ),
             ],
-            stroke: particle.color,
+            stroke: index % 2 === 0 ? particle.color : secondaryColor,
             lineWidth: particle.size * 0.25,
             lineCap: 'round',
             alpha: particle.alpha,
@@ -1209,7 +1224,7 @@ export class BattleRenderer {
           radiusX: motifSize * 0.55,
           radiusY: motifSize * 0.55,
           rotation: particle.rotation,
-          stroke: particle.color,
+          stroke: secondaryColor,
           lineWidth: particle.size * 0.24,
           alpha: particle.alpha,
           blendMode: 'screen',
@@ -1219,9 +1234,9 @@ export class BattleRenderer {
       if (particle.kind === 'overflow-droplet') {
         const outerCenter = evolutionMotifPoint(particle, -0.35 * motifSize, 0);
         const innerCenter = evolutionMotifPoint(particle, 0.45 * motifSize, -0.05 * motifSize);
-        for (const [center, radiusX, radiusY] of [
-          [outerCenter, motifSize * 2, motifSize * 1.25],
-          [innerCenter, motifSize * 1.35, motifSize * 0.82],
+        for (const [center, radiusX, radiusY, stroke] of [
+          [outerCenter, motifSize * 2, motifSize * 1.25, particle.color],
+          [innerCenter, motifSize * 1.35, motifSize * 0.82, secondaryColor],
         ] as const) {
           this.painter.ellipse({
             kind: 'effect-overflow-droplet',
@@ -1231,7 +1246,7 @@ export class BattleRenderer {
             radiusX,
             radiusY,
             rotation: particle.rotation,
-            stroke: particle.color,
+            stroke,
             lineWidth: particle.size * 0.24,
             alpha: particle.alpha,
             blendMode: 'screen',
@@ -1244,7 +1259,7 @@ export class BattleRenderer {
             evolutionMotifPoint(particle, 0, motifSize * 1.2),
             evolutionMotifPoint(particle, 0.25 * motifSize, motifSize * 2.15),
           ],
-          stroke: particle.color,
+          stroke: secondaryColor,
           lineWidth: particle.size * 0.28,
           lineCap: 'round',
           alpha: particle.alpha,
@@ -1278,7 +1293,7 @@ export class BattleRenderer {
               evolutionMotifPoint(particle, direction * 2.05 * motifSize, 0),
               evolutionMotifPoint(particle, direction * 2.8 * motifSize, 0),
             ],
-            stroke: particle.color,
+            stroke: secondaryColor,
             lineWidth: particle.size * 0.26,
             lineCap: 'round',
             alpha: particle.alpha,
@@ -1288,9 +1303,9 @@ export class BattleRenderer {
         continue;
       }
       if (particle.kind === 'undertow-eye') {
-        for (const [radiusX, radiusY] of [
-          [motifSize * 2.5, motifSize * 1.25],
-          [motifSize * 1.15, motifSize * 0.62],
+        for (const [radiusX, radiusY, stroke] of [
+          [motifSize * 2.5, motifSize * 1.25, particle.color],
+          [motifSize * 1.15, motifSize * 0.62, secondaryColor],
         ] as const) {
           this.painter.ellipse({
             kind: 'effect-undertow-eye',
@@ -1300,10 +1315,10 @@ export class BattleRenderer {
             radiusX,
             radiusY,
             rotation: particle.rotation,
-            stroke: particle.color,
-            lineWidth: particle.size * 0.24,
+            stroke,
+            lineWidth: Math.max(1.7, particle.size * 0.24),
             alpha: particle.alpha,
-            blendMode: 'screen',
+            blendMode: 'source-over',
           });
         }
         for (const angle of [
@@ -1327,11 +1342,11 @@ export class BattleRenderer {
                 Math.sin(angle) * motifSize * 0.34,
               ),
             ],
-            stroke: particle.color,
-            lineWidth: particle.size * 0.22,
+            stroke: secondaryColor,
+            lineWidth: Math.max(1.6, particle.size * 0.22),
             lineCap: 'round',
             alpha: particle.alpha,
-            blendMode: 'screen',
+            blendMode: 'source-over',
           });
         }
         continue;
@@ -1351,7 +1366,7 @@ export class BattleRenderer {
           radiusX: motifSize * 0.85,
           radiusY: motifSize * 0.55,
           rotation: particle.rotation,
-          stroke: particle.color,
+          stroke: secondaryColor,
           lineWidth: particle.size * 0.26,
           alpha: particle.alpha,
           blendMode: 'screen',
@@ -1377,32 +1392,48 @@ export class BattleRenderer {
       if (particle.kind === 'rank-volley-trail' || particle.kind === 'coral-pierce') {
         const length = particle.kind === 'coral-pierce' ? particle.size * 5 : particle.size * 4;
         const angle = particle.rotation - Math.PI / 2;
-        this.painter.line({
-          kind: `effect-${particle.kind}`,
-          layer,
-          points: [{ x: particle.x - Math.cos(angle) * length * 0.5, y: particle.y - Math.sin(angle) * length * 0.5 }, { x: particle.x + Math.cos(angle) * length * 0.5, y: particle.y + Math.sin(angle) * length * 0.5 }],
-          stroke: particle.color,
-          lineWidth: particle.kind === 'coral-pierce' ? particle.size * 0.52 : particle.size * 0.38,
-          lineCap: 'round',
-          alpha: particle.alpha,
-          blendMode: 'screen',
-        });
+        const strokes = particle.kind === 'coral-pierce'
+          ? [
+              [particle.color, particle.size * 0.52],
+              [secondaryColor, particle.size * 0.2],
+            ] as const
+          : [[particle.color, particle.size * 0.38]] as const;
+        for (const [stroke, lineWidth] of strokes) {
+          this.painter.line({
+            kind: `effect-${particle.kind}`,
+            layer,
+            points: [{ x: particle.x - Math.cos(angle) * length * 0.5, y: particle.y - Math.sin(angle) * length * 0.5 }, { x: particle.x + Math.cos(angle) * length * 0.5, y: particle.y + Math.sin(angle) * length * 0.5 }],
+            stroke,
+            lineWidth,
+            lineCap: 'round',
+            alpha: particle.alpha,
+            blendMode: 'screen',
+          });
+        }
         continue;
       }
       if (particle.kind === 'extreme-radial-stroke' || particle.kind === 'reflection' || particle.kind === 'extreme-pull') {
         const angle = particle.rotation;
         const outer = particle.kind === 'extreme-pull' ? particle.size * 3 : particle.size * 2.8;
         const inner = particle.kind === 'extreme-pull' ? particle.size * 0.55 : particle.size * 1.1;
-        this.painter.line({
-          kind: `effect-${particle.kind}`,
-          layer,
-          points: [{ x: particle.x + Math.cos(angle) * outer, y: particle.y + Math.sin(angle) * outer }, { x: particle.x + Math.cos(angle) * inner, y: particle.y + Math.sin(angle) * inner }],
-          stroke: particle.color,
-          lineWidth: particle.kind === 'reflection' ? particle.size * 0.48 : particle.size * 0.34,
-          lineCap: particle.kind === 'reflection' ? 'square' : 'round',
-          alpha: particle.alpha,
-          blendMode: 'screen',
-        });
+        const strokes = particle.kind === 'reflection'
+          ? [
+              [particle.color, particle.size * 0.48],
+              [secondaryColor, particle.size * 0.18],
+            ] as const
+          : [[particle.color, particle.size * 0.34]] as const;
+        for (const [stroke, lineWidth] of strokes) {
+          this.painter.line({
+            kind: `effect-${particle.kind}`,
+            layer,
+            points: [{ x: particle.x + Math.cos(angle) * outer, y: particle.y + Math.sin(angle) * outer }, { x: particle.x + Math.cos(angle) * inner, y: particle.y + Math.sin(angle) * inner }],
+            stroke,
+            lineWidth,
+            lineCap: particle.kind === 'reflection' ? 'square' : 'round',
+            alpha: particle.alpha,
+            blendMode: 'screen',
+          });
+        }
         continue;
       }
       if (particle.kind === 'extreme-vortex' || particle.kind === 'second-crest') {
@@ -1411,17 +1442,22 @@ export class BattleRenderer {
         const points = particle.kind === 'second-crest'
           ? [{ x: particle.x - radius, y: particle.y + bend }, { x: particle.x - radius * 0.5, y: particle.y - bend }, { x: particle.x, y: particle.y + bend }, { x: particle.x + radius * 0.5, y: particle.y - bend }, { x: particle.x + radius, y: particle.y + bend }]
           : [{ x: particle.x - radius, y: particle.y + bend }, { x: particle.x, y: particle.y - bend }, { x: particle.x + radius, y: particle.y + bend }];
-        this.painter.line({
-          kind: `effect-${particle.kind}`,
-          layer,
-          points,
-          stroke: particle.color,
-          lineWidth: particle.size * 0.32,
-          curve: true,
-          lineCap: 'round',
-          alpha: particle.alpha,
-          blendMode: 'screen',
-        });
+        for (const [stroke, lineWidth] of [
+          [particle.color, particle.size * 0.32],
+          [secondaryColor, particle.size * 0.13],
+        ] as const) {
+          this.painter.line({
+            kind: `effect-${particle.kind}`,
+            layer,
+            points,
+            stroke,
+            lineWidth,
+            curve: true,
+            lineCap: 'round',
+            alpha: particle.alpha,
+            blendMode: 'screen',
+          });
+        }
         continue;
       }
       if (particle.kind === 'critical-shard' || particle.kind === 'armour-spark') {

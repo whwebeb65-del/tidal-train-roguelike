@@ -176,9 +176,11 @@ function largestFilledRectangle(pixels: ArrayLike<number>): number {
 function renderEvolutionMotif(
   variantId: SkillVariantId,
   alpha = 1,
+  size = 12,
 ): {
   readonly commands: readonly BattleDrawCommand[];
-  readonly color: string;
+  readonly primary: string;
+  readonly secondary: string;
   readonly particleKind: string;
 } {
   const signature = getSkillEvolutionVisualSignature(variantId);
@@ -189,8 +191,9 @@ function renderEvolutionMotif(
       layer: 'front-effects',
       x: 195,
       y: 430,
-      size: 12,
+      size,
       color: signature.primary,
+      secondaryColor: signature.secondary,
       alpha,
       rotation: 0,
       progress: 0.4,
@@ -203,7 +206,8 @@ function renderEvolutionMotif(
   new BattleRenderer(painter).render(createPresentationFixture({ effects }));
   return {
     commands: painter.commands,
-    color: signature.primary,
+    primary: signature.primary,
+    secondary: signature.secondary,
     particleKind: signature.particleKind,
   };
 }
@@ -236,7 +240,8 @@ describe('battle pixel evidence helpers', () => {
       const rendered = renderEvolutionMotif(variantId);
       const { commands } = rendered;
       expect(rendered).toMatchObject({
-        color: signature.primary,
+        primary: signature.primary,
+        secondary: signature.secondary,
         particleKind,
       });
       const motifCommands = commands.filter((command) => command.kind === drawKind);
@@ -244,15 +249,34 @@ describe('battle pixel evidence helpers', () => {
       expect(motifCommands.every((command) => (
         (command.alpha ?? 1) > 0
         && (
-          ('points' in command && command.stroke === signature.primary)
+          ('points' in command && (
+            command.stroke === signature.primary
+              || command.stroke === signature.secondary
+          ))
           || (
             'radiusX' in command
-              && (command.stroke === signature.primary || command.fill === signature.primary)
+              && (
+                command.stroke === signature.primary
+                  || command.fill === signature.primary
+                  || command.stroke === signature.secondary
+                  || command.fill === signature.secondary
+              )
           )
         )
       ))).toBe(true);
       const pixels = rasterizeMotif(commands, drawKind, signature.primary);
+      const secondaryPixels = rasterizeMotif(
+        commands,
+        drawKind,
+        signature.secondary,
+      );
       expect(coloredPixelCount(pixels, expectedRegion)).toBeGreaterThan(0);
+      expect(coloredPixelCount(secondaryPixels, {
+        x: 145,
+        y: 385,
+        width: 100,
+        height: 90,
+      })).toBeGreaterThan(0);
       expect(largestFilledRectangle(pixels)).toBeLessThan(
         LOGICAL_WIDTH * LOGICAL_HEIGHT * 0.35,
       );
@@ -264,6 +288,24 @@ describe('battle pixel evidence helpers', () => {
       )).toBe(true);
     },
   );
+
+  it('keeps both undertow-eye colors visible at the rank-one particle size', () => {
+    const rendered = renderEvolutionMotif('undertow-eye', 0.65, 3.85);
+    const motifRegion = { x: 184, y: 418, width: 23, height: 24 };
+    const primaryPixels = rasterizeMotif(
+      rendered.commands,
+      'effect-undertow-eye',
+      rendered.primary,
+    );
+    const secondaryPixels = rasterizeMotif(
+      rendered.commands,
+      'effect-undertow-eye',
+      rendered.secondary,
+    );
+
+    expect(coloredPixelCount(primaryPixels, motifRegion)).toBeGreaterThan(35);
+    expect(coloredPixelCount(secondaryPixels, motifRegion)).toBeGreaterThan(35);
+  });
 
   it('rejects same-color motif geometry when its final alpha is zero', () => {
     const expectedRegion = { x: 176, y: 414, width: 8, height: 8 };
@@ -286,14 +328,33 @@ describe('battle pixel evidence helpers', () => {
       'effect-split-chevron',
       signature.primary,
     );
+    const visibleSecondaryPixels = rasterizeMotif(
+      visible.commands,
+      'effect-split-chevron',
+      signature.secondary,
+    );
+    const transparentSecondaryPixels = rasterizeMotif(
+      transparent.commands,
+      'effect-split-chevron',
+      signature.secondary,
+    );
 
     expect(coloredPixelCount(visiblePixels, expectedRegion)).toBeGreaterThan(0);
     expect(coloredPixelCount(transparentPixels, expectedRegion)).toBe(0);
+    const motifRegion = { x: 145, y: 385, width: 100, height: 90 };
+    expect(coloredPixelCount(visibleSecondaryPixels, motifRegion)).toBeGreaterThan(0);
+    expect(coloredPixelCount(transparentSecondaryPixels, motifRegion)).toBe(0);
     expect(passesMotifPixelEvidence(
       transparent.commands,
       'effect-split-chevron',
       signature.primary,
       expectedRegion,
+    )).toBe(false);
+    expect(passesMotifPixelEvidence(
+      transparent.commands,
+      'effect-split-chevron',
+      signature.secondary,
+      motifRegion,
     )).toBe(false);
   });
 

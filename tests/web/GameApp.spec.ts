@@ -1041,6 +1041,7 @@ describe('LegacyGameRuntime E2E snapshots', () => {
       kind: 'split-chevron',
       layer: 'front-effects',
       color: '#59e9ff',
+      secondaryColor: '#f1ffff',
       alpha: expect.any(Number),
     });
     expect(Object.isFrozen(signatureSnapshot.effects)).toBe(true);

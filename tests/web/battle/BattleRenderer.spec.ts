@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { BattleRenderer } from '../../../web/battle/BattleRenderer';
-import type {
+import {
+  EffectSystem,
+  type EffectParticleView,
   EffectFrameView,
   EffectParticleKind,
 } from '../../../web/battle/EffectSystem';
@@ -23,6 +25,14 @@ import {
   enemySpawnY,
 } from '../../../web/battle/EnemyGeometry';
 import type { EnemyKind } from '../../../web/battle/BattleTypes';
+import type { BattleEvent } from '../../../web/battle/BattleTypes';
+import {
+  SKILL_VARIANT_IDS,
+  type SkillVariantId,
+} from '../../../src/domain/skill/SkillProgressionTypes';
+import {
+  getSkillEvolutionVisualSignature,
+} from '../../../web/battle/SkillEvolutionVisualCatalog';
 
 interface TestPose {
   readonly offsetX: number;
@@ -70,6 +80,45 @@ function expectSharedPose(
 
 function pointPairs(command: LineDrawCommand): readonly (readonly number[])[] {
   return command.points.map((point) => [point.x, point.y]);
+}
+
+function authoritativeEvolutionEvents(id: SkillVariantId): readonly BattleEvent[] {
+  if (id === 'bursting-bubble') return [{ type: 'barrier-burst' }];
+  if (id === 'emergency-trigger') {
+    return [{ type: 'barrier-emergency-triggered', effectRatio: 0.6 }];
+  }
+  if (id === 'undertow-eye') {
+    return [{ type: 'extreme-pull-started', durationMs: 2000 }];
+  }
+  if (id === 'lingering-vortex') {
+    return [{ type: 'extreme-vortex-started', durationMs: 4000 }];
+  }
+  if (id === 'energy-return') {
+    return [{ type: 'extreme-energy-refunded', amount: 2 }];
+  }
+  if (id === 'double-crest') {
+    return [{ type: 'extreme-second-crest', durationMs: 1200, amount: 45 }];
+  }
+  return [{
+    type: 'skill-used',
+    skillId: getSkillEvolutionVisualSignature(id).skillId,
+  }];
+}
+
+function commandHasVisibleColor(
+  command: BattleDrawCommand,
+  color: string,
+): boolean {
+  if ((command.alpha ?? 1) <= 0) return false;
+  if ('points' in command) {
+    return command.points.length >= 2
+      && command.lineWidth > 0
+      && command.stroke === color;
+  }
+  return 'radiusX' in command
+    && command.radiusX > 0
+    && command.radiusY > 0
+    && (command.stroke === color || command.fill === color);
 }
 
 function commandBounds(
@@ -353,17 +402,17 @@ describe('BattleRenderer', () => {
 
   it.each([
     ['split-chevron', 'effect-split-chevron', 2],
-    ['coral-pierce', 'effect-coral-pierce', 1],
-    ['returning-arc', 'effect-returning-arc', 1],
+    ['coral-pierce', 'effect-coral-pierce', 2],
+    ['returning-arc', 'effect-returning-arc', 2],
     ['rainstorm-fin', 'effect-rainstorm-fin', 3],
     ['bubble-fracture', 'effect-bubble-fracture', 5],
-    ['reflection', 'effect-reflection', 1],
+    ['reflection', 'effect-reflection', 2],
     ['overflow-droplet', 'effect-overflow-droplet', 3],
     ['emergency-beacon', 'effect-emergency-beacon', 3],
     ['undertow-eye', 'effect-undertow-eye', 6],
-    ['extreme-vortex', 'effect-extreme-vortex', 1],
+    ['extreme-vortex', 'effect-extreme-vortex', 2],
     ['energy-return', 'effect-energy-return', 2],
-    ['second-crest', 'effect-second-crest', 1],
+    ['second-crest', 'effect-second-crest', 2],
   ] as const)(
     'draws %s as nonzero bounded %s commands',
     (particleKind, drawKind, expectedCount) => {
@@ -413,6 +462,50 @@ describe('BattleRenderer', () => {
       expect(bounds.height).toBeGreaterThan(0);
       expect(bounds.width).toBeLessThan(180);
       expect(bounds.height).toBeLessThan(140);
+    },
+  );
+
+  it.each(SKILL_VARIANT_IDS)(
+    'renders both catalog colors for the real %s EffectSystem motif',
+    (id) => {
+      const signature = getSkillEvolutionVisualSignature(id);
+      const frame = createFrameFixture({
+        skillRanks: {
+          'tidal-volley': 5,
+          'bubble-barrier': 5,
+          'extreme-tide': 5,
+        },
+        skillVariants: {
+          'tidal-volley': signature.skillId === 'tidal-volley' ? [id] : [],
+          'bubble-barrier': signature.skillId === 'bubble-barrier' ? [id] : [],
+          'extreme-tide': signature.skillId === 'extreme-tide' ? [id] : [],
+        },
+      });
+      const effects = new EffectSystem({
+        particleLimit: 200,
+        damageNumberLimit: 18,
+        impactLimit: 24,
+        reducedMotion: false,
+      });
+      effects.consume(authoritativeEvolutionEvents(id), frame);
+      effects.update(17);
+      const particle = effects.view.particles.find((candidate) => (
+        candidate.kind === signature.particleKind
+      ));
+      expect(particle).toMatchObject({
+        color: signature.primary,
+        secondaryColor: signature.secondary,
+      } satisfies Partial<EffectParticleView>);
+
+      const commands = renderCommands({ frame, effects: effects.view }).filter(
+        (command) => command.kind === `effect-${signature.particleKind}`,
+      );
+      expect(commands.some((command) => (
+        commandHasVisibleColor(command, signature.primary)
+      ))).toBe(true);
+      expect(commands.some((command) => (
+        commandHasVisibleColor(command, signature.secondary)
+      ))).toBe(true);
     },
   );
 

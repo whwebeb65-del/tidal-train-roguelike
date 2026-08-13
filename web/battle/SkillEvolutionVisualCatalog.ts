@@ -24,7 +24,10 @@ export interface SkillEvolutionVisualSignature {
   readonly primary: string;
   readonly secondary: string;
   readonly particleKind: SkillEvolutionParticleKind;
+  readonly reducedMotionRingKind: 'static-skill-silhouette';
 }
+
+const REDUCED_MOTION_RING_KIND = 'static-skill-silhouette' as const;
 
 const INPUT = {
   'split-tide-arrow': ['tidal-volley', '#59e9ff', '#f1ffff', 'split-chevron'],
@@ -54,7 +57,14 @@ export const SKILL_EVOLUTION_VISUAL_SIGNATURES: Readonly<Record<
       throw new Error(`Missing visual signature for evolution: ${id}`);
     }
     const [skillId, primary, secondary, particleKind] = input;
-    return [id, Object.freeze({ id, skillId, primary, secondary, particleKind })];
+    return [id, Object.freeze({
+      id,
+      skillId,
+      primary,
+      secondary,
+      particleKind,
+      reducedMotionRingKind: REDUCED_MOTION_RING_KIND,
+    })];
   })) as Record<SkillVariantId, SkillEvolutionVisualSignature>,
 );
 

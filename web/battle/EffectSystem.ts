@@ -51,6 +51,7 @@ export interface EffectParticleView {
   readonly y: number;
   readonly size: number;
   readonly color: string;
+  readonly secondaryColor?: string;
   readonly alpha: number;
   readonly rotation: number;
   readonly progress: number;
@@ -133,6 +134,7 @@ interface MutableParticle {
   kind: EffectParticleKind;
   layer: EffectParticleView['layer'];
   color: string;
+  secondaryColor?: string;
   size: number;
   lifetimeMs: number;
   priority: number;
@@ -177,6 +179,8 @@ interface MutableImpactRing {
 interface ActiveEvolutionSignature {
   readonly authoritativeExpiresAtMs: number;
 }
+
+const EVOLUTION_MAIN_MOTIF_PRIORITY = 11;
 
 export interface EffectPoolStats {
   readonly particles: EntityPoolStats;
@@ -305,6 +309,9 @@ export class EffectSystem {
         y: particle.y,
         size: particle.size,
         color: particle.color,
+        ...(particle.secondaryColor === undefined
+          ? {}
+          : { secondaryColor: particle.secondaryColor }),
         alpha: fade(particle.ageMs, particle.lifetimeMs),
         rotation: particle.rotation,
         progress: Math.min(
@@ -802,6 +809,7 @@ export class EffectSystem {
       particle.kind = kind;
       particle.layer = layer;
       particle.color = color;
+      particle.secondaryColor = undefined;
       particle.size = 2.5 + id % 4 * 1.1;
       particle.lifetimeMs = lifetimeMs;
       particle.priority = priority;
@@ -904,9 +912,10 @@ export class EffectSystem {
     particle.kind = signature.particleKind;
     particle.layer = 'front-effects';
     particle.color = signature.primary;
+    particle.secondaryColor = signature.secondary;
     particle.size = 3.2 + rank * 0.65;
     particle.lifetimeMs = lifetimeMs;
-    particle.priority = 6;
+    particle.priority = EVOLUTION_MAIN_MOTIF_PRIORITY;
     particle.x = x + offsetX;
     particle.y = y + offsetY;
     particle.vx = Math.cos(angle) * (18 + catalogIndex % 3 * 4);
@@ -958,7 +967,7 @@ export class EffectSystem {
       ? y - 40
       : signature.skillId === 'tidal-volley'
         ? y + 180
-        : y + 220;
+        : y + 168;
     const displayExpiresAtMs = Math.min(
       authoritativeExpiresAtMs,
       this.clockMs + 420,
@@ -986,7 +995,7 @@ export class EffectSystem {
         signature.primary,
         100,
         signature.secondary,
-        'static-skill-silhouette',
+        signature.reducedMotionRingKind,
         id,
         remainingMs,
         displayExpiresAtMs,
@@ -1265,6 +1274,7 @@ function createParticle(): MutableParticle {
     kind: 'muzzle',
     layer: 'front-effects',
     color: '',
+    secondaryColor: undefined,
     size: 0,
     lifetimeMs: 0,
     priority: 0,
@@ -1286,6 +1296,7 @@ function resetParticle(particle: MutableParticle): void {
   particle.kind = 'muzzle';
   particle.layer = 'front-effects';
   particle.color = '';
+  particle.secondaryColor = undefined;
   particle.size = 0;
   particle.lifetimeMs = 0;
   particle.priority = 0;

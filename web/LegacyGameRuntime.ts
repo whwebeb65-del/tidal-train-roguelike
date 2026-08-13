@@ -2639,6 +2639,9 @@ function e2eSnapshot(): BattleE2ESnapshot {
             y: particle.y,
             size: particle.size,
             color: particle.color,
+            ...(particle.secondaryColor === undefined
+              ? {}
+              : { secondaryColor: particle.secondaryColor }),
             alpha: particle.alpha,
             rotation: particle.rotation,
             progress: particle.progress,

@@ -804,6 +804,32 @@ describe('EffectSystem', () => {
     }
   });
 
+  it.each([
+    'bursting-bubble',
+    'reflective-spines',
+    'overflow-membrane',
+    'emergency-trigger',
+  ] as const)(
+    'keeps the reduced-motion %s catalog silhouette above the 390px protection line',
+    (id) => {
+      const effects = createEffectsForQuality('low', true);
+      const signature = getSkillEvolutionVisualSignature(id);
+
+      effects.consume(authoritativeEventsForVariant(id), createVariantFrame([id]));
+
+      const ring = effects.view.rings.find((candidate) => (
+        candidate.color === signature.primary
+      ));
+      expect(ring).toMatchObject({
+        kind: signature.reducedMotionRingKind,
+        color: signature.primary,
+        secondaryColor: signature.secondary,
+      });
+      const conservativeRendererBottom = ring!.y + ring!.radius * 0.72 + 1.25;
+      expect(conservativeRendererBottom).toBeLessThanOrEqual(688);
+    },
+  );
+
   it.each(['high', 'medium', 'low'] as const)(
     'keeps every selected motif while respecting the %s signature budget',
     (quality) => {
@@ -842,6 +868,64 @@ describe('EffectSystem', () => {
       expect(new Set(effects.view.particles.map((item) => item.kind))).toEqual(
         new Set(ids.map((id) => getSkillEvolutionVisualSignature(id).particleKind)),
       );
+    },
+  );
+
+  it.each([
+    {
+      label: 'tidal-volley representative',
+      ids: ['split-tide-arrow'],
+      events: [{ type: 'skill-used', skillId: 'tidal-volley' }],
+    },
+    {
+      label: 'bubble-barrier representative',
+      ids: ['reflective-spines'],
+      events: [{ type: 'skill-used', skillId: 'bubble-barrier' }],
+    },
+    {
+      label: 'extreme-tide representative',
+      ids: ['undertow-eye'],
+      events: [
+        { type: 'skill-used', skillId: 'extreme-tide' },
+        { type: 'extreme-pull-started', durationMs: 2000 },
+      ],
+    },
+    {
+      label: 'multi-variant tidal-volley batch',
+      ids: ['split-tide-arrow', 'reef-piercer', 'returning-volley', 'rainstorm-school'],
+      events: [{ type: 'skill-used', skillId: 'tidal-volley' }],
+    },
+  ] satisfies readonly {
+    readonly label: string;
+    readonly ids: readonly SkillVariantId[];
+    readonly events: readonly BattleEvent[];
+  }[])(
+    'retains each newly triggered motif under pre-existing boss pressure: $label',
+    ({ ids, events }) => {
+      const effects = createEffectsForQuality('low');
+      const frame = createVariantFrame(ids);
+      const bossPressure = Array.from({ length: 80 }, (_, index): BattleEvent => ({
+        type: 'boss-tide-impact',
+        safeLane: (index % 3) as 0 | 1 | 2,
+        avoided: false,
+      }));
+      effects.consume(bossPressure, frame);
+      expect(effects.view.particles).toHaveLength(80);
+      expect(effects.view.particles.every((particle) => (
+        particle.kind === 'boss-tide'
+      ))).toBe(true);
+
+      for (let repeat = 0; repeat < 3; repeat += 1) {
+        effects.consume(events, frame);
+        const kinds = new Set(effects.view.particles.map((particle) => particle.kind));
+        for (const id of ids) {
+          expect(kinds).toContain(
+            getSkillEvolutionVisualSignature(id).particleKind,
+          );
+        }
+        expect(effects.view.particles.length).toBeLessThanOrEqual(80);
+        expect(effects.poolStats.particles.inUse).toBeLessThanOrEqual(80);
+      }
     },
   );
 

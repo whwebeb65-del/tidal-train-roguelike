@@ -190,6 +190,10 @@ describe('browser smoke script', () => {
     expect(castSource).toContain('static-skill-silhouette');
     expect(castSource).toContain('stableStaticRing');
     expect(castSource).toContain('secondaryColor');
+    expect(castSource).toContain('staticSignatureRingBounds');
+    expect(castSource).toMatch(
+      /if \(reducedMotion\)[\s\S]*?assertSignatureAvoidsProtectedControls/,
+    );
     expect(castSource).toContain('sampleSignaturePixels');
     expect(castSource).toContain('captureSignaturePixelBaseline');
     expect(source).toContain('baselinePrimaryMatches');
@@ -205,6 +209,35 @@ describe('browser smoke script', () => {
     expect(source).toContain('#ffd58a');
     expect(source).toContain('#456fe8');
     expect(source).toContain('#78e8ff');
+    expect(source).toContain('continueVerifiedSignatureBattle');
+    expect(source).toContain('verifiedBattleId');
+    expect(source).toMatch(
+      /terminalBattle\.battleId[\s\S]*?verifiedBattleId/,
+    );
+    const verifiedVictoryStart = source.indexOf(
+      'async function continueVerifiedSignatureBattle',
+    );
+    const verifiedVictoryEnd = source.indexOf(
+      'async function claimRepeatedSalvage',
+      verifiedVictoryStart,
+    );
+    const verifiedVictorySource = source.slice(
+      verifiedVictoryStart,
+      verifiedVictoryEnd,
+    );
+    expect(verifiedVictorySource).toContain(
+      'terminalBattle.status',
+    );
+    expect(verifiedVictorySource).toContain(
+      'terminalBattle.battleId',
+    );
+    expect(verifiedVictorySource).not.toContain(
+      'data-settlement-overlay',
+    );
+    expect(verifiedVictorySource).not.toContain(
+      'data-battle-action="revive"',
+    );
+    expect(source).not.toContain('forceVictory');
   });
 
   it('guards the complete tidal archive discovery feedback lifecycle', () => {
