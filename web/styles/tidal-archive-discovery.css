@@ -375,8 +375,9 @@
   .battle-overlay--settlement [data-settlement-archive-entry],
   .battle-overlay--settlement [data-settlement-archive-entry]::before,
   .battle-overlay--settlement [data-settlement-archive-entry]::after {
-    animation: none;
-    transition: none;
-    transform: none;
+    animation-name: none !important;
+    animation-duration: 0s !important;
+    transition-duration: 0s !important;
+    transform: none !important;
   }
 }

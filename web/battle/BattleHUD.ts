@@ -357,6 +357,8 @@ export class BattleHUD {
     if (archiveDiscovery) {
       nodes.archiveDiscovery.dataset.archiveDiscoveryKind =
         archiveDiscovery.entryType;
+      nodes.archiveDiscovery.dataset.archiveDiscoveryKey =
+        archiveDiscovery.key;
       if (nodes.archiveDiscoveryArt.getAttribute('src') !== archiveDiscovery.artUrl) {
         nodes.archiveDiscoveryArt.src = archiveDiscovery.artUrl;
       }
@@ -369,6 +371,7 @@ export class BattleHUD {
       setText(nodes.archiveDiscoveryName, archiveDiscovery.name);
     } else {
       delete nodes.archiveDiscovery.dataset.archiveDiscoveryKind;
+      delete nodes.archiveDiscovery.dataset.archiveDiscoveryKey;
     }
 
     for (const panel of nodes.tutorialPanels) {

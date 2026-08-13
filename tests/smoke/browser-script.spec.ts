@@ -174,6 +174,37 @@ describe('browser smoke script', () => {
     );
   });
 
+  it('requires authoritative visible ticket binding and complete protected geometry', () => {
+    const source = readFileSync('scripts/smoke-browser.mjs', 'utf8');
+
+    expect(source).toContain(
+      "'.battle-archive-discovery[data-archive-discovery]'",
+    );
+    expect(source).toContain('archiveDiscoveryKey');
+    expect(source).toContain('isRenderedAndVisible');
+    expect(source).toContain("style.display !== 'none'");
+    expect(source).toContain("style.visibility === 'visible'");
+    expect(source).toContain('Number.parseFloat(style.opacity) > 0');
+    expect(source).toContain('rect.width > 0 && rect.height > 0');
+    expect(source).toContain('protectedRegionFailures');
+    expect(source).toContain('canvasAimRegion.width > 0');
+    expect(source).toContain('ticket.key');
+    expect(source).toContain('ticket.artSrc');
+  });
+
+  it('requires true-zero reduced motion and retains the broad archive audit', () => {
+    const source = readFileSync('scripts/smoke-browser.mjs', 'utf8');
+
+    expect(source).not.toContain('hasNonZeroCssTime');
+    expect(source).toContain("style.animationDuration !== '0s'");
+    expect(source).toContain("style.transitionDuration !== '0s'");
+    expect(source).toContain('broadArchiveMotion');
+    expect(source).toContain("workshop.querySelectorAll('.workshop-tabs button')");
+    expect(source).toContain("root.querySelectorAll('*')");
+    expect(source).toContain('visibleBounds');
+    expect(source).toContain('archive broad reduced-motion audit');
+  });
+
   it('rejects an already occupied preview port before startup', async () => {
     expect(previewLifecycle.assertLoopbackPortAvailable).toBeTypeOf('function');
     const staleServer = createServer((_request, response) => response.end('stale'));

@@ -381,11 +381,15 @@ async function assertArchiveUnreadSeal(client, label) {
     }
     const rect = node.getBoundingClientRect();
     const style = getComputedStyle(node);
+    const isRenderedAndVisible = style.display !== 'none'
+      && style.visibility === 'visible'
+      && Number.parseFloat(style.opacity) > 0
+      && node.getClientRects().length > 0
+      && rect.width > 0 && rect.height > 0;
     return {
       text: node.textContent?.trim() ?? '',
-      visible: node.getClientRects().length > 0
-        && style.display !== 'none'
-        && style.visibility !== 'hidden',
+      visible: isRenderedAndVisible,
+      visibleBounds: { width: rect.width, height: rect.height },
       contained: rect.left >= -1
         && rect.right <= innerWidth + 1
         && rect.top >= -1
@@ -396,6 +400,10 @@ async function assertArchiveUnreadSeal(client, label) {
   })()`);
   assert.ok(seal, `${label} archive-unread-seal is missing`);
   assert.equal(seal.visible, true, `${label} archive unread seal is hidden`);
+  assert.ok(
+    seal.visibleBounds.width > 0 && seal.visibleBounds.height > 0,
+    `${label} archive unread seal has no visible bounds`,
+  );
   assert.match(seal.text, /^NEW [1-9]\d*$/, `${label} archive unread seal copy`);
   assert.equal(seal.contained, true, `${label} archive unread seal is clipped`);
   assert.ok(
@@ -658,22 +666,13 @@ async function assertTidalArchiveCarriage(client, label, { full = false } = {}) 
   await navigateScene(client, 'station');
 }
 
-function hasNonZeroCssTime(value) {
-  return value.split(',').some((part) => {
-    const duration = part.trim();
-    const parsed = Number.parseFloat(duration);
-    const seconds = duration.endsWith('ms') ? parsed / 1_000 : parsed;
-    return Number.isFinite(seconds) && seconds > 0.000_01;
-  });
-}
-
 function assertStaticArchiveFeedback(styles, label) {
   assert.ok(styles.length > 0, `${label} reduced-motion audit is empty`);
   const failures = styles.filter((style) => (
     style.animationName !== 'none'
-    || hasNonZeroCssTime(style.animationDuration)
+    || style.animationDuration !== '0s'
     || style.transform !== 'none'
-    || hasNonZeroCssTime(style.transitionDuration)
+    || style.transitionDuration !== '0s'
   ));
   assert.deepEqual(
     failures,
@@ -688,13 +687,27 @@ async function assertFirstArchiveDiscoveryTicket(
   label,
   { reducedMotion = false } = {},
 ) {
+  const discoveryTicketSelector =
+    '.battle-archive-discovery[data-archive-discovery]';
   let firstEnemyKind = null;
   for (let index = 0; index < 40; index += 1) {
     const state = await snapshot(client);
     firstEnemyKind = state.battle?.enemies[0]?.kind ?? null;
     const ticketVisible = await evaluate(
       client,
-      `Boolean(document.querySelector('[data-archive-discovery]:not([hidden])'))`,
+      `(() => {
+        const node = document.querySelector(
+          ${JSON.stringify(discoveryTicketSelector)}
+        );
+        if (!(node instanceof HTMLElement) || node.hidden) return false;
+        const style = getComputedStyle(node);
+        const rect = node.getBoundingClientRect();
+        return style.display !== 'none'
+          && style.visibility === 'visible'
+          && Number.parseFloat(style.opacity) > 0
+          && node.getClientRects().length > 0
+          && rect.width > 0 && rect.height > 0;
+      })()`,
     );
     if (firstEnemyKind && ticketVisible) break;
     await advanceBattle(client, 50);
@@ -707,10 +720,13 @@ async function assertFirstArchiveDiscoveryTicket(
   await waitForEvaluation(
     client,
     `(() => {
-      const image = document.querySelector(
-        '[data-archive-discovery]:not([hidden]) [data-archive-discovery-art]'
+      const root = document.querySelector(
+        ${JSON.stringify(discoveryTicketSelector)}
       );
+      const image = root?.querySelector('[data-archive-discovery-art]');
       return image instanceof HTMLImageElement
+        && root instanceof HTMLElement
+        && !root.hidden
         && image.complete
         && image.naturalWidth > 0;
     })()`,
@@ -719,7 +735,7 @@ async function assertFirstArchiveDiscoveryTicket(
 
   const ticket = await evaluate(client, `(() => {
     const root = document.querySelector(
-      '[data-archive-discovery]:not([hidden])'
+      ${JSON.stringify(discoveryTicketSelector)}
     );
     const canvas = document.querySelector('[data-battle-canvas]');
     if (!(root instanceof HTMLElement) || !(canvas instanceof HTMLCanvasElement)) {
@@ -728,20 +744,48 @@ async function assertFirstArchiveDiscoveryTicket(
     const image = root.querySelector('[data-archive-discovery-art]');
     const rootRect = root.getBoundingClientRect();
     const canvasRect = canvas.getBoundingClientRect();
+    const rootStyle = getComputedStyle(root);
+    const canvasStyle = getComputedStyle(canvas);
+    const isRenderedAndVisible = (node, style, rect) => (
+      !node.hidden
+      && node.getClientRects().length > 0
+      && style.display !== 'none'
+      && style.visibility === 'visible'
+      && Number.parseFloat(style.opacity) > 0
+      && rect.width > 0 && rect.height > 0
+    );
     const overlaps = (first, second) => first.left < second.right
       && first.right > second.left
       && first.top < second.bottom
       && first.bottom > second.top;
-    const rectFor = (selector) => {
+    const inspectProtectedRegion = (selector) => {
       const node = document.querySelector(selector);
-      if (!(node instanceof HTMLElement) || node.hidden) return null;
-      return node.getBoundingClientRect();
+      if (!(node instanceof HTMLElement)) {
+        return { selector, exists: false, visible: false, rect: null };
+      }
+      const style = getComputedStyle(node);
+      const rect = node.getBoundingClientRect();
+      return {
+        selector,
+        exists: true,
+        visible: isRenderedAndVisible(node, style, rect),
+        rect: {
+          left: rect.left,
+          right: rect.right,
+          top: rect.top,
+          bottom: rect.bottom,
+          width: rect.width,
+          height: rect.height,
+        },
+      };
     };
     const canvasAimRegion = {
       left: canvasRect.left + canvasRect.width * .72 - 28,
       right: canvasRect.left + canvasRect.width * .72 + 28,
       top: canvasRect.top + canvasRect.height * .34 - 28,
       bottom: canvasRect.top + canvasRect.height * .34 + 28,
+      width: 56,
+      height: 56,
     };
     const styleEntries = [null, '::before', '::after']
       .map((pseudo) => {
@@ -757,20 +801,23 @@ async function assertFirstArchiveDiscoveryTicket(
         };
       })
       .filter((entry) => entry.pseudo === null || entry.content !== 'none');
-    const protectedRects = {
-      topHud: rectFor('.battle-hud__tide-log'),
-      speed: rectFor('[data-battle-action="speed"]'),
-      pause: rectFor('[data-battle-action="pause"]'),
-      skills: rectFor('.battle-hud__skills'),
-      canvasAimRegion,
+    const protectedRegions = {
+      topHud: inspectProtectedRegion('.battle-hud__tide-log'),
+      speed: inspectProtectedRegion('[data-battle-action="speed"]'),
+      pause: inspectProtectedRegion('[data-battle-action="pause"]'),
+      skills: inspectProtectedRegion('.battle-hud__skills'),
     };
     return {
+      key: root.dataset.archiveDiscoveryKey ?? '',
       kind: root.dataset.archiveDiscoveryKind ?? '',
       name: root.querySelector('[data-archive-discovery-name]')
         ?.textContent?.trim() ?? '',
       typeText: root.querySelector('[data-archive-discovery-type]')
         ?.textContent?.trim() ?? '',
       ticketText: root.textContent?.trim() ?? '',
+      artSrc: image instanceof HTMLImageElement
+        ? image.currentSrc || image.src
+        : '',
       imageLoaded: image instanceof HTMLImageElement
         && image.complete
         && image.naturalWidth > 0,
@@ -781,24 +828,61 @@ async function assertFirstArchiveDiscoveryTicket(
       interactionVisible: Boolean(document.querySelector(
         '[data-battle-action="claim-interaction"]:not([hidden])'
       )),
+      visible: isRenderedAndVisible(root, rootStyle, rootRect),
+      visibleBounds: { width: rootRect.width, height: rootRect.height },
+      canvasVisible: isRenderedAndVisible(canvas, canvasStyle, canvasRect),
+      canvasBounds: { width: canvasRect.width, height: canvasRect.height },
+      canvasAimRegion,
+      protectedRegions,
       contained: rootRect.left >= -1
         && rootRect.right <= innerWidth + 1
         && rootRect.top >= -1
         && rootRect.bottom <= innerHeight + 1,
-      overlaps: Object.fromEntries(Object.entries(protectedRects).map(
-        ([key, rect]) => [key, rect ? overlaps(rootRect, rect) : false]
-      )),
+      overlaps: {
+        ...Object.fromEntries(Object.entries(protectedRegions).map(
+          ([key, region]) => [
+            key,
+            region.rect ? overlaps(rootRect, region.rect) : null,
+          ]
+        )),
+        canvasAimRegion: overlaps(rootRect, canvasAimRegion),
+      },
       styles: styleEntries,
     };
   })()`);
   assert.ok(ticket, `${label} battle discovery ticket is missing`);
+  assert.equal(ticket.visible, true, `${label} battle discovery ticket is not visible`);
+  assert.ok(
+    ticket.visibleBounds.width > 0 && ticket.visibleBounds.height > 0,
+    `${label} battle discovery ticket has no visible bounds`,
+  );
+  const storedArchive = await readStoredTidalArchive(client);
+  assert.deepEqual(
+    storedArchive.unreadEntryKeys,
+    [authoritativeFirstArchiveDiscovery.key],
+    `${label} first spawn must persist the matching authoritative enemy key`,
+  );
+  assert.equal(
+    ticket.key,
+    storedArchive.unreadEntryKeys[0],
+    `${label} ticket key must bind directly to the stored discovery`,
+  );
   assert.equal(ticket.kind, 'enemy', `${label} discovery kind`);
   assert.equal(
     ticket.name,
     authoritativeFirstArchiveDiscovery.name,
     `${label} discovery name must use the authoritative archive catalog`,
   );
-  assert.match(ticket.typeText, /首次目击/, `${label} enemy discovery copy`);
+  assert.equal(
+    ticket.typeText,
+    '首次目击已装订',
+    `${label} enemy discovery type must match the authoritative entry`,
+  );
+  assert.match(
+    new URL(ticket.artSrc).pathname,
+    /\/assets\/puffer-dragon-[^/]+\.webp$/,
+    `${label} discovery art must use the authoritative bubble-fin asset`,
+  );
   assert.equal(ticket.imageLoaded, true, `${label} discovery image must load`);
   assert.equal(
     ticket.interactiveDescendants,
@@ -816,6 +900,30 @@ async function assertFirstArchiveDiscoveryTicket(
     `${label} first discovery must occur outside a battle interaction`,
   );
   assert.equal(ticket.contained, true, `${label} discovery ticket is clipped`);
+  assert.equal(ticket.canvasVisible, true, `${label} canvas aim surface is hidden`);
+  assert.ok(
+    ticket.canvasBounds.width > 0 && ticket.canvasBounds.height > 0,
+    `${label} canvas aim surface has no bounds`,
+  );
+  assert.ok(
+    ticket.canvasAimRegion.width > 0
+      && ticket.canvasAimRegion.height > 0,
+    `${label} protected canvas aim region has no positive geometry`,
+  );
+  const protectedRegionFailures = Object.entries(ticket.protectedRegions)
+    .filter(([, region]) => (
+      !region.exists
+      || !region.visible
+      || !region.rect
+      || region.rect.width <= 0
+      || region.rect.height <= 0
+    ));
+  assert.deepEqual(
+    protectedRegionFailures,
+    [],
+    `${label} protected battle controls must exist with visible positive bounds: `
+      + JSON.stringify(protectedRegionFailures),
+  );
   assert.deepEqual(
     ticket.overlaps,
     {
@@ -827,11 +935,6 @@ async function assertFirstArchiveDiscoveryTicket(
     },
     `${label} discovery ticket overlaps protected battle geometry`,
   );
-  assert.deepEqual(
-    (await readStoredTidalArchive(client)).unreadEntryKeys,
-    [authoritativeFirstArchiveDiscovery.key],
-    `${label} first spawn must persist the matching authoritative enemy key`,
-  );
   if (reducedMotion) {
     assert.match(
       ticket.ticketText,
@@ -840,7 +943,10 @@ async function assertFirstArchiveDiscoveryTicket(
     );
     assertStaticArchiveFeedback(ticket.styles, `${label} battle discovery`);
   }
-  return authoritativeFirstArchiveDiscovery;
+  return Object.freeze({
+    ...authoritativeFirstArchiveDiscovery,
+    artSrc: ticket.artSrc,
+  });
 }
 
 async function assertBattleHudGeometry(client, label) {
@@ -2223,6 +2329,20 @@ async function assertReducedMotionArchive(client, label) {
     return {
       count: nodes.length,
       text: nodes.map((node) => node.textContent?.trim() ?? ''),
+      visibleBounds: nodes.map((node) => {
+        const style = getComputedStyle(node);
+        const rect = node.getBoundingClientRect();
+        return {
+          visible: !node.hidden
+            && node.getClientRects().length > 0
+            && style.display !== 'none'
+            && style.visibility === 'visible'
+            && Number.parseFloat(style.opacity) > 0
+            && rect.width > 0 && rect.height > 0,
+          width: rect.width,
+          height: rect.height,
+        };
+      }),
       entries,
     };
   })()`);
@@ -2231,6 +2351,11 @@ async function assertReducedMotionArchive(client, label) {
   );
   assert.equal(sealMotion.count, 1, `${label} reduced-motion unread seal`);
   assert.match(sealMotion.text[0] ?? '', /^NEW [1-9]\d*$/);
+  assert.deepEqual(
+    sealMotion.visibleBounds.map(({ visible }) => visible),
+    [true],
+    `${label} reduced-motion unread seal must have visible positive bounds`,
+  );
   assertStaticArchiveFeedback(sealMotion.entries, `${label} unread seal`);
   assert.deepEqual(
     sealMotion.entries
@@ -2265,6 +2390,11 @@ async function assertReducedMotionArchive(client, label) {
   );
   assert.equal(stampMotion.count, 1, `${label} reduced-motion NEW stamp`);
   assert.deepEqual(stampMotion.text, ['NEW']);
+  assert.deepEqual(
+    stampMotion.visibleBounds.map(({ visible }) => visible),
+    [true],
+    `${label} reduced-motion NEW stamp must have visible positive bounds`,
+  );
   assertStaticArchiveFeedback(stampMotion.entries, `${label} archive NEW stamp`);
   assert.deepEqual(
     stampMotion.entries
@@ -2272,6 +2402,58 @@ async function assertReducedMotionArchive(client, label) {
       .map((entry) => entry.pointerEvents),
     ['none', 'none'],
     `${label} archive reduced-motion decorations must be static and non-interactive`,
+  );
+
+  const broadArchiveMotion = await evaluate(client, `(() => {
+    const workshop = document.querySelector('.otter-workshop');
+    const root = document.querySelector('.tidal-archive-carriage');
+    if (!(workshop instanceof HTMLElement) || !(root instanceof HTMLElement)) {
+      return { checked: 0, failures: [{ key: 'archive-root', missing: true }] };
+    }
+    const nodes = [
+      ...workshop.querySelectorAll('.workshop-tabs button'),
+      root,
+      ...root.querySelectorAll('*'),
+    ];
+    const inspected = nodes.flatMap((node) => [null, '::before', '::after']
+      .map((pseudo) => {
+        const style = getComputedStyle(node, pseudo);
+        const rect = node.getBoundingClientRect();
+        const visible = node.getClientRects().length > 0
+          && style.display !== 'none'
+          && style.visibility === 'visible'
+          && Number.parseFloat(style.opacity) > 0
+          && rect.width > 0 && rect.height > 0;
+        return {
+          key: (node.className || node.tagName) + (pseudo ?? ''),
+          pseudo,
+          content: style.content,
+          visible,
+          animationName: style.animationName,
+          transform: style.transform,
+          pointerEvents: style.pointerEvents,
+        };
+      }))
+      .filter((entry) => entry.pseudo === null
+        || (entry.content !== 'none' && entry.visible));
+    return {
+      checked: inspected.length,
+      failures: inspected.filter((entry) => (
+        entry.animationName !== 'none'
+        || entry.transform !== 'none'
+        || (entry.pseudo !== null && entry.pointerEvents !== 'none')
+      )),
+    };
+  })()`);
+  assert.ok(
+    broadArchiveMotion.checked > 0,
+    `${label} archive broad reduced-motion audit is empty`,
+  );
+  assert.deepEqual(
+    broadArchiveMotion.failures,
+    [],
+    `${label} archive broad reduced-motion audit found moving or interactive decorations: `
+      + JSON.stringify(broadArchiveMotion.failures),
   );
 
   const closed = await evaluate(client, `(() => {
@@ -2934,10 +3116,11 @@ async function assertTidalArchiveDiscoveryFeedback(client, label) {
     `${label} discovery lifecycle must start from an empty archive fixture`,
   );
 
+  let firstTicket = null;
   const result = await finishFullBattle(client, {
     claimSalvage: true,
     afterBattleStart: async () => {
-      await assertFirstArchiveDiscoveryTicket(
+      firstTicket = await assertFirstArchiveDiscoveryTicket(
         client,
         `${label} real first spawn`,
       );
@@ -2979,6 +3162,9 @@ async function assertTidalArchiveDiscoveryFeedback(client, label) {
             && image.complete
             && image.naturalWidth > 0,
           imageAlt: image?.getAttribute('alt') ?? '',
+          imageSrc: image instanceof HTMLImageElement
+            ? image.currentSrc || image.src
+            : '',
           contained: rect.left >= -1
             && rect.right <= innerWidth + 1
             && rect.top >= -1
@@ -2997,6 +3183,12 @@ async function assertTidalArchiveDiscoveryFeedback(client, label) {
       assert.equal(settlement.type, '潮兽目击');
       assert.equal(settlement.imageLoaded, true);
       assert.equal(settlement.imageAlt, authoritativeFirstArchiveDiscovery.name);
+      assert.ok(firstTicket, `${label} first-spawn ticket binding is missing`);
+      assert.equal(
+        settlement.imageSrc,
+        firstTicket.artSrc,
+        `${label} settlement must retain the exact first-spawn archive art`,
+      );
       assert.equal(settlement.contained, true, `${label} settlement entry is clipped`);
       assert.ok(
         settlement.rewards.every(Number.isFinite),
@@ -3048,12 +3240,20 @@ async function assertTidalArchiveDiscoveryFeedback(client, label) {
       imageLoaded: image instanceof HTMLImageElement
         && image.complete
         && image.naturalWidth > 0,
+      imageSrc: image instanceof HTMLImageElement
+        ? image.currentSrc || image.src
+        : '',
     };
   })()`);
-  assert.deepEqual(
-    matchingCard,
-    { discovered: true, isNew: true, stampText: 'NEW', imageLoaded: true },
-    `${label} opened archive must retain the matching one-visit NEW card`,
+  assert.equal(matchingCard.discovered, true);
+  assert.equal(matchingCard.isNew, true);
+  assert.equal(matchingCard.stampText, 'NEW');
+  assert.equal(matchingCard.imageLoaded, true);
+  assert.ok(firstTicket, `${label} first-spawn ticket binding is missing`);
+  assert.equal(
+    matchingCard.imageSrc,
+    firstTicket.artSrc,
+    `${label} archive card must retain the exact first-spawn archive art`,
   );
 
   const workshopOpened = await evaluate(client, `(() => {

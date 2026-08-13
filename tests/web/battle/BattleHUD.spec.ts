@@ -100,6 +100,7 @@ describe('BattleHUD', () => {
     );
     expect(ticket?.hidden).toBe(false);
     expect(ticket?.dataset.archiveDiscoveryKind).toBe('enemy');
+    expect(ticket?.dataset.archiveDiscoveryKey).toBe('enemy:bubble-fin');
     expect(ticket?.textContent).toContain('NEW ARCHIVE ENTRY');
     expect(ticket?.querySelector('[data-archive-discovery-type]')?.textContent)
       .toBe('首次目击已装订');
@@ -114,6 +115,7 @@ describe('BattleHUD', () => {
       archiveDiscovery: null,
     }));
     expect(ticket?.hidden).toBe(true);
+    expect(ticket?.dataset.archiveDiscoveryKey).toBeUndefined();
 
     hud.update(createBattleHudModel(createFrameFixture(), {
       ...createHudModelOptionsFixture(),
@@ -129,6 +131,8 @@ describe('BattleHUD', () => {
     expect(ticket?.querySelector('[data-archive-discovery-type]')?.textContent)
       .toBe('新进化标本已归档');
     expect(ticket?.dataset.archiveDiscoveryKind).toBe('skill-variant');
+    expect(ticket?.dataset.archiveDiscoveryKey)
+      .toBe('skill-variant:split-tide-arrow');
 
     hud.dispose();
     host.remove();
