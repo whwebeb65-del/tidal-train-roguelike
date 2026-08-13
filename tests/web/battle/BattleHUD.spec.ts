@@ -382,6 +382,80 @@ describe('BattleHUD', () => {
     host.remove();
   });
 
+  it('preserves settlement luggage node identities until discoveries change', () => {
+    const hud = new BattleHUD(createCallbacks(), window);
+    const host = document.createElement('div');
+    document.body.append(host);
+    hud.mount(host);
+    const frame = createFrameFixture({ status: 'victory' });
+    const archiveDiscoveries = Object.freeze([Object.freeze({
+      key: 'enemy:bubble-fin' as const,
+      entryType: 'enemy' as const,
+      entryId: 'bubble-fin',
+      name: '泡鳍怪',
+      artUrl: '/archive/bubble-fin.webp',
+    })]);
+    const settlement = {
+      title: '潮汐航线通关',
+      description: '奖励已到账。',
+      rewards: { gears: 80, routeMarks: 2, starTickets: 0 },
+      expeditionPoints: 0,
+      dailyTrialScore: null,
+      archiveDiscoveries,
+      doubleSettlementAvailable: true,
+      doubled: false,
+    };
+    const update = (
+      discoveries: readonly TidalArchiveDiscoveryPresentation[] =
+        archiveDiscoveries,
+    ) => hud.update(
+      createBattleHudModel(frame, {
+        ...createHudModelOptionsFixture(),
+        settlement: { ...settlement, archiveDiscoveries: discoveries },
+      }),
+    );
+
+    update();
+    const firstArticle = host.querySelector<HTMLElement>(
+      '[data-settlement-archive-entry="enemy:bubble-fin"]',
+    );
+    const firstImage = firstArticle?.querySelector('img');
+    expect(firstArticle).not.toBeNull();
+    expect(firstImage).not.toBeNull();
+
+    update();
+    expect(host.querySelector(
+      '[data-settlement-archive-entry="enemy:bubble-fin"]',
+    )).toBe(firstArticle);
+    expect(host.querySelector(
+      '[data-settlement-archive-entry="enemy:bubble-fin"] img',
+    )).toBe(firstImage);
+
+    const changedDiscoveries = Object.freeze([
+      ...archiveDiscoveries,
+      Object.freeze({
+        key: 'skill-variant:split-tide-arrow' as const,
+        entryType: 'skill-variant' as const,
+        entryId: 'split-tide-arrow',
+        name: '分汐浪箭',
+        artUrl: '/archive/split-tide-arrow.webp',
+      }),
+    ]);
+    update(changedDiscoveries);
+    expect(host.querySelector(
+      '[data-settlement-archive-entry="enemy:bubble-fin"]',
+    )).not.toBe(firstArticle);
+    expect(host.querySelectorAll('[data-settlement-archive-entry]')).toHaveLength(2);
+
+    update(Object.freeze([]));
+    const luggage = host.querySelector<HTMLElement>('[data-settlement-archive]');
+    expect(luggage?.hidden).toBe(true);
+    expect(luggage?.childElementCount).toBe(0);
+
+    hud.dispose();
+    host.remove();
+  });
+
   it('hides and clears settlement luggage when no discoveries are present', () => {
     const hud = new BattleHUD(createCallbacks(), window);
     const host = document.createElement('div');

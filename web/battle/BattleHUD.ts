@@ -229,6 +229,9 @@ export class BattleHUD {
   private nodes: HudNodes | null = null;
   private model: BattleHudModel | null = null;
   private exitRequested = false;
+  private lastSettlementArchiveDiscoveries:
+    | readonly TidalArchiveDiscoveryPresentation[]
+    | null = null;
   private readonly keyboardTarget: EventTarget | null;
 
   private readonly onClick = (event: Event): void => {
@@ -540,10 +543,24 @@ export class BattleHUD {
     nodes.firstClearTicket.hidden = !firstClearSettlement;
     nodes.repeatClearTicket.hidden = !repeatClearSettlement;
     nodes.settlementRewards.hidden = trialSettlement;
-    renderSettlementArchiveDiscoveries(
-      nodes.settlementArchive,
-      model.settlement?.archiveDiscoveries ?? [],
-    );
+    const settlementArchiveDiscoveries =
+      model.settlement?.archiveDiscoveries ?? null;
+    if (
+      settlementArchiveDiscoveries
+      !== this.lastSettlementArchiveDiscoveries
+    ) {
+      const hadDiscoveries =
+        (this.lastSettlementArchiveDiscoveries?.length ?? 0) > 0;
+      const hasDiscoveries =
+        (settlementArchiveDiscoveries?.length ?? 0) > 0;
+      if (hadDiscoveries || hasDiscoveries) {
+        renderSettlementArchiveDiscoveries(
+          nodes.settlementArchive,
+          settlementArchiveDiscoveries ?? [],
+        );
+      }
+      this.lastSettlementArchiveDiscoveries = settlementArchiveDiscoveries;
+    }
     if (model.settlement) {
       setText(nodes.settlementTitle, model.settlement.title);
       setText(
@@ -605,6 +622,7 @@ export class BattleHUD {
     this.host = null;
     this.nodes = null;
     this.model = null;
+    this.lastSettlementArchiveDiscoveries = null;
   }
 }
 

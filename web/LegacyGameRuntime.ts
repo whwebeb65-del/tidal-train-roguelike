@@ -397,6 +397,7 @@ let pendingProductId: string | null = null;
 let storeViewTracked = false;
 let viewedGuidebookObjectiveId: CaptainGuidebookObjectiveId | null = null;
 let settlementDoubleClaimed = false;
+let pendingDoubleSettlementToken: symbol | null = null;
 const battleAssetLoader = new BattleAssetLoader(BATTLE_ART_URLS);
 const diagnostics = new BattleDiagnostics();
 const requestedE2ESeed = Number(runtimeSearchParams.get('e2eSeed'));
@@ -1508,6 +1509,7 @@ async function startRun(
 
     recoveryState = createRecoveryState();
     pendingRecoveryActions.clear();
+    pendingDoubleSettlementToken = null;
     trackedAdOffers.clear();
     lastRunRecovery = 'none';
     lastDailySubmission = null;
@@ -1978,27 +1980,45 @@ function claimBattleInteraction(
 async function requestBattleDoubleSettlement(
   outcome: BattleOutcome,
 ): Promise<BattleSettlementPresentation | null> {
+  const battle = activeBattleEngine;
+  const settlement = activeBattleSettlement;
   if (
     runMode !== 'normal'
     || !outcome.victory
-    || !activeBattleSettlement
-    || !activeBattleSettlement.doubleSettlementAvailable
+    || !battle
+    || !settlement
+    || !settlement.doubleSettlementAvailable
     || settlementDoubleClaimed
     || pendingRecoveryActions.has('double-settlement')
   ) {
     return null;
   }
 
+  const ownedRunId = runId;
+  const requestToken = Symbol('double-settlement');
+  pendingDoubleSettlementToken = requestToken;
   pendingRecoveryActions.add('double-settlement');
   trackAdOfferOnce('double-settlement');
   track('rewarded_ad_clicked', { placement: 'double-settlement' });
   const adResult = await ads.showRewardedAd('double-settlement');
-  pendingRecoveryActions.delete('double-settlement');
+  if (pendingDoubleSettlementToken === requestToken) {
+    pendingDoubleSettlementToken = null;
+    pendingRecoveryActions.delete('double-settlement');
+  }
   const resultName = recoveryResultName(adResult);
   track('rewarded_ad_result', {
     placement: 'double-settlement',
     result: resultName,
   });
+  if (
+    phase !== 'combat'
+    || runId !== ownedRunId
+    || activeBattleEngine !== battle
+    || battle.outcome !== outcome
+    || activeBattleSettlement !== settlement
+  ) {
+    return null;
+  }
   if (resultName !== 'completed') {
     notice = resultName === 'cancelled'
       ? '已取消广告，追加奖励机会仍然保留。'
@@ -2014,16 +2034,18 @@ async function requestBattleDoubleSettlement(
     routeMarks: save.routeMarks + 2,
   });
   settlementDoubleClaimed = true;
-  activeBattleSettlement = {
-    ...activeBattleSettlement,
-    rewards: {
-      gears: activeBattleSettlement.rewards.gears + gears,
-      routeMarks: activeBattleSettlement.rewards.routeMarks + 2,
-      starTickets: activeBattleSettlement.rewards.starTickets,
-    },
+  const doubledSettlement = Object.freeze({
+    ...settlement,
+    rewards: Object.freeze({
+      gears: settlement.rewards.gears + gears,
+      routeMarks: settlement.rewards.routeMarks + 2,
+      starTickets: settlement.rewards.starTickets,
+    }),
+    archiveDiscoveries: settlement.archiveDiscoveries,
     doubleSettlementAvailable: false,
     doubled: true,
-  };
+  });
+  activeBattleSettlement = doubledSettlement;
   track('economy_reward_granted', {
     source: 'rewarded-ad',
     placement: 'double-settlement',
@@ -2033,7 +2055,7 @@ async function requestBattleDoubleSettlement(
   });
   notice = `广告完成，已追加 ${gears} 齿轮和 2 航线徽记。`;
   render();
-  return activeBattleSettlement;
+  return doubledSettlement;
 }
 
 function exitBattle(): void {

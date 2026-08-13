@@ -12,6 +12,8 @@ import type { BattleEngine } from '../../web/battle/BattleEngine';
 import { createWaveSchedule } from '../../web/battle/WaveScheduler';
 import { getTidalArchiveEnemyDiscovery } from '../../web/battle/TidalArchiveDiscoveryPresentation';
 import { BattleScene } from '../../web/scenes/BattleScene';
+import { MockAds } from '../../src/platform/MockPlatform';
+import type { BattleEvent } from '../../web/battle/BattleTypes';
 
 function installCanvas2DStub(): () => void {
   const original = HTMLCanvasElement.prototype.getContext;
@@ -60,6 +62,149 @@ describe('GameApp navigation', () => {
 });
 
 describe('LegacyGameRuntime E2E snapshots', () => {
+  async function setupRepeatVictoryWithDiscovery() {
+    const restoreCanvas = installCanvas2DStub();
+    window.history.replaceState({}, '', '/?e2e=1&e2eSeed=17');
+    const app = document.createElement('div');
+    document.body.append(app);
+    const storage = window.localStorage;
+    storage.clear();
+    storage.setItem(APP_STORAGE_KEYS.player, JSON.stringify({
+      ...defaultSave(),
+      stamina: 20,
+      gears: 1_000,
+      routeMarks: 100,
+      firstClearMapIds: ['drift-suburb'],
+      selectedCaptainId: 'captain-tide-female',
+    }));
+    storage.setItem(APP_STORAGE_KEYS.firstRunBattleTutorial, JSON.stringify({
+      version: 1,
+      completedStepIds: ['aim', 'skill', 'upgrade'],
+      skipped: false,
+    }));
+    const snapshots: LegacyRuntimeTestSnapshot[] = [];
+    let battleScene: BattleScene | null = null;
+    let battleEngine: BattleEngine | null = null;
+    const originalMount = BattleScene.prototype.mount;
+    const mountSpy = vi.spyOn(BattleScene.prototype, 'mount')
+      .mockImplementation(function captureScene(this: BattleScene, host: HTMLElement) {
+        battleScene = this;
+        return originalMount.call(this, host);
+      });
+    const audio = new Proxy({}, { get: () => () => undefined }) as never;
+    const runtime = createLegacyGameRuntime(app, storage, true, audio, {
+      getSettings: () => ({ version: 2, musicEnabled: false, sfxEnabled: false, reducedMotion: true, qualityPreference: 'auto', preferredBattleSpeed: 1 }),
+      updateSettings: () => ({ version: 2, musicEnabled: false, sfxEnabled: false, reducedMotion: true, qualityPreference: 'auto', preferredBattleSpeed: 1 }),
+    }, {
+      prepareStationRun: async () => ({ status: 'ready', assets: { failedIds: [], get: () => null } }),
+      onTestSnapshot: (snapshot) => snapshots.push(snapshot),
+      onBattleEngineCreated: (engine) => {
+        battleEngine = engine;
+      },
+    });
+    onTestFinished(() => {
+      runtime.destroy();
+      mountSpy.mockRestore();
+      app.remove();
+      restoreCanvas();
+    });
+
+    await runtime.start();
+    await runtime.e2eStartNormalBattle();
+    if (!battleScene || !battleEngine) {
+      throw new Error('Expected mounted repeat-victory battle');
+    }
+    const sceneInternals = battleScene as unknown as {
+      dependencies: {
+        onBattleEvents(events: readonly BattleEvent[]): unknown;
+      };
+      updateBattle(stepMs: number): void;
+    };
+    sceneInternals.dependencies.onBattleEvents([Object.freeze({
+      type: 'enemy-spawned',
+      enemyId: 1,
+      kind: 'bubble-fin',
+    })]);
+    (battleEngine as unknown as { finish(victory: boolean): void }).finish(true);
+    sceneInternals.updateBattle(17);
+    (battleScene as BattleScene).advanceForE2E(0);
+    await vi.waitFor(() => {
+      expect(snapshots.at(-1)?.activeBattleSettlement).not.toBeNull();
+    });
+    return { app, runtime, snapshots, storage };
+  }
+
+  it('drops a completed settlement double after its battle exits', async () => {
+    let resolveAd = (_result: 'completed'): void => undefined;
+    const adPromise = new Promise<'completed'>((resolve) => {
+      resolveAd = resolve;
+    });
+    const showRewardedAd = vi.spyOn(MockAds.prototype, 'showRewardedAd')
+      .mockImplementation(() => adPromise);
+    onTestFinished(() => showRewardedAd.mockRestore());
+    const { app, runtime, snapshots, storage } =
+      await setupRepeatVictoryWithDiscovery();
+    const savedBeforeDouble = JSON.parse(
+      storage.getItem(APP_STORAGE_KEYS.player) ?? '{}',
+    );
+
+    app.querySelector<HTMLButtonElement>(
+      '[data-battle-action="double-settlement"]',
+    )?.click();
+    expect(showRewardedAd).toHaveBeenCalledWith('double-settlement');
+    await runtime.e2eReturnToStation();
+    resolveAd('completed');
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(JSON.parse(
+      storage.getItem(APP_STORAGE_KEYS.player) ?? '{}',
+    )).toEqual(savedBeforeDouble);
+    expect(snapshots.at(-1)?.phase).toBe('station');
+    expect(snapshots.at(-1)?.activeBattleSettlement).toBeNull();
+  });
+
+  it('freezes a valid doubled settlement and preserves its discovery array identity', async () => {
+    let resolveAd = (_result: 'completed'): void => undefined;
+    const adPromise = new Promise<'completed'>((resolve) => {
+      resolveAd = resolve;
+    });
+    const showRewardedAd = vi.spyOn(MockAds.prototype, 'showRewardedAd')
+      .mockImplementation(() => adPromise);
+    onTestFinished(() => showRewardedAd.mockRestore());
+    const { app, snapshots, storage } = await setupRepeatVictoryWithDiscovery();
+    const capturedSettlement = snapshots.at(-1)?.activeBattleSettlement;
+    const capturedDiscoveries = capturedSettlement?.archiveDiscoveries;
+    const savedBeforeDouble = JSON.parse(
+      storage.getItem(APP_STORAGE_KEYS.player) ?? '{}',
+    );
+    expect(capturedDiscoveries?.map((entry) => entry.key))
+      .toEqual(['enemy:bubble-fin']);
+
+    app.querySelector<HTMLButtonElement>(
+      '[data-battle-action="double-settlement"]',
+    )?.click();
+    expect(showRewardedAd).toHaveBeenCalledWith('double-settlement');
+    resolveAd('completed');
+    await vi.waitFor(() => {
+      expect(snapshots.at(-1)?.activeBattleSettlement?.doubled).toBe(true);
+    });
+
+    const doubledSettlement = snapshots.at(-1)?.activeBattleSettlement;
+    const savedAfterDouble = JSON.parse(
+      storage.getItem(APP_STORAGE_KEYS.player) ?? '{}',
+    );
+    expect(doubledSettlement).not.toBe(capturedSettlement);
+    expect(Object.isFrozen(doubledSettlement)).toBe(true);
+    expect(Object.isFrozen(doubledSettlement?.archiveDiscoveries)).toBe(true);
+    expect(doubledSettlement?.archiveDiscoveries).toBe(capturedDiscoveries);
+    expect(doubledSettlement?.archiveDiscoveries.map((entry) => entry.key))
+      .toEqual(['enemy:bubble-fin']);
+    expect(savedAfterDouble.gears).toBe(savedBeforeDouble.gears + 80);
+    expect(savedAfterDouble.routeMarks).toBe(savedBeforeDouble.routeMarks + 2);
+  });
+
   it('keeps the battle-engine inspection seam behind the exact e2e=1 gate', async () => {
     window.history.replaceState({}, '', '/');
     const app = document.createElement('div');

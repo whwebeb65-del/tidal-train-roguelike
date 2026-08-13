@@ -444,6 +444,7 @@ export class BattleScene implements GameScene {
 
   public pauseForVisibility(): void {
     if (!this.host || this.visibilityPaused) return;
+    this.chargeArchiveDiscoveryClockAtTransition();
     this.visibilityPaused = true;
     this.pauseUpgradeChoiceTimer();
     const status = this.dependencies.engine.frame.status;
@@ -530,6 +531,7 @@ export class BattleScene implements GameScene {
 
   public requestPauseForE2E(): void {
     if (!this.dependencies.manualStepMode) return;
+    this.chargeArchiveDiscoveryClockAtTransition();
     this.dependencies.engine.pause('manual');
     this.sound.pause();
     this.renderBattle();
@@ -713,18 +715,9 @@ export class BattleScene implements GameScene {
     });
     const firstRunTutorialPrompt =
       this.dependencies.getFirstRunTutorialPrompt?.() ?? null;
-    const interactionAvailable = getAvailableBattleInteractions(
-      this.dependencies.engine.frame.elapsedMs,
-      this.interactionClaims,
-      this.dependencies.engine.frame.mode,
-    ).length > 0;
-    const archiveDiscoveryEligible =
-      this.dependencies.engine.frame.status === 'running'
-      && !this.visibilityPaused
-      && !this.archiveDiscoveryClockResetPending
-      && this.settlement === null
-      && firstRunTutorialPrompt === null
-      && !interactionAvailable;
+    const archiveDiscoveryEligible = this.isArchiveDiscoveryEligible(
+      firstRunTutorialPrompt,
+    );
     const archiveDiscovery = this.archiveDiscoveryQueue.update(
       this.lastFrameTimeMs,
       archiveDiscoveryEligible,
@@ -771,6 +764,33 @@ export class BattleScene implements GameScene {
       this.dependencies.onFirstRunTutorialStep?.('aim');
     }
     this.renderBattle();
+  }
+
+  private isArchiveDiscoveryEligible(
+    firstRunTutorialPrompt =
+      this.dependencies.getFirstRunTutorialPrompt?.() ?? null,
+  ): boolean {
+    const interactionAvailable = getAvailableBattleInteractions(
+      this.dependencies.engine.frame.elapsedMs,
+      this.interactionClaims,
+      this.dependencies.engine.frame.mode,
+    ).length > 0;
+    return this.dependencies.engine.frame.status === 'running'
+      && !this.visibilityPaused
+      && !this.archiveDiscoveryClockResetPending
+      && this.settlement === null
+      && firstRunTutorialPrompt === null
+      && !interactionAvailable;
+  }
+
+  private chargeArchiveDiscoveryClockAtTransition(): void {
+    const nowMs = this.monotonicNowMs();
+    if (!Number.isFinite(nowMs)) return;
+    this.lastFrameTimeMs = nowMs;
+    this.archiveDiscoveryQueue.update(
+      nowMs,
+      this.isArchiveDiscoveryEligible(),
+    );
   }
 
   private removeCanvasPointerListeners(): void {
@@ -1042,6 +1062,7 @@ export class BattleScene implements GameScene {
       },
       onPause: () => {
         if (this.dependencies.engine.frame.status !== 'running') return;
+        this.chargeArchiveDiscoveryClockAtTransition();
         this.dependencies.engine.pause('manual');
         this.sound.pause();
         this.stopAnimationLoop();

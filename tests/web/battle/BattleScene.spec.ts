@@ -770,6 +770,7 @@ describe('BattleScene', () => {
     const scheduler = new ManualFrameScheduler();
     const engine = createEngine(createFrameFixture({ elapsedMs: 0 }));
     const hudUpdate = vi.fn();
+    let nowMs = 0;
     const { host } = createHost();
     const scene = new BattleScene({
       ...TEST_BATTLE_SPEED_DEPENDENCIES,
@@ -787,6 +788,7 @@ describe('BattleScene', () => {
       scheduler,
       eventTarget: new EventTarget(),
       getDevicePixelRatio: () => 1,
+      monotonicNowMs: () => nowMs,
       onBattleEvents: () => [ARCHIVE_DISCOVERY],
     });
     engine.events.push({
@@ -796,18 +798,69 @@ describe('BattleScene', () => {
     });
 
     scene.mount(host);
-    scheduler.fire(0);
-    scheduler.fire(17);
-    scheduler.fire(1_017);
+    scheduler.fire(nowMs = 0);
+    scheduler.fire(nowMs = 17);
+    scheduler.fire(nowMs = 1_017);
     scene.pauseForVisibility();
     expect(hudUpdate.mock.lastCall?.[0].archiveDiscovery).toBeNull();
 
     await scene.resumeForVisibility();
-    scheduler.fire(9_017);
-    scheduler.fire(10_416);
+    scheduler.fire(nowMs = 9_017);
+    scheduler.fire(nowMs = 10_416);
     expect(hudUpdate.mock.lastCall?.[0].archiveDiscovery)
       .toBe(ARCHIVE_DISCOVERY);
-    scheduler.fire(10_417);
+    scheduler.fire(nowMs = 10_417);
+    expect(hudUpdate.mock.lastCall?.[0].archiveDiscovery).toBeNull();
+
+    scene.unmount();
+  });
+
+  it('charges the final eligible interval when visibility pauses between frames', async () => {
+    const scheduler = new ManualFrameScheduler();
+    const engine = createEngine(createFrameFixture({ elapsedMs: 0 }));
+    const hudUpdate = vi.fn();
+    let nowMs = 0;
+    const { host } = createHost();
+    const scene = new BattleScene({
+      ...TEST_BATTLE_SPEED_DEPENDENCIES,
+      engine,
+      effects: {
+        view: EMPTY_EFFECT_FRAME_VIEW,
+        consume: vi.fn(), update: vi.fn(), reset: vi.fn(),
+      },
+      assets: { failedIds: [], get: () => null },
+      callbacks: createCallbacks(),
+      createRenderer: () => ({ render: vi.fn() }),
+      createHud: () => ({ mount: vi.fn(), update: hudUpdate, dispose: vi.fn() }),
+      captainArtId: 'captainFemaleBase',
+      reducedMotion: false,
+      scheduler,
+      eventTarget: new EventTarget(),
+      getDevicePixelRatio: () => 1,
+      monotonicNowMs: () => nowMs,
+      onBattleEvents: () => [ARCHIVE_DISCOVERY],
+    });
+    engine.events.push({
+      type: 'enemy-spawned',
+      enemyId: 1,
+      kind: 'bubble-fin',
+    });
+
+    scene.mount(host);
+    scheduler.fire(nowMs = 0);
+    scheduler.fire(nowMs = 17);
+    expect(hudUpdate.mock.lastCall?.[0].archiveDiscovery)
+      .toBe(ARCHIVE_DISCOVERY);
+
+    nowMs = 1_017;
+    scene.pauseForVisibility();
+    expect(hudUpdate.mock.lastCall?.[0].archiveDiscovery).toBeNull();
+    await scene.resumeForVisibility();
+    scheduler.fire(nowMs = 9_017);
+    scheduler.fire(nowMs = 10_416);
+    expect(hudUpdate.mock.lastCall?.[0].archiveDiscovery)
+      .toBe(ARCHIVE_DISCOVERY);
+    scheduler.fire(nowMs = 10_417);
     expect(hudUpdate.mock.lastCall?.[0].archiveDiscovery).toBeNull();
 
     scene.unmount();
