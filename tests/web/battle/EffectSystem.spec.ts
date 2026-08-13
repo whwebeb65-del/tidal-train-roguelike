@@ -365,6 +365,51 @@ describe('EffectSystem', () => {
     expect(effects.view.camera).toEqual({ x: 0, y: 0, rotation: 0, amplitude: 0 });
   });
 
+  it('converts active evolution into one static catalog silhouette on a runtime toggle', () => {
+    const effects = createEffectsForQuality('high');
+    const frame = createVariantFrame(['reef-piercer']);
+    effects.consume([
+      { type: 'skill-used', skillId: 'tidal-volley' },
+      {
+        type: 'enemy-killed',
+        enemyId: 99,
+        kind: 'bubble-fin',
+        x: 120,
+        y: 260,
+      },
+    ], frame);
+    effects.update(40);
+    expect(effects.view.particles.length).toBeGreaterThan(0);
+    expect(effects.view.rings.some((ring) => (
+      ring.kind !== 'static-skill-silhouette'
+    ))).toBe(true);
+    expect(effects.view.camera.amplitude).toBeGreaterThan(0);
+
+    effects.setReducedMotion(true);
+
+    const catalog = getSkillEvolutionVisualSignature('reef-piercer');
+    const silhouettes = () => effects.view.rings.filter((ring) => (
+      ring.kind === 'static-skill-silhouette'
+    ));
+    expect(effects.view.particles).toEqual([]);
+    expect(effects.view.rings).toHaveLength(1);
+    expect(silhouettes()).toEqual([
+      expect.objectContaining({ color: catalog.primary }),
+    ]);
+    expect(effects.view.camera).toEqual({ x: 0, y: 0, rotation: 0, amplitude: 0 });
+    const staticRadius = silhouettes()[0]!.radius;
+
+    effects.update(120);
+    expect(effects.view.particles).toEqual([]);
+    expect(effects.view.rings).toHaveLength(1);
+    expect(silhouettes()[0]!.radius).toBe(staticRadius);
+    expect(effects.view.camera).toEqual({ x: 0, y: 0, rotation: 0, amplitude: 0 });
+    effects.update(199);
+    expect(silhouettes()).toHaveLength(1);
+    effects.update(161);
+    expect(silhouettes()).toHaveLength(0);
+  });
+
   it('keeps new impact semantics deterministic while reduced motion suppresses camera shake', () => {
     const animated = new EffectSystem({
       particleLimit: 32,
@@ -607,6 +652,43 @@ describe('EffectSystem', () => {
     },
   );
 
+  it('keeps sequential low-quality rank signatures monotonic in one effect lifetime', () => {
+    const effects = createEffectsForQuality('low');
+    const sampleRanks = (
+      skillId: 'tidal-volley' | 'extreme-tide',
+      kind: 'rank-volley-trail' | 'extreme-radial-stroke',
+    ) => ([1, 2, 3, 4, 5] as const).map((rank) => {
+      effects.consume([{ type: 'skill-used', skillId }], createFrameFixture({
+        skillRanks: {
+          'tidal-volley': skillId === 'tidal-volley' ? rank : 1,
+          'bubble-barrier': 1,
+          'extreme-tide': skillId === 'extreme-tide' ? rank : 1,
+        },
+      }));
+      const rankSignature = effects.view.particles.find(
+        (particle) => particle.kind === kind,
+      );
+      expect(rankSignature).toBeDefined();
+      expect(effects.view.particles.length).toBeLessThanOrEqual(12);
+      const metric = rankSignature!.size;
+      effects.update(800);
+      expect(effects.view.particles.filter((particle) => (
+        particle.kind === kind
+      ))).toHaveLength(0);
+      return metric;
+    });
+
+    for (const [skillId, kind] of [
+      ['tidal-volley', 'rank-volley-trail'],
+      ['extreme-tide', 'extreme-radial-stroke'],
+    ] as const) {
+      const metrics = sampleRanks(skillId, kind);
+      expect(metrics.every((metric, index) => (
+        index === 0 || metric > metrics[index - 1]!
+      ))).toBe(true);
+    }
+  });
+
   it.each(SKILL_VARIANT_IDS)(
     'maps the authoritative event for %s to its catalog motif and color',
     (id) => {
@@ -701,6 +783,53 @@ describe('EffectSystem', () => {
     expect(signatures()).toHaveLength(SKILL_VARIANT_IDS.length);
     effects.update(161);
     expect(signatures()).toHaveLength(0);
+  });
+
+  it('protects twelve unique low-quality silhouettes ahead of a boss ring', () => {
+    const effects = createEffectsForQuality('low', true);
+    effects.consume([
+      ...allSkillUseEvents(),
+      { type: 'boss-intro-started' },
+    ], createVariantFrame(SKILL_VARIANT_IDS));
+
+    const silhouettes = effects.view.rings.filter((ring) => (
+      ring.kind === 'static-skill-silhouette'
+    ));
+    expect(silhouettes).toHaveLength(SKILL_VARIANT_IDS.length);
+    expect(new Set(silhouettes.map((ring) => ring.color))).toEqual(
+      new Set(SKILL_VARIANT_IDS.map((id) => (
+        getSkillEvolutionVisualSignature(id).primary
+      ))),
+    );
+    expect(effects.view.rings.length).toBeLessThanOrEqual(SKILL_VARIANT_IDS.length);
+    expect(effects.poolStats.rings.inUse).toBeLessThanOrEqual(SKILL_VARIANT_IDS.length);
+  });
+
+  it('refreshes one energy-return silhouette across 25 events and releases it at 420ms', () => {
+    const effects = createEffectsForQuality('low', true);
+    const frame = createVariantFrame(['energy-return']);
+    for (let index = 0; index < 25; index += 1) {
+      effects.consume([{
+        type: 'extreme-energy-refunded',
+        amount: 2,
+      }], frame);
+    }
+
+    const silhouettes = () => effects.view.rings.filter((ring) => (
+      ring.kind === 'static-skill-silhouette'
+    ));
+    expect(silhouettes()).toHaveLength(1);
+    expect(silhouettes()[0]).toMatchObject({
+      color: getSkillEvolutionVisualSignature('energy-return').primary,
+    });
+    expect(effects.view.rings).toHaveLength(1);
+    expect(effects.poolStats.rings.inUse).toBe(1);
+
+    effects.update(419);
+    expect(silhouettes()).toHaveLength(1);
+    effects.update(1);
+    expect(silhouettes()).toHaveLength(0);
+    expect(effects.poolStats.rings.inUse).toBe(0);
   });
 
   it('keeps variant cues identifiable while low quality and reduced motion use static bounded fallbacks', () => {

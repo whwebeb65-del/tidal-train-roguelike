@@ -161,6 +161,7 @@ interface MutableDamageNumber {
 interface MutableImpactRing {
   id: number;
   kind: NonNullable<ImpactRingView['kind']>;
+  evolutionId: SkillVariantId | null;
   x: number;
   y: number;
   color: string;
@@ -204,6 +205,7 @@ export class EffectSystem {
   private impactLimit: number;
   private particleSpawnScale = 1;
   private activeSkillParticleBudget: number | null = null;
+  private readonly activeEvolutionSignatures = new Map<SkillVariantId, number>();
 
   public constructor(options: EffectSystemOptions) {
     assertLimit(options.particleLimit, 'Particle limit');
@@ -246,9 +248,18 @@ export class EffectSystem {
       this.cameraRemainingMs = 0;
     }
     if (enteringReducedMotion) {
+      const activeEvolutionIds = [...this.activeEvolutionSignatures]
+        .filter(([, expiresAtMs]) => expiresAtMs > this.clockMs)
+        .map(([id]) => id);
       this.particlePool.releaseAll();
+      this.damageNumberPool.releaseAll();
+      this.ringPool.releaseAll();
       this.particles.length = 0;
+      this.damageNumbers.length = 0;
+      this.rings.length = 0;
       this.activeSkillParticleBudget = null;
+      this.activeEvolutionSignatures.clear();
+      this.addReducedEvolutionSignatures(activeEvolutionIds, 195, 470);
     }
   }
 
@@ -719,6 +730,11 @@ export class EffectSystem {
       0,
       this.slowMotionRemainingMs - deltaMs,
     );
+    for (const [id, expiresAtMs] of this.activeEvolutionSignatures) {
+      if (expiresAtMs <= this.clockMs) {
+        this.activeEvolutionSignatures.delete(id);
+      }
+    }
   }
 
   public reset(): void {
@@ -742,6 +758,7 @@ export class EffectSystem {
     this.lastEventX = 195;
     this.lastEventY = 360;
     this.activeSkillParticleBudget = null;
+    this.activeEvolutionSignatures.clear();
   }
 
   private spawnBurst(
@@ -847,7 +864,7 @@ export class EffectSystem {
       index += 1
     ) {
       const particle = this.particles[index];
-      if (particle) particle.size += (rank - 1) * 0.6;
+      if (particle) particle.size = 3.6 + (rank - 1) * 0.6;
     }
   }
 
@@ -866,13 +883,14 @@ export class EffectSystem {
     const offsetX = (catalogIndex % 4 - 1.5) * 6;
     const offsetY = (Math.floor(catalogIndex / 4) - 1) * 5;
     const angle = (catalogIndex + 1) * 0.71;
+    const lifetimeMs = 480 + rank * 60;
     const particle = this.particlePool.acquire();
     particle.id = this.nextId++;
     particle.kind = signature.particleKind;
     particle.layer = 'front-effects';
     particle.color = signature.primary;
     particle.size = 3.2 + rank * 0.65;
-    particle.lifetimeMs = 480 + rank * 60;
+    particle.lifetimeMs = lifetimeMs;
     particle.priority = 6;
     particle.x = x + offsetX;
     particle.y = y + offsetY;
@@ -885,6 +903,7 @@ export class EffectSystem {
     particle.originX = x;
     particle.originY = y;
     this.particles.push(particle);
+    this.activeEvolutionSignatures.set(id, this.clockMs + lifetimeMs);
     if (this.activeSkillParticleBudget !== null) {
       this.activeSkillParticleBudget -= 1;
     }
@@ -896,25 +915,48 @@ export class EffectSystem {
     y: number,
   ): void {
     for (const id of ids) {
-      const signature = getSkillEvolutionVisualSignature(id);
-      const catalogIndex = SKILL_VARIANT_IDS.indexOf(id);
-      const radius = 38 + catalogIndex * 4;
-      const signatureY = signature.skillId === 'extreme-tide'
-        ? y - 40
-        : signature.skillId === 'tidal-volley'
-          ? y + 180
-          : y + 220;
+      this.addOrRefreshReducedEvolutionSignature(id, x, y);
+    }
+  }
+
+  private addOrRefreshReducedEvolutionSignature(
+    id: SkillVariantId,
+    x: number,
+    y: number,
+  ): void {
+    const signature = getSkillEvolutionVisualSignature(id);
+    const catalogIndex = SKILL_VARIANT_IDS.indexOf(id);
+    const radius = 38 + catalogIndex * 4;
+    const signatureY = signature.skillId === 'extreme-tide'
+      ? y - 40
+      : signature.skillId === 'tidal-volley'
+        ? y + 180
+        : y + 220;
+    const existing = this.rings.find((ring) => ring.evolutionId === id);
+    if (existing) {
+      existing.x = x;
+      existing.y = signatureY;
+      existing.color = signature.primary;
+      existing.secondaryColor = signature.secondary;
+      existing.startRadius = radius;
+      existing.endRadius = radius;
+      existing.lifetimeMs = 420;
+      existing.priority = 100;
+      existing.ageMs = 0;
+    } else {
       this.addRing(
         x,
         signatureY,
         radius,
         radius,
         signature.primary,
-        6,
+        100,
         signature.secondary,
         'static-skill-silhouette',
+        id,
       );
     }
+    this.activeEvolutionSignatures.set(id, this.clockMs + 420);
   }
 
   private triggeredEvolutionIds(
@@ -1017,11 +1059,13 @@ export class EffectSystem {
     priority = 1,
     secondaryColor?: string,
     kind: MutableImpactRing['kind'] = 'impact-ring',
+    evolutionId: SkillVariantId | null = null,
   ): void {
     if (this.impactLimit <= 0) return;
     const ring = this.ringPool.acquire();
     ring.id = this.nextId++;
     ring.kind = kind;
+    ring.evolutionId = evolutionId;
     ring.x = x;
     ring.y = y;
     ring.color = color;
@@ -1068,9 +1112,9 @@ export class EffectSystem {
       this.rings,
       Math.max(
         this.impactLimit,
-        this.rings.filter((ring) => (
-          ring.kind === 'static-skill-silhouette'
-        )).length,
+        new Set(this.rings.flatMap((ring) => (
+          ring.evolutionId === null ? [] : [ring.evolutionId]
+        ))).size,
       ),
       this.ringPool,
     );
@@ -1097,6 +1141,9 @@ export class EffectSystem {
       const ring = this.rings[index];
       if (!ring || ring.ageMs < ring.lifetimeMs) continue;
       this.rings.splice(index, 1);
+      if (ring.evolutionId !== null) {
+        this.activeEvolutionSignatures.delete(ring.evolutionId);
+      }
       this.ringPool.release(ring);
     }
   }
@@ -1233,6 +1280,7 @@ function createImpactRing(): MutableImpactRing {
   return {
     id: 0,
     kind: 'impact-ring',
+    evolutionId: null,
     x: 0,
     y: 0,
     color: '',
@@ -1248,6 +1296,7 @@ function createImpactRing(): MutableImpactRing {
 function resetImpactRing(ring: MutableImpactRing): void {
   ring.id = 0;
   ring.kind = 'impact-ring';
+  ring.evolutionId = null;
   ring.x = 0;
   ring.y = 0;
   ring.color = '';
