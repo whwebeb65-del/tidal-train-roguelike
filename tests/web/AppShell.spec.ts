@@ -97,6 +97,17 @@ describe('AppShell', () => {
     );
   });
 
+  it('gives the settings close control one CSS pixel of cross-platform touch slack', () => {
+    const css = readFileSync(
+      new URL('../../web/styles/settings-panel.css', import.meta.url),
+      'utf8',
+    );
+
+    expect(css).toMatch(
+      /\.settings-sheet__close\s*\{[^}]*width:\s*45px;[^}]*min-height:\s*45px;/,
+    );
+  });
+
   it('removes notice transition and vertical displacement for reduced motion', () => {
     expect(appShellCss).toMatch(
       /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.app-notice,[\s\S]*?\.app-notice\.is-visible\s*\{[^}]*transition:\s*none;[^}]*transform:\s*translateX\(-50%\);/,
