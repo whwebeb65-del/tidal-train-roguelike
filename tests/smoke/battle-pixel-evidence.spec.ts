@@ -8,8 +8,9 @@ import type {
 } from '../../web/battle/BattleDrawTypes';
 import type {
   EffectFrameView,
-  EffectParticleKind,
 } from '../../web/battle/EffectSystem';
+import { getSkillEvolutionVisualSignature } from '../../web/battle/SkillEvolutionVisualCatalog';
+import type { SkillVariantId } from '../../src/domain/skill/SkillProgressionTypes';
 import { createPresentationFixture } from '../web/battle/helpers/BattleFixtures';
 import { createRecordingPainter } from '../web/battle/helpers/RecordingPainter';
 
@@ -109,15 +110,29 @@ function commandPaintsPixel(
 function rasterizeMotif(
   commands: readonly BattleDrawCommand[],
   kind: string,
-): Uint8Array {
-  const pixels = new Uint8Array(LOGICAL_WIDTH * LOGICAL_HEIGHT);
+  expectedColor: string,
+): Float32Array {
+  const pixels = new Float32Array(LOGICAL_WIDTH * LOGICAL_HEIGHT);
   const motif = commands.filter((command): command is LineDrawCommand | EllipseDrawCommand => (
-    command.kind === kind && ('points' in command || 'radiusX' in command)
+    command.kind === kind
+      && (
+        ('points' in command && command.stroke === expectedColor)
+        || (
+          'radiusX' in command
+            && (command.stroke === expectedColor || command.fill === expectedColor)
+        )
+      )
   ));
-  for (let y = 0; y < LOGICAL_HEIGHT; y += 1) {
-    for (let x = 0; x < LOGICAL_WIDTH; x += 1) {
-      if (motif.some((command) => commandPaintsPixel(command, x + 0.5, y + 0.5))) {
-        pixels[y * LOGICAL_WIDTH + x] = 1;
+  for (const command of motif) {
+    const sourceAlpha = Math.min(1, Math.max(0, command.alpha ?? 1));
+    if (sourceAlpha <= 0) continue;
+    for (let y = 0; y < LOGICAL_HEIGHT; y += 1) {
+      for (let x = 0; x < LOGICAL_WIDTH; x += 1) {
+        if (!commandPaintsPixel(command, x + 0.5, y + 0.5)) continue;
+        const pixelIndex = y * LOGICAL_WIDTH + x;
+        const destinationAlpha = pixels[pixelIndex] ?? 0;
+        pixels[pixelIndex] = sourceAlpha
+          + destinationAlpha * (1 - sourceAlpha);
       }
     }
   }
@@ -125,7 +140,7 @@ function rasterizeMotif(
 }
 
 function coloredPixelCount(
-  pixels: Uint8Array,
+  pixels: ArrayLike<number>,
   region: { readonly x: number; readonly y: number; readonly width: number; readonly height: number },
 ): number {
   let count = 0;
@@ -137,7 +152,7 @@ function coloredPixelCount(
   return count;
 }
 
-function largestFilledRectangle(pixels: Uint8Array): number {
+function largestFilledRectangle(pixels: ArrayLike<number>): number {
   const heights = new Uint16Array(LOGICAL_WIDTH);
   let largest = 0;
   for (let y = 0; y < LOGICAL_HEIGHT; y += 1) {
@@ -158,17 +173,25 @@ function largestFilledRectangle(pixels: Uint8Array): number {
   return largest;
 }
 
-function renderEvolutionMotif(kind: EffectParticleKind): readonly BattleDrawCommand[] {
+function renderEvolutionMotif(
+  variantId: SkillVariantId,
+  alpha = 1,
+): {
+  readonly commands: readonly BattleDrawCommand[];
+  readonly color: string;
+  readonly particleKind: string;
+} {
+  const signature = getSkillEvolutionVisualSignature(variantId);
   const effects: EffectFrameView = {
     particles: [{
       id: 501,
-      kind,
+      kind: signature.particleKind,
       layer: 'front-effects',
       x: 195,
       y: 430,
       size: 12,
-      color: '#59e9ff',
-      alpha: 1,
+      color: signature.primary,
+      alpha,
       rotation: 0,
       progress: 0.4,
     }],
@@ -178,36 +201,101 @@ function renderEvolutionMotif(kind: EffectParticleKind): readonly BattleDrawComm
   };
   const painter = createRecordingPainter();
   new BattleRenderer(painter).render(createPresentationFixture({ effects }));
-  return painter.commands;
+  return {
+    commands: painter.commands,
+    color: signature.primary,
+    particleKind: signature.particleKind,
+  };
+}
+
+function passesMotifPixelEvidence(
+  commands: readonly BattleDrawCommand[],
+  drawKind: string,
+  expectedColor: string,
+  expectedRegion: { readonly x: number; readonly y: number; readonly width: number; readonly height: number },
+): boolean {
+  const pixels = rasterizeMotif(commands, drawKind, expectedColor);
+  return coloredPixelCount(pixels, expectedRegion) > 0
+    && largestFilledRectangle(pixels) < LOGICAL_WIDTH * LOGICAL_HEIGHT * 0.35;
 }
 
 describe('battle pixel evidence helpers', () => {
   it.each([
-    ['split chevrons', 'split-chevron', 'effect-split-chevron', { x: 176, y: 414, width: 8, height: 8 }],
-    ['returning arc', 'returning-arc', 'effect-returning-arc', { x: 163, y: 426, width: 8, height: 8 }],
-    ['rainstorm fan', 'rainstorm-fin', 'effect-rainstorm-fin', { x: 214, y: 411, width: 9, height: 9 }],
-    ['bubble fracture', 'bubble-fracture', 'effect-bubble-fracture', { x: 220, y: 426, width: 9, height: 9 }],
-    ['overflow double membrane', 'overflow-droplet', 'effect-overflow-droplet', { x: 213, y: 425, width: 9, height: 10 }],
-    ['emergency beacon', 'emergency-beacon', 'effect-emergency-beacon', { x: 191, y: 401, width: 9, height: 9 }],
-    ['undertow eye', 'undertow-eye', 'effect-undertow-eye', { x: 220, y: 425, width: 10, height: 10 }],
-    ['double crest', 'second-crest', 'effect-second-crest', { x: 159, y: 436, width: 9, height: 10 }],
+    ['split chevrons', 'split-tide-arrow', 'split-chevron', 'effect-split-chevron', { x: 176, y: 414, width: 8, height: 8 }],
+    ['returning arc', 'returning-volley', 'returning-arc', 'effect-returning-arc', { x: 163, y: 426, width: 8, height: 8 }],
+    ['rainstorm fan', 'rainstorm-school', 'rainstorm-fin', 'effect-rainstorm-fin', { x: 214, y: 411, width: 9, height: 9 }],
+    ['bubble fracture', 'bursting-bubble', 'bubble-fracture', 'effect-bubble-fracture', { x: 220, y: 426, width: 9, height: 9 }],
+    ['overflow double membrane', 'overflow-membrane', 'overflow-droplet', 'effect-overflow-droplet', { x: 213, y: 425, width: 9, height: 10 }],
+    ['emergency beacon', 'emergency-trigger', 'emergency-beacon', 'effect-emergency-beacon', { x: 191, y: 401, width: 9, height: 9 }],
+    ['undertow eye', 'undertow-eye', 'undertow-eye', 'effect-undertow-eye', { x: 220, y: 425, width: 10, height: 10 }],
+    ['double crest', 'double-crest', 'second-crest', 'effect-second-crest', { x: 159, y: 436, width: 9, height: 10 }],
   ] as const)(
-    'captures colored pixels for the %s without a battle-sized filled rectangle',
-    (_name, particleKind, drawKind, expectedRegion) => {
-      const commands = renderEvolutionMotif(particleKind as EffectParticleKind);
+    'captures the catalog color for the %s without a battle-sized filled rectangle',
+    (_name, variantId, particleKind, drawKind, expectedRegion) => {
+      const signature = getSkillEvolutionVisualSignature(variantId);
+      const rendered = renderEvolutionMotif(variantId);
+      const { commands } = rendered;
+      expect(rendered).toMatchObject({
+        color: signature.primary,
+        particleKind,
+      });
       const motifCommands = commands.filter((command) => command.kind === drawKind);
       expect(motifCommands.length).toBeGreaterThan(0);
       expect(motifCommands.every((command) => (
-        ('points' in command && command.stroke === '#59e9ff')
-        || ('radiusX' in command && (command.stroke === '#59e9ff' || command.fill === '#59e9ff'))
+        (command.alpha ?? 1) > 0
+        && (
+          ('points' in command && command.stroke === signature.primary)
+          || (
+            'radiusX' in command
+              && (command.stroke === signature.primary || command.fill === signature.primary)
+          )
+        )
       ))).toBe(true);
-      const pixels = rasterizeMotif(commands, drawKind);
+      const pixels = rasterizeMotif(commands, drawKind, signature.primary);
       expect(coloredPixelCount(pixels, expectedRegion)).toBeGreaterThan(0);
       expect(largestFilledRectangle(pixels)).toBeLessThan(
         LOGICAL_WIDTH * LOGICAL_HEIGHT * 0.35,
       );
+      expect(passesMotifPixelEvidence(
+        commands,
+        drawKind,
+        signature.primary,
+        expectedRegion,
+      )).toBe(true);
     },
   );
+
+  it('rejects same-color motif geometry when its final alpha is zero', () => {
+    const expectedRegion = { x: 176, y: 414, width: 8, height: 8 };
+    const signature = getSkillEvolutionVisualSignature('split-tide-arrow');
+    const visible = renderEvolutionMotif('split-tide-arrow', 1);
+    const transparent = renderEvolutionMotif('split-tide-arrow', 0);
+    const motifGeometry = (commands: readonly BattleDrawCommand[]) => commands
+      .filter((command) => command.kind === 'effect-split-chevron')
+      .map(({ alpha: _alpha, ...command }) => command);
+    expect(motifGeometry(transparent.commands)).toEqual(
+      motifGeometry(visible.commands),
+    );
+    const visiblePixels = rasterizeMotif(
+      visible.commands,
+      'effect-split-chevron',
+      signature.primary,
+    );
+    const transparentPixels = rasterizeMotif(
+      transparent.commands,
+      'effect-split-chevron',
+      signature.primary,
+    );
+
+    expect(coloredPixelCount(visiblePixels, expectedRegion)).toBeGreaterThan(0);
+    expect(coloredPixelCount(transparentPixels, expectedRegion)).toBe(0);
+    expect(passesMotifPixelEvidence(
+      transparent.commands,
+      'effect-split-chevron',
+      signature.primary,
+      expectedRegion,
+    )).toBe(false);
+  });
 
   it('detects a single filled rectangular component above 35% of the logical battle area', () => {
     const pixels = new Uint8Array(LOGICAL_WIDTH * LOGICAL_HEIGHT);

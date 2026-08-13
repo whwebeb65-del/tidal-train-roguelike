@@ -75,7 +75,14 @@ function pointPairs(command: LineDrawCommand): readonly (readonly number[])[] {
 function commandBounds(
   commands: readonly BattleDrawCommand[],
   kind: string,
-): { readonly width: number; readonly height: number } {
+): {
+  readonly minX: number;
+  readonly minY: number;
+  readonly maxX: number;
+  readonly maxY: number;
+  readonly width: number;
+  readonly height: number;
+} {
   const points: { readonly x: number; readonly y: number }[] = [];
   for (const command of commands.filter((item) => item.kind === kind)) {
     if ('points' in command) {
@@ -107,11 +114,17 @@ function commandBounds(
     }
   }
   expect(points.length).toBeGreaterThan(0);
+  const minX = Math.min(...points.map((point) => point.x));
+  const minY = Math.min(...points.map((point) => point.y));
+  const maxX = Math.max(...points.map((point) => point.x));
+  const maxY = Math.max(...points.map((point) => point.y));
   return {
-    width: Math.max(...points.map((point) => point.x))
-      - Math.min(...points.map((point) => point.x)),
-    height: Math.max(...points.map((point) => point.y))
-      - Math.min(...points.map((point) => point.y)),
+    minX,
+    minY,
+    maxX,
+    maxY,
+    width: maxX - minX,
+    height: maxY - minY,
   };
 }
 
@@ -379,6 +392,9 @@ describe('BattleRenderer', () => {
 
       expect(motif).toHaveLength(expectedCount);
       expect(motif.every((command) => {
+        if (command.layer !== 'front-effects' || command.alpha !== 0.84) {
+          return false;
+        }
         if ('points' in command) {
           return command.lineWidth > 0
             && command.points.length >= 2
@@ -397,6 +413,79 @@ describe('BattleRenderer', () => {
       expect(bounds.height).toBeGreaterThan(0);
       expect(bounds.width).toBeLessThan(180);
       expect(bounds.height).toBeLessThan(140);
+    },
+  );
+
+  it.each(([
+    ['split-chevron', 'effect-split-chevron'],
+    ['coral-pierce', 'effect-coral-pierce'],
+    ['returning-arc', 'effect-returning-arc'],
+    ['rainstorm-fin', 'effect-rainstorm-fin'],
+    ['bubble-fracture', 'effect-bubble-fracture'],
+    ['reflection', 'effect-reflection'],
+    ['overflow-droplet', 'effect-overflow-droplet'],
+    ['emergency-beacon', 'effect-emergency-beacon'],
+    ['undertow-eye', 'effect-undertow-eye'],
+    ['extreme-vortex', 'effect-extreme-vortex'],
+    ['energy-return', 'effect-energy-return'],
+    ['second-crest', 'effect-second-crest'],
+  ] as const).flatMap(([particleKind, drawKind]) => ([
+    { particleKind, drawKind, progress: 0, rotation: 0, x: 20, y: 30, size: 3.2 },
+    { particleKind, drawKind, progress: 1, rotation: Math.PI, x: 370, y: 814, size: 12 },
+    { particleKind, drawKind, progress: 0.5, rotation: Math.PI * 2 - 1e-7, x: 195, y: 430, size: 7 },
+  ])))(
+    'keeps $particleKind finite and locally bounded at progress=$progress rotation=$rotation',
+    ({ particleKind, drawKind, progress, rotation, x, y, size }) => {
+      const effects: EffectFrameView = {
+        particles: [{
+          id: 160,
+          kind: particleKind,
+          layer: 'enemies',
+          x,
+          y,
+          size,
+          color: '#f5d77b',
+          alpha: 0.62,
+          rotation,
+          progress,
+        }],
+        damageNumbers: [], rings: [],
+        camera: { x: 0, y: 0, rotation: 0, amplitude: 0 },
+        cinematic: { darken: 0, title: null, slowMotion: 0 },
+      };
+      const motif = renderCommands({ effects }).filter(
+        (command) => command.kind === drawKind,
+      );
+
+      expect(motif.length).toBeGreaterThan(0);
+      expect(motif.every((command) => {
+        if (command.layer !== 'enemies' || command.alpha !== 0.62) return false;
+        if ('points' in command) {
+          return Number.isFinite(command.lineWidth)
+            && command.lineWidth > 0
+            && command.points.every((point) => (
+              Number.isFinite(point.x) && Number.isFinite(point.y)
+            ));
+        }
+        return 'radiusX' in command
+          && Number.isFinite(command.x)
+          && Number.isFinite(command.y)
+          && Number.isFinite(command.radiusX)
+          && Number.isFinite(command.radiusY)
+          && Number.isFinite(command.rotation ?? 0)
+          && command.radiusX > 0
+          && command.radiusY > 0;
+      })).toBe(true);
+      const bounds = commandBounds(motif, drawKind);
+      expect(Object.values(bounds).every(Number.isFinite)).toBe(true);
+      expect(bounds.width).toBeGreaterThan(0);
+      expect(bounds.height).toBeGreaterThan(0);
+      expect(bounds.width).toBeLessThan(size * 8);
+      expect(bounds.height).toBeLessThan(size * 8);
+      expect(bounds.minX).toBeGreaterThanOrEqual(-size * 4);
+      expect(bounds.minY).toBeGreaterThanOrEqual(-size * 4);
+      expect(bounds.maxX).toBeLessThanOrEqual(390 + size * 4);
+      expect(bounds.maxY).toBeLessThanOrEqual(844 + size * 4);
     },
   );
 
