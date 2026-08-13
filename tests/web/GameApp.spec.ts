@@ -11,6 +11,7 @@ import { getBattleUpgradeDefinition } from '../../web/battle/BattleUpgradeCatalo
 import type { BattleEngine } from '../../web/battle/BattleEngine';
 import { createWaveSchedule } from '../../web/battle/WaveScheduler';
 import { getTidalArchiveEnemyDiscovery } from '../../web/battle/TidalArchiveDiscoveryPresentation';
+import { BattleScene } from '../../web/scenes/BattleScene';
 
 function installCanvas2DStub(): () => void {
   const original = HTMLCanvasElement.prototype.getContext;
@@ -93,6 +94,104 @@ describe('LegacyGameRuntime E2E snapshots', () => {
 
     expect(onBattleEngineCreated).not.toHaveBeenCalled();
   });
+
+  it('keeps a frame-zero discovery through animation, settlement, and a failed next mount', async () => {
+    const restoreCanvas = installCanvas2DStub();
+    window.history.replaceState({}, '', '/');
+    const app = document.createElement('div');
+    document.body.append(app);
+    const storage = window.localStorage;
+    const nowMs = Date.now();
+    storage.clear();
+    storage.setItem(APP_STORAGE_KEYS.player, JSON.stringify({
+      ...defaultSave(),
+      stamina: 10,
+      staminaUpdatedAtMs: nowMs,
+      selectedCaptainId: 'captain-tide-female',
+    }));
+    storage.setItem(APP_STORAGE_KEYS.firstRunBattleTutorial, JSON.stringify({
+      version: 1,
+      completedStepIds: ['aim', 'skill', 'upgrade'],
+      skipped: false,
+    }));
+    const snapshots: LegacyRuntimeTestSnapshot[] = [];
+    let battleScene: BattleScene | null = null;
+    let battleMounts = 0;
+    const originalMount = BattleScene.prototype.mount;
+    const mountSpy = vi.spyOn(BattleScene.prototype, 'mount')
+      .mockImplementation(function captureRealBattleScene(
+        this: BattleScene,
+        host: HTMLElement,
+      ) {
+        battleMounts += 1;
+        if (battleMounts === 2) throw new Error('next battle mount failed');
+        battleScene = this;
+        return originalMount.call(this, host);
+      });
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const audio = new Proxy({}, { get: () => () => undefined }) as never;
+    const runtime = createLegacyGameRuntime(app, storage, false, audio, {
+      getSettings: () => ({ version: 2, musicEnabled: false, sfxEnabled: false, reducedMotion: false, qualityPreference: 'auto', preferredBattleSpeed: 1 }),
+      updateSettings: () => ({ version: 2, musicEnabled: false, sfxEnabled: false, reducedMotion: false, qualityPreference: 'auto', preferredBattleSpeed: 1 }),
+    }, {
+      prepareStationRun: async () => ({ status: 'ready', assets: { failedIds: [], get: () => null } }),
+      nowMs: () => nowMs,
+      onTestSnapshot: (snapshot) => snapshots.push(snapshot),
+    });
+    onTestFinished(() => {
+      runtime.destroy();
+      mountSpy.mockRestore();
+      consoleError.mockRestore();
+      app.remove();
+      restoreCanvas();
+    });
+
+    await runtime.start();
+    app.querySelector<HTMLButtonElement>('[data-action="start-run"]')?.click();
+    await vi.waitFor(() => {
+      const archive = JSON.parse(
+        storage.getItem(APP_STORAGE_KEYS.tidalArchive) ?? '{}',
+      );
+      expect(archive.unreadEntryKeys).toHaveLength(1);
+    });
+    const discoveredKey = JSON.parse(
+      storage.getItem(APP_STORAGE_KEYS.tidalArchive) ?? '{}',
+    ).unreadEntryKeys[0] as string;
+    expect(snapshots.at(-1)?.phase).toBe('station');
+    await vi.waitFor(() => {
+      expect(snapshots.at(-1)?.phase).toBe('combat');
+    });
+    expect(battleScene).not.toBeNull();
+
+    const engine = (battleScene as unknown as {
+      dependencies: { engine: { finish(victory: boolean): void } };
+    }).dependencies.engine;
+    engine.finish(true);
+    await vi.waitFor(() => {
+      expect(snapshots.at(-1)?.activeBattleSettlement).not.toBeNull();
+    });
+    expect(
+      snapshots.at(-1)?.activeBattleSettlement?.archiveDiscoveries
+        .map((entry) => entry.key),
+    ).toContain(discoveredKey);
+
+    app.querySelector<HTMLButtonElement>(
+      '[data-battle-action="return-station"]',
+    )?.click();
+    await vi.waitFor(() => {
+      expect(snapshots.at(-1)?.phase).toBe('station');
+    });
+    const snapshotsBeforeFailedDeparture = snapshots.length;
+    app.querySelector<HTMLButtonElement>('[data-action="start-run"]')?.click();
+    await vi.waitFor(() => {
+      expect(consoleError).toHaveBeenCalledWith(expect.any(Error));
+      expect(snapshots.length).toBeGreaterThan(snapshotsBeforeFailedDeparture);
+    });
+    expect(snapshots.at(-1)?.phase).toBe('station');
+    expect(
+      snapshots.at(-1)?.activeRunArchiveDiscoveries.map((entry) => entry.key),
+    ).toContain(discoveredKey);
+  }, 10_000);
 
   it('records authoritative archive discoveries once and opens the archive without changing player assets', async () => {
     const restoreCanvas = installCanvas2DStub();
@@ -360,6 +459,20 @@ describe('LegacyGameRuntime E2E snapshots', () => {
     expect(app.querySelector(
       `[data-archive-variant="${selectedVariantId}"].is-discovered.is-new`,
     )).not.toBeNull();
+
+    app.querySelector<HTMLButtonElement>(
+      '[data-action="show-tidal-archive"]',
+    )?.click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(app.querySelector(
+      `[data-archive-enemy="${firstEnemyKind}"].is-new`,
+    )).not.toBeNull();
+    expect(app.querySelector(
+      `[data-archive-variant="${selectedVariantId}"].is-new`,
+    )).not.toBeNull();
+    expect(telemetryEvents.filter(
+      (event) => event.name === 'tidal_archive_entries_read',
+    )).toHaveLength(1);
 
     app.querySelector<HTMLButtonElement>(
       '[data-action="show-equipment-workshop"]',

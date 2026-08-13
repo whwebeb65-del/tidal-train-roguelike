@@ -1434,6 +1434,8 @@ async function startRun(
   const runToken = Symbol('station-runtime-run');
   activeStationRunToken = runToken;
   const stationNotice = notice;
+  const previousRunArchiveDiscoveries = activeRunArchiveDiscoveries;
+  let archiveDiscoveriesReset = false;
   const departure = new StationDepartureController(
     shell.sceneHost,
     effectiveReducedMotion,
@@ -1546,6 +1548,8 @@ async function startRun(
       currentBattleAssets,
     ) ?? createBattleScene(candidateEngine, currentBattleAssets);
     activeBattleScene = preparedBattleScene;
+    activeRunArchiveDiscoveries = [];
+    archiveDiscoveriesReset = true;
     phase = 'combat';
     await syncView();
     activeRunAccountStart = save.accountLevel;
@@ -1568,9 +1572,11 @@ async function startRun(
     if (currentBattleAssets.failedIds.length > 0) {
       notice += ` ${currentBattleAssets.failedIds.length} 项美术资源将使用安全替代图形。`;
     }
-    activeRunArchiveDiscoveries = [];
     emitTestSnapshot();
   } catch (error) {
+    if (archiveDiscoveriesReset) {
+      activeRunArchiveDiscoveries = previousRunArchiveDiscoveries;
+    }
     departure.cancel();
     console.error(error);
     activeBattleEngine = null;
@@ -2477,9 +2483,11 @@ const onClick = async (event: Event): Promise<void> => {
     return;
   }
   if (action === 'show-tidal-archive') {
-    archiveVisitNewKeys = Object.freeze([
-      ...tidalArchiveState.unreadEntryKeys,
-    ]);
+    if (equipmentPanel !== 'archive') {
+      archiveVisitNewKeys = Object.freeze([
+        ...tidalArchiveState.unreadEntryKeys,
+      ]);
+    }
     const next = markTidalArchiveRead(tidalArchiveState);
     if (next !== tidalArchiveState) {
       const count = tidalArchiveState.unreadEntryKeys.length;
