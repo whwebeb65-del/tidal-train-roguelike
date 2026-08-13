@@ -1,5 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import { readFile } from 'node:fs/promises';
+import { BattleRenderer } from '../../web/battle/BattleRenderer';
+import type {
+  BattleDrawCommand,
+  EllipseDrawCommand,
+  LineDrawCommand,
+} from '../../web/battle/BattleDrawTypes';
+import type {
+  EffectFrameView,
+  EffectParticleKind,
+} from '../../web/battle/EffectSystem';
+import { createPresentationFixture } from '../web/battle/helpers/BattleFixtures';
+import { createRecordingPainter } from '../web/battle/helpers/RecordingPainter';
 
 const helperPath = '../../scripts/lib/battle-pixel-evidence.mjs';
 
@@ -47,7 +59,166 @@ function validDefeatEvidence() {
   };
 }
 
+const LOGICAL_WIDTH = 390;
+const LOGICAL_HEIGHT = 844;
+
+function distanceToSegment(
+  x: number,
+  y: number,
+  start: { readonly x: number; readonly y: number },
+  end: { readonly x: number; readonly y: number },
+): number {
+  const dx = end.x - start.x;
+  const dy = end.y - start.y;
+  const lengthSquared = dx * dx + dy * dy;
+  const amount = lengthSquared === 0
+    ? 0
+    : Math.max(0, Math.min(1, ((x - start.x) * dx + (y - start.y) * dy) / lengthSquared));
+  return Math.hypot(
+    x - (start.x + dx * amount),
+    y - (start.y + dy * amount),
+  );
+}
+
+function commandPaintsPixel(
+  command: LineDrawCommand | EllipseDrawCommand,
+  x: number,
+  y: number,
+): boolean {
+  if ('points' in command) {
+    return command.points.slice(1).some((point, index) => (
+      distanceToSegment(x, y, command.points[index]!, point)
+        <= command.lineWidth / 2
+    ));
+  }
+  const rotation = -(command.rotation ?? 0);
+  const dx = x - command.x;
+  const dy = y - command.y;
+  const localX = dx * Math.cos(rotation) - dy * Math.sin(rotation);
+  const localY = dx * Math.sin(rotation) + dy * Math.cos(rotation);
+  const normalizedRadius = Math.sqrt(
+    (localX / command.radiusX) ** 2 + (localY / command.radiusY) ** 2,
+  );
+  if (command.fill && normalizedRadius <= 1) return true;
+  if (!command.stroke) return false;
+  const strokeDistance = Math.abs(normalizedRadius - 1)
+    * Math.min(command.radiusX, command.radiusY);
+  return strokeDistance <= (command.lineWidth ?? 1) / 2;
+}
+
+function rasterizeMotif(
+  commands: readonly BattleDrawCommand[],
+  kind: string,
+): Uint8Array {
+  const pixels = new Uint8Array(LOGICAL_WIDTH * LOGICAL_HEIGHT);
+  const motif = commands.filter((command): command is LineDrawCommand | EllipseDrawCommand => (
+    command.kind === kind && ('points' in command || 'radiusX' in command)
+  ));
+  for (let y = 0; y < LOGICAL_HEIGHT; y += 1) {
+    for (let x = 0; x < LOGICAL_WIDTH; x += 1) {
+      if (motif.some((command) => commandPaintsPixel(command, x + 0.5, y + 0.5))) {
+        pixels[y * LOGICAL_WIDTH + x] = 1;
+      }
+    }
+  }
+  return pixels;
+}
+
+function coloredPixelCount(
+  pixels: Uint8Array,
+  region: { readonly x: number; readonly y: number; readonly width: number; readonly height: number },
+): number {
+  let count = 0;
+  for (let y = region.y; y < region.y + region.height; y += 1) {
+    for (let x = region.x; x < region.x + region.width; x += 1) {
+      count += pixels[y * LOGICAL_WIDTH + x] ?? 0;
+    }
+  }
+  return count;
+}
+
+function largestFilledRectangle(pixels: Uint8Array): number {
+  const heights = new Uint16Array(LOGICAL_WIDTH);
+  let largest = 0;
+  for (let y = 0; y < LOGICAL_HEIGHT; y += 1) {
+    for (let x = 0; x < LOGICAL_WIDTH; x += 1) {
+      heights[x] = pixels[y * LOGICAL_WIDTH + x] ? heights[x]! + 1 : 0;
+    }
+    const stack: number[] = [];
+    for (let x = 0; x <= LOGICAL_WIDTH; x += 1) {
+      const height = x === LOGICAL_WIDTH ? 0 : heights[x]!;
+      while (stack.length > 0 && heights[stack.at(-1)!]! > height) {
+        const top = stack.pop()!;
+        const width = stack.length === 0 ? x : x - stack.at(-1)! - 1;
+        largest = Math.max(largest, heights[top]! * width);
+      }
+      stack.push(x);
+    }
+  }
+  return largest;
+}
+
+function renderEvolutionMotif(kind: EffectParticleKind): readonly BattleDrawCommand[] {
+  const effects: EffectFrameView = {
+    particles: [{
+      id: 501,
+      kind,
+      layer: 'front-effects',
+      x: 195,
+      y: 430,
+      size: 12,
+      color: '#59e9ff',
+      alpha: 1,
+      rotation: 0,
+      progress: 0.4,
+    }],
+    damageNumbers: [], rings: [],
+    camera: { x: 0, y: 0, rotation: 0, amplitude: 0 },
+    cinematic: { darken: 0, title: null, slowMotion: 0 },
+  };
+  const painter = createRecordingPainter();
+  new BattleRenderer(painter).render(createPresentationFixture({ effects }));
+  return painter.commands;
+}
+
 describe('battle pixel evidence helpers', () => {
+  it.each([
+    ['split chevrons', 'split-chevron', 'effect-split-chevron', { x: 176, y: 414, width: 8, height: 8 }],
+    ['returning arc', 'returning-arc', 'effect-returning-arc', { x: 163, y: 426, width: 8, height: 8 }],
+    ['rainstorm fan', 'rainstorm-fin', 'effect-rainstorm-fin', { x: 214, y: 411, width: 9, height: 9 }],
+    ['bubble fracture', 'bubble-fracture', 'effect-bubble-fracture', { x: 220, y: 426, width: 9, height: 9 }],
+    ['overflow double membrane', 'overflow-droplet', 'effect-overflow-droplet', { x: 213, y: 425, width: 9, height: 10 }],
+    ['emergency beacon', 'emergency-beacon', 'effect-emergency-beacon', { x: 191, y: 401, width: 9, height: 9 }],
+    ['undertow eye', 'undertow-eye', 'effect-undertow-eye', { x: 220, y: 425, width: 10, height: 10 }],
+    ['double crest', 'second-crest', 'effect-second-crest', { x: 159, y: 436, width: 9, height: 10 }],
+  ] as const)(
+    'captures colored pixels for the %s without a battle-sized filled rectangle',
+    (_name, particleKind, drawKind, expectedRegion) => {
+      const commands = renderEvolutionMotif(particleKind as EffectParticleKind);
+      const motifCommands = commands.filter((command) => command.kind === drawKind);
+      expect(motifCommands.length).toBeGreaterThan(0);
+      expect(motifCommands.every((command) => (
+        ('points' in command && command.stroke === '#59e9ff')
+        || ('radiusX' in command && (command.stroke === '#59e9ff' || command.fill === '#59e9ff'))
+      ))).toBe(true);
+      const pixels = rasterizeMotif(commands, drawKind);
+      expect(coloredPixelCount(pixels, expectedRegion)).toBeGreaterThan(0);
+      expect(largestFilledRectangle(pixels)).toBeLessThan(
+        LOGICAL_WIDTH * LOGICAL_HEIGHT * 0.35,
+      );
+    },
+  );
+
+  it('detects a single filled rectangular component above 35% of the logical battle area', () => {
+    const pixels = new Uint8Array(LOGICAL_WIDTH * LOGICAL_HEIGHT);
+    for (let y = 0; y < 300; y += 1) {
+      pixels.fill(1, y * LOGICAL_WIDTH, (y + 1) * LOGICAL_WIDTH);
+    }
+    expect(largestFilledRectangle(pixels)).toBeGreaterThan(
+      LOGICAL_WIDTH * LOGICAL_HEIGHT * 0.35,
+    );
+  });
+
   it('keeps the battle HUD as a compact hand-drawn tide log with accessible rank states', async () => {
     const css = await readFile(new URL('../../web/styles/battle-hud.css', import.meta.url), 'utf8');
 

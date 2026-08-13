@@ -1115,6 +1115,265 @@ export class BattleRenderer {
         });
         continue;
       }
+      const motifSize = particle.size * (0.9 + particle.progress * 0.2);
+      if (particle.kind === 'split-chevron') {
+        const upper = evolutionMotifPoint(particle, -1.4 * motifSize, -1.1 * motifSize);
+        const vertex = evolutionMotifPoint(particle, 0.8 * motifSize, 0);
+        const lower = evolutionMotifPoint(particle, -1.4 * motifSize, 1.1 * motifSize);
+        for (const points of [[upper, vertex], [vertex, lower]]) {
+          this.painter.line({
+            kind: 'effect-split-chevron',
+            layer,
+            points,
+            stroke: particle.color,
+            lineWidth: particle.size * 0.34,
+            lineCap: 'round',
+            alpha: particle.alpha,
+            blendMode: 'screen',
+          });
+        }
+        continue;
+      }
+      if (particle.kind === 'returning-arc') {
+        const arcProfile = [
+          [-2.5, -0.05],
+          [-1.7, -0.48],
+          [-0.8, -0.66],
+          [0.05, -0.48],
+          [0.85, -0.12],
+          [1.65, 0.18],
+          [2.5, 0.02],
+        ] as const;
+        this.painter.line({
+          kind: 'effect-returning-arc',
+          layer,
+          points: arcProfile.map(([x, y]) => (
+            evolutionMotifPoint(particle, x * motifSize, y * motifSize)
+          )),
+          stroke: particle.color,
+          lineWidth: particle.size * 0.3,
+          lineCap: 'round',
+          alpha: particle.alpha,
+          blendMode: 'screen',
+        });
+        continue;
+      }
+      if (particle.kind === 'rainstorm-fin') {
+        const origin = evolutionMotifPoint(particle, -0.6 * motifSize, 0.5 * motifSize);
+        for (const endpointY of [-1.6, 0.15, 1.5]) {
+          this.painter.line({
+            kind: 'effect-rainstorm-fin',
+            layer,
+            points: [
+              origin,
+              evolutionMotifPoint(particle, 2.1 * motifSize, endpointY * motifSize),
+            ],
+            stroke: particle.color,
+            lineWidth: particle.size * 0.28,
+            lineCap: 'round',
+            alpha: particle.alpha,
+            blendMode: 'screen',
+          });
+        }
+        continue;
+      }
+      if (particle.kind === 'bubble-fracture') {
+        for (const angle of [0, Math.PI / 2, Math.PI, Math.PI * 1.5]) {
+          this.painter.line({
+            kind: 'effect-bubble-fracture',
+            layer,
+            points: [
+              evolutionMotifPoint(
+                particle,
+                Math.cos(angle) * motifSize * 0.65,
+                Math.sin(angle) * motifSize * 0.65,
+              ),
+              evolutionMotifPoint(
+                particle,
+                Math.cos(angle) * motifSize * 2.25,
+                Math.sin(angle) * motifSize * 2.25,
+              ),
+            ],
+            stroke: particle.color,
+            lineWidth: particle.size * 0.25,
+            lineCap: 'round',
+            alpha: particle.alpha,
+            blendMode: 'screen',
+          });
+        }
+        this.painter.ellipse({
+          kind: 'effect-bubble-fracture',
+          layer,
+          x: particle.x,
+          y: particle.y,
+          radiusX: motifSize * 0.55,
+          radiusY: motifSize * 0.55,
+          rotation: particle.rotation,
+          stroke: particle.color,
+          lineWidth: particle.size * 0.24,
+          alpha: particle.alpha,
+          blendMode: 'screen',
+        });
+        continue;
+      }
+      if (particle.kind === 'overflow-droplet') {
+        const outerCenter = evolutionMotifPoint(particle, -0.35 * motifSize, 0);
+        const innerCenter = evolutionMotifPoint(particle, 0.45 * motifSize, -0.05 * motifSize);
+        for (const [center, radiusX, radiusY] of [
+          [outerCenter, motifSize * 2, motifSize * 1.25],
+          [innerCenter, motifSize * 1.35, motifSize * 0.82],
+        ] as const) {
+          this.painter.ellipse({
+            kind: 'effect-overflow-droplet',
+            layer,
+            x: center.x,
+            y: center.y,
+            radiusX,
+            radiusY,
+            rotation: particle.rotation,
+            stroke: particle.color,
+            lineWidth: particle.size * 0.24,
+            alpha: particle.alpha,
+            blendMode: 'screen',
+          });
+        }
+        this.painter.line({
+          kind: 'effect-overflow-droplet',
+          layer,
+          points: [
+            evolutionMotifPoint(particle, 0, motifSize * 1.2),
+            evolutionMotifPoint(particle, 0.25 * motifSize, motifSize * 2.15),
+          ],
+          stroke: particle.color,
+          lineWidth: particle.size * 0.28,
+          lineCap: 'round',
+          alpha: particle.alpha,
+          blendMode: 'screen',
+        });
+        continue;
+      }
+      if (particle.kind === 'emergency-beacon') {
+        const diamond = [
+          evolutionMotifPoint(particle, 0, -2.2 * motifSize),
+          evolutionMotifPoint(particle, 1.65 * motifSize, 0),
+          evolutionMotifPoint(particle, 0, 2.2 * motifSize),
+          evolutionMotifPoint(particle, -1.65 * motifSize, 0),
+          evolutionMotifPoint(particle, 0, -2.2 * motifSize),
+        ];
+        this.painter.line({
+          kind: 'effect-emergency-beacon',
+          layer,
+          points: diamond,
+          stroke: particle.color,
+          lineWidth: particle.size * 0.3,
+          lineCap: 'round',
+          alpha: particle.alpha,
+          blendMode: 'screen',
+        });
+        for (const direction of [-1, 1]) {
+          this.painter.line({
+            kind: 'effect-emergency-beacon',
+            layer,
+            points: [
+              evolutionMotifPoint(particle, direction * 2.05 * motifSize, 0),
+              evolutionMotifPoint(particle, direction * 2.8 * motifSize, 0),
+            ],
+            stroke: particle.color,
+            lineWidth: particle.size * 0.26,
+            lineCap: 'round',
+            alpha: particle.alpha,
+            blendMode: 'screen',
+          });
+        }
+        continue;
+      }
+      if (particle.kind === 'undertow-eye') {
+        for (const [radiusX, radiusY] of [
+          [motifSize * 2.5, motifSize * 1.25],
+          [motifSize * 1.15, motifSize * 0.62],
+        ] as const) {
+          this.painter.ellipse({
+            kind: 'effect-undertow-eye',
+            layer,
+            x: particle.x,
+            y: particle.y,
+            radiusX,
+            radiusY,
+            rotation: particle.rotation,
+            stroke: particle.color,
+            lineWidth: particle.size * 0.24,
+            alpha: particle.alpha,
+            blendMode: 'screen',
+          });
+        }
+        for (const angle of [
+          Math.PI * 0.25,
+          Math.PI * 0.75,
+          Math.PI * 1.25,
+          Math.PI * 1.75,
+        ]) {
+          this.painter.line({
+            kind: 'effect-undertow-eye',
+            layer,
+            points: [
+              evolutionMotifPoint(
+                particle,
+                Math.cos(angle) * motifSize * 1.8,
+                Math.sin(angle) * motifSize,
+              ),
+              evolutionMotifPoint(
+                particle,
+                Math.cos(angle) * motifSize * 0.62,
+                Math.sin(angle) * motifSize * 0.34,
+              ),
+            ],
+            stroke: particle.color,
+            lineWidth: particle.size * 0.22,
+            lineCap: 'round',
+            alpha: particle.alpha,
+            blendMode: 'screen',
+          });
+        }
+        continue;
+      }
+      if (particle.kind === 'energy-return') {
+        const center = evolutionMotifPoint(particle, 0, motifSize * 0.3);
+        const returnStart = evolutionMotifPoint(particle, 0, motifSize * 0.95);
+        const returnAngle = Math.atan2(
+          TRAIN_PIVOT_Y - returnStart.y,
+          TRAIN_PIVOT_X - returnStart.x,
+        );
+        this.painter.ellipse({
+          kind: 'effect-energy-return',
+          layer,
+          x: center.x,
+          y: center.y,
+          radiusX: motifSize * 0.85,
+          radiusY: motifSize * 0.55,
+          rotation: particle.rotation,
+          stroke: particle.color,
+          lineWidth: particle.size * 0.26,
+          alpha: particle.alpha,
+          blendMode: 'screen',
+        });
+        this.painter.line({
+          kind: 'effect-energy-return',
+          layer,
+          points: [
+            returnStart,
+            {
+              x: returnStart.x + Math.cos(returnAngle) * motifSize * 1.45,
+              y: returnStart.y + Math.sin(returnAngle) * motifSize * 1.45,
+            },
+          ],
+          stroke: particle.color,
+          lineWidth: particle.size * 0.28,
+          lineCap: 'round',
+          alpha: particle.alpha,
+          blendMode: 'screen',
+        });
+        continue;
+      }
       if (particle.kind === 'rank-volley-trail' || particle.kind === 'coral-pierce') {
         const length = particle.kind === 'coral-pierce' ? particle.size * 5 : particle.size * 4;
         const angle = particle.rotation - Math.PI / 2;
@@ -1358,4 +1617,17 @@ function clamp01(value: number): number {
 
 function wrapUnit(value: number): number {
   return ((value % 1) + 1) % 1;
+}
+
+function evolutionMotifPoint(
+  particle: EffectParticleView,
+  localX: number,
+  localY: number,
+): { readonly x: number; readonly y: number } {
+  const cosine = Math.cos(particle.rotation);
+  const sine = Math.sin(particle.rotation);
+  return {
+    x: particle.x + localX * cosine - localY * sine,
+    y: particle.y + localX * sine + localY * cosine,
+  };
 }

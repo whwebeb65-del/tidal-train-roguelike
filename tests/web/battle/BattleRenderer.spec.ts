@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { BattleRenderer } from '../../../web/battle/BattleRenderer';
-import type { EffectFrameView } from '../../../web/battle/EffectSystem';
+import type {
+  EffectFrameView,
+  EffectParticleKind,
+} from '../../../web/battle/EffectSystem';
 import { TrainMotionController } from '../../../web/battle/TrainMotionController';
 import type {
   BattleDrawCommand,
@@ -67,6 +70,49 @@ function expectSharedPose(
 
 function pointPairs(command: LineDrawCommand): readonly (readonly number[])[] {
   return command.points.map((point) => [point.x, point.y]);
+}
+
+function commandBounds(
+  commands: readonly BattleDrawCommand[],
+  kind: string,
+): { readonly width: number; readonly height: number } {
+  const points: { readonly x: number; readonly y: number }[] = [];
+  for (const command of commands.filter((item) => item.kind === kind)) {
+    if ('points' in command) {
+      const padding = command.lineWidth / 2;
+      for (const point of command.points) {
+        points.push(
+          { x: point.x - padding, y: point.y - padding },
+          { x: point.x + padding, y: point.y + padding },
+        );
+      }
+      continue;
+    }
+    if ('radiusX' in command) {
+      const cosine = Math.cos(command.rotation ?? 0);
+      const sine = Math.sin(command.rotation ?? 0);
+      const padding = (command.lineWidth ?? 0) / 2;
+      const halfWidth = Math.hypot(
+        command.radiusX * cosine,
+        command.radiusY * sine,
+      ) + padding;
+      const halfHeight = Math.hypot(
+        command.radiusX * sine,
+        command.radiusY * cosine,
+      ) + padding;
+      points.push(
+        { x: command.x - halfWidth, y: command.y - halfHeight },
+        { x: command.x + halfWidth, y: command.y + halfHeight },
+      );
+    }
+  }
+  expect(points.length).toBeGreaterThan(0);
+  return {
+    width: Math.max(...points.map((point) => point.x))
+      - Math.min(...points.map((point) => point.x)),
+    height: Math.max(...points.map((point) => point.y))
+      - Math.min(...points.map((point) => point.y)),
+  };
 }
 
 function distanceToSegment(
@@ -290,6 +336,154 @@ describe('BattleRenderer', () => {
     }
     expect(findCommand<LineDrawCommand>(commands, (item) => item.kind === 'effect-extreme-vortex').points).toHaveLength(3);
     expect(findCommand<LineDrawCommand>(commands, (item) => item.kind === 'effect-second-crest').points).toHaveLength(5);
+  });
+
+  it.each([
+    ['split-chevron', 'effect-split-chevron', 2],
+    ['coral-pierce', 'effect-coral-pierce', 1],
+    ['returning-arc', 'effect-returning-arc', 1],
+    ['rainstorm-fin', 'effect-rainstorm-fin', 3],
+    ['bubble-fracture', 'effect-bubble-fracture', 5],
+    ['reflection', 'effect-reflection', 1],
+    ['overflow-droplet', 'effect-overflow-droplet', 3],
+    ['emergency-beacon', 'effect-emergency-beacon', 3],
+    ['undertow-eye', 'effect-undertow-eye', 6],
+    ['extreme-vortex', 'effect-extreme-vortex', 1],
+    ['energy-return', 'effect-energy-return', 2],
+    ['second-crest', 'effect-second-crest', 1],
+  ] as const)(
+    'draws %s as nonzero bounded %s commands',
+    (particleKind, drawKind, expectedCount) => {
+      const color = '#59e9ff';
+      const effects: EffectFrameView = {
+        particles: [{
+          id: 101,
+          kind: particleKind as EffectParticleKind,
+          layer: 'front-effects',
+          x: 195,
+          y: 430,
+          size: 12,
+          color,
+          alpha: 0.84,
+          rotation: 0.35,
+          progress: 0.4,
+        }],
+        damageNumbers: [],
+        rings: [],
+        camera: { x: 0, y: 0, rotation: 0, amplitude: 0 },
+        cinematic: { darken: 0, title: null, slowMotion: 0 },
+      };
+      const motif = renderCommands({ effects }).filter(
+        (command) => command.kind === drawKind,
+      );
+
+      expect(motif).toHaveLength(expectedCount);
+      expect(motif.every((command) => {
+        if ('points' in command) {
+          return command.lineWidth > 0
+            && command.points.length >= 2
+            && command.points.every((point) => (
+              Number.isFinite(point.x) && Number.isFinite(point.y)
+            ))
+            && command.stroke === color;
+        }
+        return 'radiusX' in command
+          && command.radiusX > 0
+          && command.radiusY > 0
+          && command.stroke === color;
+      })).toBe(true);
+      const bounds = commandBounds(motif, drawKind);
+      expect(bounds.width).toBeGreaterThan(0);
+      expect(bounds.height).toBeGreaterThan(0);
+      expect(bounds.width).toBeLessThan(180);
+      expect(bounds.height).toBeLessThan(140);
+    },
+  );
+
+  it('uses recognisable hollow geometry for the eight new evolution motifs', () => {
+    const particle = (kind: EffectParticleKind, id: number) => ({
+      id, kind, layer: 'front-effects' as const, x: 195, y: 430,
+      size: 12, color: '#67efc3', alpha: 1, rotation: 0, progress: 0.5,
+    });
+    const effects: EffectFrameView = {
+      particles: [
+        particle('split-chevron', 1),
+        particle('returning-arc', 2),
+        particle('rainstorm-fin', 3),
+        particle('bubble-fracture', 4),
+        particle('overflow-droplet', 5),
+        particle('emergency-beacon', 6),
+        particle('undertow-eye', 7),
+        particle('energy-return', 8),
+      ],
+      damageNumbers: [], rings: [],
+      camera: { x: 0, y: 0, rotation: 0, amplitude: 0 },
+      cinematic: { darken: 0, title: null, slowMotion: 0 },
+    };
+    const commands = renderCommands({ effects });
+    const split = commands.filter(
+      (item): item is LineDrawCommand => item.kind === 'effect-split-chevron' && 'points' in item,
+    );
+    expect(split).toHaveLength(2);
+    expect(split[0]!.points[1]).toEqual(split[1]!.points[0]);
+
+    const returning = findCommand<LineDrawCommand>(
+      commands,
+      (item) => item.kind === 'effect-returning-arc',
+    );
+    expect(returning.points).toHaveLength(7);
+    const returningBounds = commandBounds(commands, 'effect-returning-arc');
+    expect(returningBounds.width).toBeGreaterThan(returningBounds.height);
+
+    expect(commands.filter((item) => item.kind === 'effect-rainstorm-fin')).toHaveLength(3);
+    expect(commands.filter((item) => item.kind === 'effect-bubble-fracture')).toHaveLength(5);
+    expect(commands.filter((item) => item.kind === 'effect-overflow-droplet')).toHaveLength(3);
+    expect(commands.filter((item) => item.kind === 'effect-emergency-beacon')).toHaveLength(3);
+    expect(commands.filter((item) => item.kind === 'effect-undertow-eye')).toHaveLength(6);
+    expect(commands.filter((item) => item.kind === 'effect-energy-return')).toHaveLength(2);
+
+    for (const kind of [
+      'effect-bubble-fracture',
+      'effect-overflow-droplet',
+      'effect-undertow-eye',
+      'effect-energy-return',
+    ]) {
+      const ellipses = commands.filter((item) => (
+        item.kind === kind && 'radiusX' in item
+      )) as EllipseDrawCommand[];
+      expect(ellipses.length).toBeGreaterThan(0);
+      expect(ellipses.every((ellipse) => ellipse.fill === undefined)).toBe(true);
+    }
+  });
+
+  it('aims the energy-return stroke toward the train despite particle rotation', () => {
+    const effects: EffectFrameView = {
+      particles: [{
+        id: 108,
+        kind: 'energy-return',
+        layer: 'front-effects',
+        x: 160,
+        y: 430,
+        size: 12,
+        color: '#71f3c0',
+        alpha: 1,
+        rotation: Math.PI,
+        progress: 0.5,
+      }],
+      damageNumbers: [], rings: [],
+      camera: { x: 0, y: 0, rotation: 0, amplitude: 0 },
+      cinematic: { darken: 0, title: null, slowMotion: 0 },
+    };
+    const command = findCommand<LineDrawCommand>(
+      renderCommands({ effects }),
+      (item) => item.kind === 'effect-energy-return' && 'points' in item,
+    );
+    const [start, end] = command.points;
+    const distanceToTrain = (point: { readonly x: number; readonly y: number }) => (
+      Math.hypot(point.x - 195, point.y - 842)
+    );
+
+    expect(distanceToTrain(end!)).toBeLessThan(distanceToTrain(start!));
   });
 
   it('renders premium impact signatures as readable strokes and ripples', () => {
