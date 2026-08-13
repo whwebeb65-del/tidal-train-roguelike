@@ -193,6 +193,130 @@ describe('LegacyGameRuntime E2E snapshots', () => {
     ).toContain(discoveredKey);
   }, 10_000);
 
+  it('starts a new archive visit when unread entries arrive while the archive panel is remembered', async () => {
+    const restoreCanvas = installCanvas2DStub();
+    window.history.replaceState({}, '', '/?e2e=1&e2eSeed=17');
+    const app = document.createElement('div');
+    document.body.append(app);
+    const storage = window.localStorage;
+    storage.clear();
+    const firstScheduledEnemyKind = createWaveSchedule(
+      17,
+      'drift-suburb',
+    )[0]?.kind;
+    expect(firstScheduledEnemyKind).toBeTruthy();
+    if (!firstScheduledEnemyKind) throw new Error('Normal schedule has no enemy');
+    storage.setItem(APP_STORAGE_KEYS.player, JSON.stringify({
+      ...defaultSave(),
+      stamina: 10,
+      selectedCaptainId: 'captain-tide-female',
+    }));
+    storage.setItem(APP_STORAGE_KEYS.tidalArchive, JSON.stringify({
+      version: 2,
+      discoveredEnemyKinds: TIDE_BEAST_ARCHIVE_IDS.filter(
+        (kind) => kind !== firstScheduledEnemyKind,
+      ),
+      discoveredSkillVariantIds: [...SKILL_VARIANT_IDS],
+      unreadEntryKeys: ['skill-variant:undertow-eye'],
+    }));
+    storage.setItem(APP_STORAGE_KEYS.firstRunBattleTutorial, JSON.stringify({
+      version: 1,
+      completedStepIds: ['aim', 'skill', 'upgrade'],
+      skipped: false,
+    }));
+    const telemetryEvents: Array<{
+      readonly name: string;
+      readonly payload: Readonly<Record<string, string | number | boolean>>;
+    }> = [];
+    const audio = new Proxy({}, { get: () => () => undefined }) as never;
+    const runtime = createLegacyGameRuntime(app, storage, true, audio, {
+      getSettings: () => ({ version: 2, musicEnabled: false, sfxEnabled: false, reducedMotion: true, qualityPreference: 'auto', preferredBattleSpeed: 1 }),
+      updateSettings: () => ({ version: 2, musicEnabled: false, sfxEnabled: false, reducedMotion: true, qualityPreference: 'auto', preferredBattleSpeed: 1 }),
+    }, {
+      prepareStationRun: async () => ({ status: 'ready', assets: { failedIds: [], get: () => null } }),
+      onTelemetryEvent: (event) => telemetryEvents.push(event),
+    });
+    onTestFinished(() => {
+      runtime.destroy();
+      app.remove();
+      restoreCanvas();
+    });
+
+    await runtime.start();
+    await runtime.e2eNavigate('equipment');
+    app.querySelector<HTMLButtonElement>(
+      '[data-action="show-tidal-archive"]',
+    )?.click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(app.querySelector(
+      '[data-archive-variant="undertow-eye"].is-new',
+    )).not.toBeNull();
+    expect(telemetryEvents.filter(
+      (event) => event.name === 'tidal_archive_entries_read',
+    )).toHaveLength(1);
+
+    await runtime.e2eNavigate('station');
+    await runtime.e2eStartNormalBattle();
+    for (let index = 0; index < 20; index += 1) {
+      if ((runtime.e2eSnapshot().battle?.enemies.length ?? 0) > 0) break;
+      runtime.e2eAdvanceBattle(250);
+    }
+    expect(JSON.parse(
+      storage.getItem(APP_STORAGE_KEYS.tidalArchive) ?? '{}',
+    ).unreadEntryKeys).toEqual([`enemy:${firstScheduledEnemyKind}`]);
+
+    await runtime.e2eReturnToStation();
+    await runtime.e2eNavigate('equipment');
+    expect(app.querySelector(
+      `[data-archive-enemy="${firstScheduledEnemyKind}"].is-new`,
+    )).toBeNull();
+    const archiveTab = app.querySelector<HTMLButtonElement>(
+      '[data-action="show-tidal-archive"]',
+    );
+    expect(archiveTab?.getAttribute('aria-pressed')).toBe('true');
+    expect(archiveTab?.textContent).toContain('NEW 1');
+    app.querySelector<HTMLButtonElement>(
+      '[data-action="show-tidal-archive"]',
+    )?.click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(JSON.parse(
+      storage.getItem(APP_STORAGE_KEYS.tidalArchive) ?? '{}',
+    ).unreadEntryKeys).toEqual([]);
+    const readEvents = telemetryEvents.filter(
+      (event) => event.name === 'tidal_archive_entries_read',
+    );
+    expect(readEvents).toHaveLength(2);
+    expect(readEvents[1]?.payload).toEqual({ count: 1 });
+    expect(app.querySelector(
+      `[data-archive-enemy="${firstScheduledEnemyKind}"].is-new`,
+    )).not.toBeNull();
+
+    app.querySelector<HTMLButtonElement>(
+      '[data-action="show-tidal-archive"]',
+    )?.click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(app.querySelector(
+      `[data-archive-enemy="${firstScheduledEnemyKind}"].is-new`,
+    )).not.toBeNull();
+    expect(telemetryEvents.filter(
+      (event) => event.name === 'tidal_archive_entries_read',
+    )).toHaveLength(2);
+
+    app.querySelector<HTMLButtonElement>(
+      '[data-action="show-equipment-workshop"]',
+    )?.click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    app.querySelector<HTMLButtonElement>(
+      '[data-action="show-tidal-archive"]',
+    )?.click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(app.querySelectorAll('.archive-card.is-new')).toHaveLength(0);
+    expect(telemetryEvents.filter(
+      (event) => event.name === 'tidal_archive_entries_read',
+    )).toHaveLength(2);
+  });
+
   it('records authoritative archive discoveries once and opens the archive without changing player assets', async () => {
     const restoreCanvas = installCanvas2DStub();
     window.history.replaceState({}, '', '/?e2e=1&e2eSeed=17');

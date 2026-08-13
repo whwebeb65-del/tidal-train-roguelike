@@ -2483,7 +2483,10 @@ const onClick = async (event: Event): Promise<void> => {
     return;
   }
   if (action === 'show-tidal-archive') {
-    if (equipmentPanel !== 'archive') {
+    if (
+      equipmentPanel !== 'archive'
+      || tidalArchiveState.unreadEntryKeys.length > 0
+    ) {
       archiveVisitNewKeys = Object.freeze([
         ...tidalArchiveState.unreadEntryKeys,
       ]);
