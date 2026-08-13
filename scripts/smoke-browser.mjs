@@ -43,6 +43,15 @@ const viewports = [
 ];
 const stationRelativeXTolerancePx = 4;
 const qaDirectory = path.join(repositoryRoot, '.superpowers', 'sdd', 'battle-progression-qa');
+const REDUCED_BUBBLE_RING_RADII = Object.freeze({
+  'bursting-bubble': 54,
+  'reflective-spines': 58,
+  'overflow-membrane': 62,
+  'emergency-trigger': 66,
+});
+const STATIC_RING_RENDERER_RADIUS_Y_SCALE = 0.72;
+const STATIC_RING_RENDERER_OUTLINE_HALF_WIDTH = 2.5 / 2;
+const SIGNATURE_SMOKE_BOUND_MARGIN = 3;
 
 async function captureQaScreenshot(client, name) {
   const shot = await client.send('Page.captureScreenshot', { format: 'png' });
@@ -2876,12 +2885,23 @@ function signatureMotifBounds(particle, camera) {
 }
 
 function staticSignatureRingBounds(ring) {
+  const horizontalRadius = ring.radius
+    + STATIC_RING_RENDERER_OUTLINE_HALF_WIDTH
+    + SIGNATURE_SMOKE_BOUND_MARGIN;
+  const verticalRadius = ring.radius * STATIC_RING_RENDERER_RADIUS_Y_SCALE
+    + STATIC_RING_RENDERER_OUTLINE_HALF_WIDTH
+    + SIGNATURE_SMOKE_BOUND_MARGIN;
   return {
-    x: ring.x - ring.radius - 3,
-    y: ring.y - ring.radius * 0.72 - 3,
-    width: ring.radius * 2 + 6,
-    height: ring.radius * 1.44 + 6,
+    x: ring.x - horizontalRadius,
+    y: ring.y - verticalRadius,
+    width: horizontalRadius * 2,
+    height: verticalRadius * 2,
   };
+}
+
+function maximumReducedBubbleSignatureRingBounds(ring) {
+  const maximumRadius = Math.max(...Object.values(REDUCED_BUBBLE_RING_RADII));
+  return staticSignatureRingBounds({ ...ring, radius: maximumRadius });
 }
 
 function assertZeroEffectCamera(camera, label) {
@@ -3293,6 +3313,15 @@ async function assertSignatureAvoidsProtectedControls(
             return { left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom };
           })(),
         })),
+      skillButtonCount: controls.filter((node) => (
+        node.hasAttribute('data-battle-skill')
+      )).length,
+      tideHudCount: controls.filter((node) => (
+        node.classList.contains('battle-hud__tide-log')
+      )).length,
+      visibleInteractionCount: controls.filter((node) => (
+        node.matches('[data-battle-action="claim-interaction"]')
+      )).length,
       targetButton: targetButton instanceof HTMLButtonElement && targetRect ? {
         visible: targetRect.width > 0 && targetRect.height > 0,
         width: targetRect.width,
@@ -3307,6 +3336,8 @@ async function assertSignatureAvoidsProtectedControls(
     [],
     `${label} renderer motif overlaps protected controls: ${JSON.stringify(geometry)}`,
   );
+  assert.equal(geometry.skillButtonCount, 3, `${label} must audit all three skill buttons`);
+  assert.ok(geometry.tideHudCount >= 1, `${label} must audit the visible tide HUD`);
   assert.ok(geometry.targetButton?.visible, `${label} target skill remains visible`);
   assert.ok(
     geometry.targetButton.width >= 44 && geometry.targetButton.height >= 44,
@@ -3402,6 +3433,19 @@ async function castAndObserveSignature(client, signature, label, reducedMotion) 
       label,
       staticSignatureRingBounds(firstRing),
     );
+    if (signature.skillId === 'bubble-barrier') {
+      assert.equal(
+        firstRing.radius,
+        REDUCED_BUBBLE_RING_RADII[signature.variantId],
+        `${label} must use the authoritative reduced bubble radius`,
+      );
+      await assertSignatureAvoidsProtectedControls(
+        client,
+        signature,
+        `${label} maximum bubble envelope`,
+        maximumReducedBubbleSignatureRingBounds(firstRing),
+      );
+    }
     await advanceBattle(client, 17);
     const stableStaticRingFrame = await snapshot(client);
     assertZeroEffectCamera(stableStaticRingFrame.effects?.camera, label);
@@ -3495,7 +3539,7 @@ async function assertSkillEvolutionSignatures(client, viewport) {
       effectKind: 'bubble-fracture',
       primary: '#ff735f',
       secondary: '#ffd58a',
-      staticRing: { x: 195, y: 638, radius: 54 },
+      staticRing: { x: 195, y: 625, radius: 54 },
       excludedKind: emergencyBarrierSignatureKind,
     },
     {

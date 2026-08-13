@@ -191,6 +191,19 @@ describe('browser smoke script', () => {
     expect(castSource).toContain('stableStaticRing');
     expect(castSource).toContain('secondaryColor');
     expect(castSource).toContain('staticSignatureRingBounds');
+    expect(source).toContain('REDUCED_BUBBLE_RING_RADII');
+    expect(source).toMatch(
+      /'bursting-bubble': 54[\s\S]*?'reflective-spines': 58[\s\S]*?'overflow-membrane': 62[\s\S]*?'emergency-trigger': 66/,
+    );
+    expect(source).toContain('STATIC_RING_RENDERER_OUTLINE_HALF_WIDTH');
+    expect(source).toContain('SIGNATURE_SMOKE_BOUND_MARGIN');
+    expect(source).toContain('skillButtonCount');
+    expect(source).toContain('tideHudCount');
+    expect(source).toContain('visibleInteractionCount');
+    expect(castSource).toContain('maximumReducedBubbleSignatureRingBounds');
+    expect(castSource).toMatch(
+      /staticSignatureRingBounds\(firstRing\)[\s\S]*?maximumReducedBubbleSignatureRingBounds\(firstRing\)/,
+    );
     expect(castSource).toMatch(
       /if \(reducedMotion\)[\s\S]*?assertSignatureAvoidsProtectedControls/,
     );

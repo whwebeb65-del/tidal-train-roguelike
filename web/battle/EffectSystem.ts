@@ -967,7 +967,7 @@ export class EffectSystem {
       ? y - 40
       : signature.skillId === 'tidal-volley'
         ? y + 180
-        : y + 168;
+        : y + 155;
     const displayExpiresAtMs = Math.min(
       authoritativeExpiresAtMs,
       this.clockMs + 420,

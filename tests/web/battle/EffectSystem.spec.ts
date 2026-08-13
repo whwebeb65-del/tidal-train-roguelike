@@ -805,13 +805,13 @@ describe('EffectSystem', () => {
   });
 
   it.each([
-    'bursting-bubble',
-    'reflective-spines',
-    'overflow-membrane',
-    'emergency-trigger',
+    { id: 'bursting-bubble', expectedRadius: 54 },
+    { id: 'reflective-spines', expectedRadius: 58 },
+    { id: 'overflow-membrane', expectedRadius: 62 },
+    { id: 'emergency-trigger', expectedRadius: 66 },
   ] as const)(
-    'keeps the reduced-motion %s catalog silhouette above the 390px protection line',
-    (id) => {
+    'keeps the reduced-motion $id catalog silhouette above the real 390px bubble button',
+    ({ id, expectedRadius }) => {
       const effects = createEffectsForQuality('low', true);
       const signature = getSkillEvolutionVisualSignature(id);
 
@@ -824,9 +824,20 @@ describe('EffectSystem', () => {
         kind: signature.reducedMotionRingKind,
         color: signature.primary,
         secondaryColor: signature.secondary,
+        radius: expectedRadius,
       });
-      const conservativeRendererBottom = ring!.y + ring!.radius * 0.72 + 1.25;
-      expect(conservativeRendererBottom).toBeLessThanOrEqual(688);
+      const real390BubbleButtonLogicalTop = (723 - 97) / 0.9170616;
+      const rendererOutlineHalfWidth = 2.5 / 2;
+      const smokeConservativeMargin = 3;
+      const conservativeRendererBottom = ring!.y
+        + ring!.radius * 0.72
+        + rendererOutlineHalfWidth
+        + smokeConservativeMargin;
+      const clearance = real390BubbleButtonLogicalTop - conservativeRendererBottom;
+
+      expect(real390BubbleButtonLogicalTop).toBeCloseTo(682.615, 3);
+      expect(conservativeRendererBottom).toBeLessThan(real390BubbleButtonLogicalTop);
+      if (id === 'emergency-trigger') expect(clearance).toBeGreaterThanOrEqual(4);
     },
   );
 
