@@ -745,8 +745,8 @@ describe('BattleScene', () => {
     expect(hudUpdate.mock.lastCall?.[0].archiveDiscovery)
       .toBe(ARCHIVE_DISCOVERY);
 
-    scheduler.fire(1_017);
     engine.setFrame(createFrameFixture({ status: 'upgrade' }));
+    scheduler.fire(1_017);
     scheduler.fire(9_017);
     expect(hudUpdate.mock.lastCall?.[0].archiveDiscovery).toBeNull();
 
@@ -756,11 +756,11 @@ describe('BattleScene', () => {
     expect(hudUpdate.mock.lastCall?.[0].archiveDiscovery).toBeNull();
 
     tutorialVisible = false;
-    scheduler.fire(14_017);
-    scheduler.fire(15_416);
+    scheduler.fire(15_017);
+    scheduler.fire(16_416);
     expect(hudUpdate.mock.lastCall?.[0].archiveDiscovery)
       .toBe(ARCHIVE_DISCOVERY);
-    scheduler.fire(15_417);
+    scheduler.fire(16_417);
     expect(hudUpdate.mock.lastCall?.[0].archiveDiscovery).toBeNull();
 
     scene.unmount();

@@ -6,6 +6,7 @@ export class BattleArchiveDiscoveryQueue {
   private active: TidalArchiveDiscoveryPresentation | null = null;
   private remainingMs = 0;
   private lastTimestampMs: number | null = null;
+  private priorEligible: boolean | null = null;
 
   public constructor(private readonly displayDurationMs: number) {}
 
@@ -23,13 +24,19 @@ export class BattleArchiveDiscoveryQueue {
     nowMs: number,
     eligible: boolean,
   ): TidalArchiveDiscoveryPresentation | null {
-    const elapsedMs = this.lastTimestampMs === null
-      ? 0
-      : Math.max(0, nowMs - this.lastTimestampMs);
-    this.lastTimestampMs = nowMs;
+    let elapsedMs = 0;
+    if (this.lastTimestampMs === null) {
+      this.lastTimestampMs = nowMs;
+    } else if (nowMs < this.lastTimestampMs) {
+      this.lastTimestampMs = null;
+    } else {
+      elapsedMs = nowMs - this.lastTimestampMs;
+      this.lastTimestampMs = nowMs;
+    }
 
-    if (eligible && this.active) this.consume(elapsedMs);
+    if (this.priorEligible === true && this.active) this.consume(elapsedMs);
     if (eligible && !this.active) this.activateNext();
+    this.priorEligible = eligible;
     return this.active;
   }
 
@@ -39,18 +46,18 @@ export class BattleArchiveDiscoveryQueue {
     this.active = null;
     this.remainingMs = 0;
     this.lastTimestampMs = null;
+    this.priorEligible = null;
   }
 
   private consume(elapsedMs: number): void {
-    let remainingElapsedMs = elapsedMs;
-    while (this.active && remainingElapsedMs >= this.remainingMs) {
-      remainingElapsedMs -= this.remainingMs;
-      this.keys.delete(this.active.key);
-      this.active = null;
-      this.remainingMs = 0;
-      this.activateNext();
+    if (!this.active) return;
+    if (elapsedMs < this.remainingMs) {
+      this.remainingMs -= elapsedMs;
+      return;
     }
-    if (this.active) this.remainingMs -= remainingElapsedMs;
+    this.keys.delete(this.active.key);
+    this.active = null;
+    this.remainingMs = 0;
   }
 
   private activateNext(): void {

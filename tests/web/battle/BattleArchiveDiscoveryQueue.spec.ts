@@ -62,6 +62,39 @@ describe('BattleArchiveDiscoveryQueue', () => {
     expect(queue.update(10_400, true)).toBeNull();
   });
 
+  it('attributes a transition interval to the previous eligibility state', () => {
+    const queue = new BattleArchiveDiscoveryQueue(2400);
+    queue.enqueue([A, B]);
+
+    expect(queue.update(0, true)).toBe(A);
+    expect(queue.update(1_000, false)).toBe(A);
+    expect(queue.update(9_000, true)).toBe(A);
+    expect(queue.update(10_399, true)).toBe(A);
+    expect(queue.update(10_400, true)).toBe(B);
+  });
+
+  it('does not carry long-frame overshoot into an entry that was not visible', () => {
+    const queue = new BattleArchiveDiscoveryQueue(2400);
+    queue.enqueue([A, B]);
+
+    expect(queue.update(0, true)).toBe(A);
+    expect(queue.update(5_000, true)).toBe(B);
+    expect(queue.update(7_399, true)).toBe(B);
+    expect(queue.update(7_400, true)).toBeNull();
+  });
+
+  it('rebases safely when the timestamp rolls backward', () => {
+    const queue = new BattleArchiveDiscoveryQueue(2400);
+    queue.enqueue([A]);
+
+    expect(queue.update(10_000, true)).toBe(A);
+    expect(queue.update(11_000, true)).toBe(A);
+    expect(queue.update(500, true)).toBe(A);
+    expect(queue.update(1_900, true)).toBe(A);
+    expect(queue.update(3_299, true)).toBe(A);
+    expect(queue.update(3_300, true)).toBeNull();
+  });
+
   it('suppresses duplicate active and queued keys but permits a later enqueue after expiry', () => {
     const queue = new BattleArchiveDiscoveryQueue(2400);
     queue.enqueue([A, A, B, B]);
@@ -86,5 +119,6 @@ describe('BattleArchiveDiscoveryQueue', () => {
     queue.enqueue([A]);
     expect(queue.update(30_000, true)).toBe(A);
     expect(queue.update(32_399, true)).toBe(A);
+    expect(queue.update(32_400, true)).toBeNull();
   });
 });
