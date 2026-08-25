@@ -131,6 +131,32 @@ export function everyEvidenceRegionFails(bossPixelCounts) {
     && regions.every((counts) => counts?.passed === false);
 }
 
+export function createBossEyePetalTips({ bossX, centerY, open }) {
+  const radius = open ? 49 : 29;
+  return [
+    {
+      label: 'eye-top-petal', petalIndex: 0,
+      color: open ? '#fff2a2' : '#786ee8',
+      x: bossX, y: centerY - radius,
+    },
+    {
+      label: 'eye-bottom-petal', petalIndex: 2,
+      color: open ? '#fff2a2' : '#786ee8',
+      x: bossX, y: centerY + radius,
+    },
+    {
+      label: 'eye-left-petal', petalIndex: 3,
+      color: open ? '#ff8d73' : '#78cfff',
+      x: bossX - radius, y: centerY,
+    },
+    {
+      label: 'eye-right-petal', petalIndex: 1,
+      color: open ? '#ff8d73' : '#78cfff',
+      x: bossX + radius, y: centerY,
+    },
+  ];
+}
+
 export function logicalRectToPixelRect(rect, viewport) {
   const left = Math.floor(
     (viewport.offsetX + rect.x * viewport.scale) * viewport.pixelRatio,

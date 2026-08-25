@@ -1010,6 +1010,39 @@ describe('boss cinematic pixel evidence', () => {
     expect(helpers.everyEvidenceRegionFails({})).toBe(false);
   });
 
+  it('defines all four named weak-point petals for both open and closed evidence', async () => {
+    const helpers = await loadHelpers();
+    expect(helpers.createBossEyePetalTips).toBeTypeOf('function');
+    const expectedLabels = [
+      'eye-top-petal',
+      'eye-bottom-petal',
+      'eye-left-petal',
+      'eye-right-petal',
+    ];
+
+    const open = helpers.createBossEyePetalTips({
+      bossX: 195,
+      centerY: 230,
+      open: true,
+    });
+    const closed = helpers.createBossEyePetalTips({
+      bossX: 195,
+      centerY: 230,
+      open: false,
+    });
+
+    expect(open.map((tip: { label: string }) => tip.label)).toEqual(expectedLabels);
+    expect(closed.map((tip: { label: string }) => tip.label)).toEqual(expectedLabels);
+    expect(open).toHaveLength(4);
+    expect(closed).toHaveLength(4);
+    expect(open.map((tip: { color: string }) => tip.color)).toEqual([
+      '#fff2a2', '#fff2a2', '#ff8d73', '#ff8d73',
+    ]);
+    expect(closed.map((tip: { color: string }) => tip.color)).toEqual([
+      '#786ee8', '#786ee8', '#78cfff', '#78cfff',
+    ]);
+  });
+
   it('follows the CanvasPainter quadratic midpoint path for curved lines', () => {
     const command: LineDrawCommand = {
       kind: 'curve-midpoint-control',

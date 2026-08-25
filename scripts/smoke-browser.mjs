@@ -20,6 +20,7 @@ import {
 import {
   buildBattleDynamicBounds,
   boundsIntersectRect,
+  createBossEyePetalTips,
   createCanvasEvidenceViewport,
   createEvidenceViewport,
   everyEvidenceRegionFails,
@@ -235,7 +236,6 @@ function buildBossEvidenceRegions(
     );
   });
   const eyeRegions = (open) => {
-    const radius = open ? 49 : 29;
     const box = open ? 20 : 16;
     const openThresholds = {
       'eye-top-petal': { minTarget: 150, minDelta: 100, minRatio: 1.45 },
@@ -248,12 +248,11 @@ function buildBossEvidenceRegions(
       },
       'eye-right-petal': { minTarget: 150, minDelta: 100, minRatio: 1.45 },
     };
-    return [
-      { label: 'eye-top-petal', petalIndex: 0, color: open ? '#fff2a2' : '#786ee8', x: boss.x, y: centerY - radius },
-      { label: 'eye-bottom-petal', petalIndex: 2, color: open ? '#fff2a2' : '#786ee8', x: boss.x, y: centerY + radius },
-      { label: 'eye-left-petal', petalIndex: 3, color: open ? '#ff8d73' : '#78cfff', x: boss.x - radius, y: centerY },
-      { label: 'eye-right-petal', petalIndex: 1, color: open ? '#ff8d73' : '#78cfff', x: boss.x + radius, y: centerY },
-    ].map((tip) => {
+    return createBossEyePetalTips({
+      bossX: boss.x,
+      centerY,
+      open,
+    }).map((tip) => {
         const target = {
           x: tip.x - box / 2,
           y: tip.y - box / 2,
