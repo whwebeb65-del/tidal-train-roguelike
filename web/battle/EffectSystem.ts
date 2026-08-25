@@ -534,17 +534,17 @@ export class EffectSystem {
       }
       if (event.type === 'boss-phase-changed') {
         this.title = event.phase === 'boss-tide'
-          ? '断潮航道'
+          ? '船长：断潮来袭 · 顺流换道'
           : event.phase === 'boss-enraged'
-            ? '狂暴潮眼'
-            : '回响召集';
+            ? '船长：潮眼暴露 · 集中火力'
+            : '船长：回响集结 · 留意援军';
         this.titleRemainingMs = 1400;
       }
       if (event.type === 'boss-tide-warning') {
         const x = LANE_X[event.safeLane];
         this.spawnBurst(x, 390, this.majorCount(10), '#69ffd1', 'boss-tide', event.durationMs, 9, 'front-effects');
         this.addRing(x, 390, 28, 120, '#79ffda', 9);
-        this.title = '点按绿色安全航道';
+        this.title = '船长：绿色潮线是安全航道';
         this.titleRemainingMs = event.durationMs;
       }
       if (event.type === 'boss-tide-impact') {

@@ -9,6 +9,7 @@ import type {
 import type {
   EffectFrameView,
 } from '../../web/battle/EffectSystem';
+import type { EnemyState } from '../../web/battle/BattleTypes';
 import { getSkillEvolutionVisualSignature } from '../../web/battle/SkillEvolutionVisualCatalog';
 import type { SkillVariantId } from '../../src/domain/skill/SkillProgressionTypes';
 import { createPresentationFixture } from '../web/battle/helpers/BattleFixtures';
@@ -222,6 +223,55 @@ function passesMotifPixelEvidence(
   return coloredPixelCount(pixels, expectedRegion) > 0
     && largestFilledRectangle(pixels) < LOGICAL_WIDTH * LOGICAL_HEIGHT * 0.35;
 }
+
+type BossPixelState = 'boss-summon' | 'boss-tide' | 'boss-enraged-open' | 'boss-enraged-closed';
+
+function renderBossPixelState(
+  state: BossPixelState,
+  options: { readonly reducedMotion?: boolean; readonly timeMs?: number } = {},
+): readonly BattleDrawCommand[] {
+  const phase = state === 'boss-summon' || state === 'boss-tide'
+    ? state
+    : 'boss-enraged';
+  const weakPointOpen = state === 'boss-enraged-open';
+  const enemy: EnemyState = {
+    id: 91, kind: 'deep-echo-boss', lane: 1, x: 195, y: 250,
+    hp: 800, maxHp: 1000, shield: 0, speedPerSecond: 0,
+    defenceBroken: false, attackCooldownMs: 1000, ageMs: 0, alive: true,
+    behaviour: {
+      phase, phaseRemainingMs: phase === 'boss-summon' ? 4000 : 600,
+      cycle: 3, targetLane: 1, safeLane: 1, invulnerable: false,
+      damageTakenMultiplier: phase === 'boss-enraged' ? 1.1 : 1,
+      weakPointOpen,
+    },
+  };
+  const input = createPresentationFixture({
+    frame: { projectiles: [], loot: [], enemies: [enemy] },
+    reducedMotion: options.reducedMotion ?? false,
+    timeMs: options.timeMs ?? 900,
+  });
+  const painter = createRecordingPainter();
+  new BattleRenderer(painter).render(input);
+  return painter.commands;
+}
+
+function onlyBossTelegraphCommands(commands: readonly BattleDrawCommand[]): readonly BattleDrawCommand[] {
+  return commands.filter((command) => command.kind.startsWith('boss-') && command.layer === 'front-effects');
+}
+
+const bossPixelCases = [
+  ['summon beacon', 'boss-summon', 'boss-summon-beacon', '#8a7dff', { x: 54, y: 220, width: 282, height: 150 }],
+  ['safe tide current', 'boss-tide', 'boss-safe-lane', '#6fffd4', { x: 120, y: 150, width: 150, height: 460 }],
+  ['danger tide current', 'boss-tide', 'boss-danger-lane', '#ff6f67', { x: 30, y: 150, width: 330, height: 460 }],
+  ['open tide eye', 'boss-enraged-open', 'boss-weakpoint-petal', '#fff2a2', { x: 140, y: 180, width: 110, height: 150 }],
+  ['closed tide eye', 'boss-enraged-closed', 'boss-weakpoint-petal', '#786ee8', { x: 140, y: 180, width: 110, height: 150 }],
+] as const satisfies readonly (readonly [
+  string,
+  BossPixelState,
+  string,
+  string,
+  { readonly x: number; readonly y: number; readonly width: number; readonly height: number },
+])[];
 
 describe('battle pixel evidence helpers', () => {
   it.each([
@@ -772,5 +822,47 @@ describe('battle pixel evidence helpers', () => {
       candidates: [{ x: 126, y: 246, width: 12, height: 12 }],
       dynamicBounds: bounds,
     })).toBeNull();
+  });
+});
+
+describe('boss cinematic pixel evidence', () => {
+  it.each(bossPixelCases)(
+    'captures %s from real renderer commands without a battle-sized filled rectangle',
+    (_name, state, kind, color, region) => {
+      const visible = renderBossPixelState(state);
+      const visiblePixels = rasterizeMotif(visible, kind, color);
+      const transparent = visible.map((command) => (
+        command.kind === kind ? { ...command, alpha: 0 } : command
+      ));
+
+      expect(coloredPixelCount(visiblePixels, region)).toBeGreaterThan(0);
+      expect(largestFilledRectangle(visiblePixels)).toBeLessThan(
+        LOGICAL_WIDTH * LOGICAL_HEIGHT * 0.35,
+      );
+      expect(passesMotifPixelEvidence(visible, kind, color, region)).toBe(true);
+      expect(coloredPixelCount(rasterizeMotif(transparent, kind, color), region)).toBe(0);
+      expect(passesMotifPixelEvidence(transparent, kind, color, region)).toBe(false);
+      expect(coloredPixelCount(rasterizeMotif(visible, kind, '#000001'), region)).toBe(0);
+      expect(passesMotifPixelEvidence(visible, kind, '#000001', region)).toBe(false);
+    },
+  );
+
+  it('freezes the real tide telegraph pixels for reduced motion', () => {
+    const atStart = onlyBossTelegraphCommands(renderBossPixelState('boss-tide', {
+      reducedMotion: true,
+      timeMs: 0,
+    }));
+    const later = onlyBossTelegraphCommands(renderBossPixelState('boss-tide', {
+      reducedMotion: true,
+      timeMs: 5000,
+    }));
+
+    expect(later).toEqual(atStart);
+    expect(rasterizeMotif(later, 'boss-safe-lane', '#6fffd4')).toEqual(
+      rasterizeMotif(atStart, 'boss-safe-lane', '#6fffd4'),
+    );
+    expect(rasterizeMotif(later, 'boss-danger-lane', '#ff6f67')).toEqual(
+      rasterizeMotif(atStart, 'boss-danger-lane', '#ff6f67'),
+    );
   });
 });

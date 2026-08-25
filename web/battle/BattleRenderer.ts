@@ -654,7 +654,6 @@ export class BattleRenderer {
   ): void {
     const centerY = y + height * 0.05;
     const primary = view.weakPointOpen ? BOSS_TELEGRAPH_COLORS.weakOpenPrimary : BOSS_TELEGRAPH_COLORS.weakClosedPrimary;
-    const secondary = view.weakPointOpen ? BOSS_TELEGRAPH_COLORS.weakOpenSecondary : BOSS_TELEGRAPH_COLORS.weakClosedSecondary;
     const pulse = Math.sin(view.motionPhase * Math.PI * 2);
     this.painter.ellipse({
       kind: 'boss-enraged-aura', layer: 'front-effects', x: enemy.x, y: centerY,
@@ -678,7 +677,7 @@ export class BattleRenderer {
           { x: tipX, y: tipY },
           { x: enemy.x - perpendicularX * fold, y: centerY - perpendicularY * fold },
         ],
-        stroke: secondary, lineWidth: view.weakPointOpen ? 4 : 3, alpha: 0.9, lineCap: 'round',
+        stroke: primary, lineWidth: view.weakPointOpen ? 4 : 3, alpha: 0.9, lineCap: 'round',
       });
     }
     const brightNotches = Math.ceil(view.progress * 4);
@@ -1727,6 +1726,23 @@ export class BattleRenderer {
           : null
       );
     if (title) {
+      if (title.startsWith('船长：')) {
+        this.painter.line({
+          kind: 'boss-callout-stroke', layer: 'cinematic-overlay',
+          points: [{ x: 76, y: 145 }, { x: 148, y: 139 }, { x: 236, y: 142 }, { x: 314, y: 135 }],
+          stroke: '#78e8ff', lineWidth: 4, curve: true, alpha: 0.72,
+        });
+        this.painter.line({
+          kind: 'boss-callout-stroke', layer: 'cinematic-overlay',
+          points: [{ x: 90, y: 177 }, { x: 162, y: 182 }, { x: 238, y: 178 }, { x: 300, y: 184 }],
+          stroke: '#fff2a2', lineWidth: 3, curve: true, alpha: 0.64,
+        });
+        this.painter.ellipse({
+          kind: 'boss-callout-knot', layer: 'cinematic-overlay',
+          x: 62, y: 160, radiusX: 7, radiusY: 7,
+          stroke: '#ff8d73', lineWidth: 3, alpha: 0.9,
+        });
+      }
       this.painter.text({
         kind: 'boss-intro-title',
         layer: 'cinematic-overlay',

@@ -1828,4 +1828,35 @@ describe('BattleRenderer', () => {
       expect(trainEffects.length).toBeLessThanOrEqual(cap);
     },
   );
+
+  it('frames captain titles with two hand-drawn strokes and a knot', () => {
+    const commands = renderCommands({
+      effects: {
+        particles: [], damageNumbers: [], rings: [],
+        camera: { x: 0, y: 0, rotation: 0, amplitude: 0 },
+        cinematic: {
+          darken: 0,
+          title: '船长：断潮来袭 · 顺流换道',
+          slowMotion: 0,
+        },
+      },
+    });
+
+    expect(commands.filter((item) => item.kind === 'boss-callout-stroke')).toHaveLength(2);
+    expect(commands.filter((item) => item.kind === 'boss-callout-knot')).toHaveLength(1);
+  });
+
+  it('does not frame unrelated cinematic titles as captain callouts', () => {
+    const commands = renderCommands({
+      effects: {
+        particles: [], damageNumbers: [], rings: [],
+        camera: { x: 0, y: 0, rotation: 0, amplitude: 0 },
+        cinematic: { darken: 0, title: '深海回响正在靠近', slowMotion: 0 },
+      },
+    });
+
+    expect(commands.some((item) => (
+      item.kind === 'boss-callout-stroke' || item.kind === 'boss-callout-knot'
+    ))).toBe(false);
+  });
 });

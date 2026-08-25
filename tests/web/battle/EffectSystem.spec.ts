@@ -1064,4 +1064,24 @@ describe('EffectSystem', () => {
     expect(reduced.view.rings.filter((item) => item.kind === 'static-skill-silhouette')).toHaveLength(1);
     expect(reduced.view.camera).toMatchObject({ x: 0, y: 0, rotation: 0, amplitude: 0 });
   });
+
+  it.each([
+    ['boss-summon', '船长：回响集结 · 留意援军'],
+    ['boss-tide', '船长：断潮来袭 · 顺流换道'],
+    ['boss-enraged', '船长：潮眼暴露 · 集中火力'],
+  ] as const)('uses a captain callout for %s', (phase, title) => {
+    const effects = createEffectsForQuality('high');
+    effects.consume([{ type: 'boss-phase-changed', phase }], createFrameFixture());
+    expect(effects.view.cinematic.title).toBe(title);
+  });
+
+  it('keeps the real tide-warning duration and gives the safe lane a captain callout', () => {
+    const effects = createEffectsForQuality('high');
+    effects.consume([{ type: 'boss-tide-warning', safeLane: 1, durationMs: 1200 }], createFrameFixture());
+    expect(effects.view.cinematic.title).toBe('船长：绿色潮线是安全航道');
+    effects.update(1199);
+    expect(effects.view.cinematic.title).not.toBeNull();
+    effects.update(1);
+    expect(effects.view.cinematic.title).toBeNull();
+  });
 });
