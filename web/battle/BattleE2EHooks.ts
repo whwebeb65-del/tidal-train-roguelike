@@ -69,6 +69,7 @@ export interface BattleE2ESnapshot {
     readonly firstRunTutorialStep: FirstRunBattleTutorialStepId | null;
     readonly effectKinds: readonly string[];
     readonly bossTideWarningActive: boolean;
+    readonly cinematicTitle: string | null;
   };
   readonly progression: {
     readonly runLevel: number;

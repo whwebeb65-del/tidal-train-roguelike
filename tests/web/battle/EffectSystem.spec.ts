@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { EffectSystem } from '../../../web/battle/EffectSystem';
 import { BattleRenderer } from '../../../web/battle/BattleRenderer';
+import { BattleEngine } from '../../../web/battle/BattleEngine';
+import { FIXED_STEP_MS } from '../../../web/battle/BattleConfig';
 import type {
   BattleEvent,
   BattleFrameView,
@@ -1075,13 +1077,82 @@ describe('EffectSystem', () => {
   });
 
   it.each([
-    ['boss-summon', '船长：回响集结 · 留意援军'],
     ['boss-tide', '船长：断潮来袭 · 顺流换道'],
     ['boss-enraged', '船长：潮眼暴露 · 集中火力'],
   ] as const)('uses a captain callout for %s', (phase, title) => {
     const effects = createEffectsForQuality('high');
     effects.consume([{ type: 'boss-phase-changed', phase }], createFrameFixture());
     expect(effects.view.cinematic.title).toBe(title);
+  });
+
+  it('uses the production boss-intro-ended event for the summon callout lifetime', () => {
+    const effects = createEffectsForQuality('high');
+    effects.consume(
+      [{ type: 'boss-intro-ended', enemyId: 77 }],
+      createFrameFixture(),
+    );
+
+    expect(effects.view.cinematic.title).toBe('船长：回响集结 · 留意援军');
+    effects.update(1399);
+    expect(effects.view.cinematic.title).toBe('船长：回响集结 · 留意援军');
+    effects.update(1);
+    expect(effects.view.cinematic.title).toBeNull();
+  });
+
+  it('expires the real deep-tunnel warning on impact and early enraged events', () => {
+    const engine = new BattleEngine({
+      battleId: 'deep-warning-expiry', seed: 9, mode: 'normal',
+      mapId: 'deep-tunnel', maxTrainHp: 1_000_000, mainCannonDamage: 0,
+      initialEnergy: 0, repairBonus: 0, enemyHpFlatBonus: 0,
+      enemyHpMultiplier: 1, enemyDamageMultiplier: 0,
+      skillMasteryPower: { 'tidal-volley': 1, 'bubble-barrier': 1, 'extreme-tide': 1 },
+      unlockedSkillVariants: [],
+    });
+    const internals = engine as unknown as {
+      bossId: number | null;
+      spawnEnemy: (kind: 'deep-echo-boss', lane: 1) => BattleFrameView['enemies'][number];
+    };
+    const boss = internals.spawnEnemy('deep-echo-boss', 1) as {
+      id: number;
+      hp: number;
+      maxHp: number;
+    };
+    internals.bossId = boss.id;
+    boss.hp = boss.maxHp * 0.6;
+    const effects = createEffectsForQuality('high');
+    const step = (stepMs: number) => {
+      engine.update(stepMs);
+      const events = engine.drainEvents();
+      effects.consume(events, engine.frame);
+      effects.update(stepMs);
+      return events;
+    };
+
+    step(FIXED_STEP_MS);
+    let impactSeen = false;
+    for (let index = 0; index < 400; index += 1) {
+      const events = step(FIXED_STEP_MS);
+      if (events.some((event) => event.type === 'boss-tide-impact')) {
+        impactSeen = true;
+        break;
+      }
+    }
+    expect(impactSeen).toBe(true);
+    expect(effects.view.cinematic.bossTideWarningActive).toBe(false);
+    expect(effects.view.cinematic.title).toBeNull();
+
+    effects.consume(
+      [{ type: 'boss-tide-warning', safeLane: 1, durationMs: 1200 }],
+      engine.frame,
+    );
+    boss.hp = boss.maxHp * 0.34;
+    const enragedEvents = step(FIXED_STEP_MS);
+    expect(enragedEvents).toContainEqual({
+      type: 'boss-phase-changed',
+      phase: 'boss-enraged',
+    });
+    expect(effects.view.cinematic.bossTideWarningActive).toBe(false);
+    expect(effects.view.cinematic.title).toBe('船长：潮眼暴露 · 集中火力');
   });
 
   it('keeps the real tide-warning duration and gives the safe lane a captain callout', () => {

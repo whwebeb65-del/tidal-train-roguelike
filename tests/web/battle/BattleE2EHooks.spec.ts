@@ -44,6 +44,7 @@ function createController(): BattleE2EController {
         firstRunTutorialStep: 'aim',
         effectKinds: Object.freeze([]),
         bossTideWarningActive: false,
+        cinematicTitle: '船长：回响集结 · 留意援军',
       },
       progression: {
         runLevel: 1,
@@ -115,6 +116,9 @@ describe('BattleE2EHooks', () => {
       target.__TIDAL_TRAIN_E2E__?.snapshot().verification
         .bossTideWarningActive,
     ).toBe(false);
+    expect(
+      target.__TIDAL_TRAIN_E2E__?.snapshot().verification.cinematicTitle,
+    ).toBe('船长：回响集结 · 留意援军');
     expect(target.__TIDAL_TRAIN_E2E__?.snapshot().progression).toEqual({
       runLevel: 1,
       ranks: { 'tidal-volley': 1 },

@@ -264,6 +264,15 @@ describe('browser smoke script', () => {
     expect(source).toContain('bossWeakPointStatesSeen');
     expect(source).toContain('assertBossTelegraphPresentation');
     expect(source).toContain('assertBossCanvasPixelEvidence');
+    expect(source).toContain('assertBossCanvasNegativeEvidence');
+    expect(source).toContain('assertBossWarningCountdownDelta');
+    expect(source).toContain('normalTideCountdownSample');
+    expect(source).toContain('negativeGateResults');
+    expect(source).toContain('warningCountdown');
+    expect(source).toContain('openPalette');
+    expect(source).toContain('closedPalette');
+    expect(source).toContain('cinematicTitle');
+    expect(source).toContain('船长：回响集结 · 留意援军');
     expect(source).toContain('CanvasRenderingContext2D');
     expect(source).toContain('getImageData');
     expect(source).toContain('bossTideWarningActive');
@@ -278,6 +287,8 @@ describe('browser smoke script', () => {
     expect(source).toContain('await advanceBattle(client, 50)');
     expect(source).toContain('const secondState = await snapshot(client)');
     expect(source).toContain('relativePixelDrift');
+    const paletteDistance = source.match(/const paletteDistance = (\d+);/);
+    expect(Number(paletteDistance?.[1])).toBeLessThan(72);
     expect(source).toContain('phaseDurationMs');
     expect(source).toContain('.json`');
     expect(source).toContain(

@@ -536,7 +536,12 @@ export class EffectSystem {
         this.spawnBurst(x, y, this.majorCount(8), '#ffe48a', 'elite-charge', event.durationMs, 8, 'front-effects');
         this.addRing(x, y, 12, 74, '#fff0a3', 8);
       }
+      if (event.type === 'boss-intro-ended') {
+        this.title = '船长：回响集结 · 留意援军';
+        this.titleRemainingMs = 1400;
+      }
       if (event.type === 'boss-phase-changed') {
+        if (event.phase !== 'boss-tide') this.clearBossTideWarning();
         this.title = event.phase === 'boss-tide'
           ? '船长：断潮来袭 · 顺流换道'
           : event.phase === 'boss-enraged'
@@ -555,6 +560,7 @@ export class EffectSystem {
         this.titleRemainingMs = event.durationMs;
       }
       if (event.type === 'boss-tide-impact') {
+        this.clearBossTideWarning();
         const x = LANE_X[event.safeLane];
         this.spawnBurst(x, 500, this.majorCount(12), event.avoided ? '#8fffe1' : '#ff765e', 'boss-tide', 620, 9, 'front-effects');
         if (!event.avoided) this.shake(5, 220);
@@ -722,6 +728,14 @@ export class EffectSystem {
     }
     this.activeSkillParticleBudget = null;
     this.trim();
+  }
+
+  private clearBossTideWarning(): void {
+    this.bossTideWarningRemainingMs = 0;
+    if (this.title === '船长：绿色潮线是安全航道') {
+      this.title = null;
+      this.titleRemainingMs = 0;
+    }
   }
 
   public update(deltaMs: number): void {

@@ -133,8 +133,10 @@ function commandPaintsPixel(
   command: LineDrawCommand | EllipseDrawCommand,
   x: number,
   y: number,
+  paintChannel?: 'fill' | 'stroke',
 ): boolean {
   if ('points' in command) {
+    if (paintChannel === 'fill') return false;
     return rasterSegments(command).some(([start, end]) => (
       distanceToSegment(x, y, start, end)
         <= command.lineWidth / 2
@@ -148,11 +150,34 @@ function commandPaintsPixel(
   const normalizedRadius = Math.sqrt(
     (localX / command.radiusX) ** 2 + (localY / command.radiusY) ** 2,
   );
-  if (command.fill && normalizedRadius <= 1) return true;
-  if (!command.stroke) return false;
-  const strokeDistance = Math.abs(normalizedRadius - 1)
-    * Math.min(command.radiusX, command.radiusY);
+  if (paintChannel !== 'stroke' && command.fill && normalizedRadius <= 1) {
+    return true;
+  }
+  if (paintChannel === 'fill' || !command.stroke) return false;
+  const ellipseFunction = normalizedRadius ** 2 - 1;
+  const normalMagnitude = Math.hypot(
+    2 * localX / (command.radiusX ** 2),
+    2 * localY / (command.radiusY ** 2),
+  );
+  const strokeDistance = normalMagnitude > 0
+    ? Math.abs(ellipseFunction) / normalMagnitude
+    : Number.POSITIVE_INFINITY;
   return strokeDistance <= (command.lineWidth ?? 1) / 2;
+}
+
+function parseColorAlpha(color: string): number {
+  const normalized = color.trim().toLowerCase();
+  if (/^#[0-9a-f]{4}$/u.test(normalized)) {
+    return Number.parseInt(normalized.slice(4, 5).repeat(2), 16) / 255;
+  }
+  if (/^#[0-9a-f]{8}$/u.test(normalized)) {
+    return Number.parseInt(normalized.slice(7, 9), 16) / 255;
+  }
+  const rgba = normalized.match(
+    /^rgba\(\s*[^,]+,\s*[^,]+,\s*[^,]+,\s*([\d.]+)\s*\)$/u,
+  );
+  if (rgba) return Math.min(1, Math.max(0, Number(rgba[1])));
+  return 1;
 }
 
 function rasterizeMotif(
@@ -161,22 +186,38 @@ function rasterizeMotif(
   expectedColor: string,
 ): Float32Array {
   const pixels = new Float32Array(LOGICAL_WIDTH * LOGICAL_HEIGHT);
-  const motif = commands.filter((command): command is LineDrawCommand | EllipseDrawCommand => (
-    command.kind === kind
-      && (
-        ('points' in command && command.stroke === expectedColor)
-        || (
-          'radiusX' in command
-            && (command.stroke === expectedColor || command.fill === expectedColor)
-        )
-      )
-  ));
-  for (const command of motif) {
-    const sourceAlpha = Math.min(1, Math.max(0, command.alpha ?? 1));
+  const motif: Array<{
+    command: LineDrawCommand | EllipseDrawCommand;
+    paintChannel: 'fill' | 'stroke';
+  }> = [];
+  for (const command of commands) {
+    if (command.kind !== kind) continue;
+    if ('points' in command) {
+      if (command.stroke === expectedColor) {
+        motif.push({ command, paintChannel: 'stroke' });
+      }
+      continue;
+    }
+    if (!('radiusX' in command)) continue;
+    if (command.fill === expectedColor) {
+      motif.push({ command, paintChannel: 'fill' });
+    }
+    if (command.stroke === expectedColor) {
+      motif.push({ command, paintChannel: 'stroke' });
+    }
+  }
+  for (const { command, paintChannel } of motif) {
+    const sourceAlpha = Math.min(1, Math.max(0, command.alpha ?? 1))
+      * parseColorAlpha(expectedColor);
     if (sourceAlpha <= 0) continue;
     for (let y = 0; y < LOGICAL_HEIGHT; y += 1) {
       for (let x = 0; x < LOGICAL_WIDTH; x += 1) {
-        if (!commandPaintsPixel(command, x + 0.5, y + 0.5)) continue;
+        if (!commandPaintsPixel(
+          command,
+          x + 0.5,
+          y + 0.5,
+          paintChannel,
+        )) continue;
         const pixelIndex = y * LOGICAL_WIDTH + x;
         const destinationAlpha = pixels[pixelIndex] ?? 0;
         pixels[pixelIndex] = sourceAlpha
@@ -891,6 +932,35 @@ describe('battle pixel evidence helpers', () => {
 });
 
 describe('boss cinematic pixel evidence', () => {
+  it('keeps ellipse fill and stroke channels separate with parsed color alpha', () => {
+    const command: EllipseDrawCommand = {
+      kind: 'paint-channel-ellipse',
+      layer: 'front-effects',
+      x: 100,
+      y: 100,
+      radiusX: 40,
+      radiusY: 10,
+      fill: 'rgba(20, 220, 80, 0.25)',
+      stroke: '#ff405080',
+      lineWidth: 4,
+      alpha: 0.5,
+    };
+    const fill = rasterizeMotif(
+      [command],
+      command.kind,
+      'rgba(20, 220, 80, 0.25)',
+    );
+    const stroke = rasterizeMotif([command], command.kind, '#ff405080');
+    const center = 100 * LOGICAL_WIDTH + 100;
+    const strokeOnly = 100 * LOGICAL_WIDTH + 141;
+
+    expect(fill[center]).toBeCloseTo(0.125, 4);
+    expect(stroke[center]).toBe(0);
+    expect(fill[strokeOnly]).toBe(0);
+    expect(stroke[strokeOnly]).toBeCloseTo(0.5 * (128 / 255), 4);
+    expect(commandPaintsPixel(command, 146.5, 100)).toBe(false);
+  });
+
   it('follows the CanvasPainter quadratic midpoint path for curved lines', () => {
     const command: LineDrawCommand = {
       kind: 'curve-midpoint-control',

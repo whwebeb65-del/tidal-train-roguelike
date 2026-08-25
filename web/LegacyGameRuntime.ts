@@ -2705,6 +2705,7 @@ function e2eSnapshot(): BattleE2ESnapshot {
       effectKinds,
       bossTideWarningActive:
         effectView?.cinematic.bossTideWarningActive ?? false,
+      cinematicTitle: effectView?.cinematic.title ?? null,
     },
     progression: {
       runLevel: activeBattleEngine?.frame.runLevel ?? 1,
