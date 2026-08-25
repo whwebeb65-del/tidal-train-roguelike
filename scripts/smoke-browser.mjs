@@ -1074,6 +1074,86 @@ async function assertBattleHudGeometry(client, label) {
   assert.ok(geometry.scrollWidth <= geometry.innerWidth + 1, `${label} battle overflows horizontally`);
 }
 
+async function assertBossTelegraphPresentation(client, label) {
+  const presentation = await evaluate(client, `(() => {
+    const canvas = document.querySelector('[data-battle-canvas]');
+    const hud = document.querySelector('[data-battle-hud-root]');
+    const isVisible = (node) => {
+      if (!(node instanceof HTMLElement)) return false;
+      const style = getComputedStyle(node);
+      const rect = node.getBoundingClientRect();
+      return !node.hidden
+        && node.getClientRects().length > 0
+        && style.display !== 'none'
+        && style.visibility === 'visible'
+        && Number.parseFloat(style.opacity) > 0
+        && rect.width > 0
+        && rect.height > 0;
+    };
+    const centerBelongsTo = (node) => {
+      const rect = node.getBoundingClientRect();
+      const topmost = document.elementFromPoint(
+        rect.left + rect.width / 2,
+        rect.top + rect.height / 2
+      );
+      return topmost !== null && node.contains(topmost);
+    };
+    const enabledSkills = [
+      ...document.querySelectorAll('[data-battle-skill]:not([disabled])'),
+    ];
+    const visibleInteractions = [
+      ...document.querySelectorAll(
+        '[data-battle-action="claim-interaction"]:not([hidden])'
+      ),
+    ].filter(isVisible);
+    return {
+      canvasVisible: canvas instanceof HTMLCanvasElement && isVisible(canvas),
+      hudVisible: isVisible(hud),
+      skillCount: enabledSkills.length,
+      skillsTopmost: enabledSkills.every((button) => {
+        const rect = button.getBoundingClientRect();
+        return isVisible(button)
+          && rect.width >= 44
+          && rect.height >= 44
+          && centerBelongsTo(button);
+      }),
+      interactionVisible: visibleInteractions.every(centerBelongsTo),
+      horizontalOverflow: document.documentElement.scrollWidth > innerWidth,
+    };
+  })()`);
+  assert.equal(
+    presentation.canvasVisible,
+    true,
+    `${label} battle canvas must have visible non-zero geometry`,
+  );
+  assert.equal(
+    presentation.hudVisible,
+    true,
+    `${label} battle HUD must have visible non-zero geometry`,
+  );
+  assert.equal(
+    presentation.skillCount,
+    3,
+    `${label} must retain all three enabled skill controls`,
+  );
+  assert.equal(
+    presentation.skillsTopmost,
+    true,
+    `${label} skill controls must stay visible, 44x44 and topmost at center`,
+  );
+  assert.equal(
+    presentation.interactionVisible,
+    true,
+    `${label} visible battle interaction must stay topmost at center`,
+  );
+  assert.equal(
+    presentation.horizontalOverflow,
+    false,
+    `${label} must not overflow horizontally`,
+  );
+  return presentation;
+}
+
 async function assertEvolutionRitual(client, label) {
   const result = await evaluate(client, `(() => {
     const dialog = document.querySelector('.battle-dialog--evolution');
@@ -3758,6 +3838,10 @@ async function finishFullBattle(
   let precisionWeakPointSeen = false;
   let battleMusicIntensitySeen = false;
   let roleBehaviourSeen = false;
+  const bossPhasesSeen = new Set();
+  const bossWeakPointStates = ['open', 'closed'];
+  const bossWeakPointStatesSeen = new Set();
+  let bossTideWarningSeen = false;
   const captured = new Set();
 
   for (let iteration = 0; iteration < 2_500; iteration += 1) {
@@ -3783,6 +3867,43 @@ async function finishFullBattle(
     eliteEncountered ||= battle.eliteEncountered;
     bossIntroSeen ||= battle.status === 'boss-intro'
       || battle.enemies.some((enemy) => enemy.kind === 'deep-echo-boss');
+    const aliveBoss = battle.enemies.find((enemy) => (
+      enemy.kind === 'deep-echo-boss' && enemy.alive
+    ));
+    const phase = aliveBoss?.behaviour?.phase;
+    if (
+      phase === 'boss-summon'
+      || phase === 'boss-tide'
+      || phase === 'boss-enraged'
+    ) {
+      const firstPhaseSample = !bossPhasesSeen.has(phase);
+      bossPhasesSeen.add(phase);
+      if (
+        phase === 'boss-tide'
+        && aliveBoss.behaviour.phaseRemainingMs <= 1200
+      ) {
+        bossTideWarningSeen = true;
+      }
+      let firstWeakPointSample = false;
+      let weakPointState = null;
+      if (phase === 'boss-enraged') {
+        weakPointState = bossWeakPointStates[
+          aliveBoss.behaviour.weakPointOpen ? 0 : 1
+        ];
+        firstWeakPointSample = !bossWeakPointStatesSeen.has(weakPointState);
+        bossWeakPointStatesSeen.add(weakPointState);
+      }
+      if (firstPhaseSample) {
+        await assertBossTelegraphPresentation(client, `390x844 ${phase}`);
+        await captureQaScreenshot(client, `390x844-boss-${phase}`);
+      }
+      if (firstWeakPointSample) {
+        await captureQaScreenshot(
+          client,
+          `390x844-boss-eye-${weakPointState}`,
+        );
+      }
+    }
     const capture = async (name) => {
       if (!captured.has(name)) {
         captured.add(name);
@@ -3949,6 +4070,15 @@ async function finishFullBattle(
     `full battle should reach the boss intro (${terminalDetail})`,
   );
   assert.ok(bossMotionSeen, 'full battle should enter the boss motion phase');
+  assert.deepEqual(
+    [...bossPhasesSeen].sort(),
+    ['boss-enraged', 'boss-summon', 'boss-tide'],
+  );
+  assert.equal(bossTideWarningSeen, true);
+  assert.deepEqual(
+    [...bossWeakPointStatesSeen].sort(),
+    ['closed', 'open'],
+  );
   assert.ok(
     maxTrainSpeed >= 1.18,
     `full battle should reach boss train speed >= 1.18, received ${maxTrainSpeed}`,

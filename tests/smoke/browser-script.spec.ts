@@ -253,6 +253,23 @@ describe('browser smoke script', () => {
     expect(source).not.toContain('forceVictory');
   });
 
+  it('binds boss cinematic evidence to all real phases and protected controls', () => {
+    const source = readFileSync('scripts/smoke-browser.mjs', 'utf8');
+
+    expect(source).toContain('bossPhasesSeen');
+    expect(source).toContain("'boss-summon'");
+    expect(source).toContain("'boss-tide'");
+    expect(source).toContain("'boss-enraged'");
+    expect(source).toContain('bossTideWarningSeen');
+    expect(source).toContain('bossWeakPointStatesSeen');
+    expect(source).toContain('assertBossTelegraphPresentation');
+    expect(source).toContain(
+      "captureQaScreenshot(client, `390x844-boss-${phase}`)",
+    );
+    expect(source).toContain("['open', 'closed']");
+    expect(source).not.toContain('setBossPhase');
+  });
+
   it('guards the complete tidal archive discovery feedback lifecycle', () => {
     const source = readFileSync('scripts/smoke-browser.mjs', 'utf8');
 
