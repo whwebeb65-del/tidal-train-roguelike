@@ -961,6 +961,55 @@ describe('boss cinematic pixel evidence', () => {
     expect(commandPaintsPixel(command, 146.5, 100)).toBe(false);
   });
 
+  it('derives the production viewport from a nonmatching Canvas rect and coherent backing store', async () => {
+    const helpers = await loadHelpers();
+    expect(helpers.createCanvasEvidenceViewport).toBeTypeOf('function');
+
+    const viewport = helpers.createCanvasEvidenceViewport({
+      cssWidth: 387,
+      cssHeight: 768,
+      pixelWidth: 774,
+      pixelHeight: 1536,
+      maxDevicePixelRatio: 2,
+    });
+    expect(viewport.pixelRatio).toBe(2);
+    expect(viewport.scale).toBeCloseTo(768 / 844, 10);
+    expect(viewport.offsetX).toBeCloseTo(
+      (387 - 390 * (768 / 844)) / 2,
+      10,
+    );
+    expect(helpers.logicalRectToPixelRect(
+      { x: 0, y: 0, width: 10, height: 10 },
+      viewport,
+    )).toEqual({
+      x: 32,
+      y: 0,
+      width: 19,
+      height: 19,
+    });
+    expect(() => helpers.createCanvasEvidenceViewport({
+      cssWidth: 387,
+      cssHeight: 768,
+      pixelWidth: 774,
+      pixelHeight: 1500,
+      maxDevicePixelRatio: 2,
+    })).toThrow(/coherent/u);
+  });
+
+  it('requires every named counterfactual region to fail its positive gate', async () => {
+    const helpers = await loadHelpers();
+    expect(helpers.everyEvidenceRegionFails).toBeTypeOf('function');
+    expect(helpers.everyEvidenceRegionFails({
+      first: { passed: false },
+      second: { passed: false },
+    })).toBe(true);
+    expect(helpers.everyEvidenceRegionFails({
+      first: { passed: false },
+      second: { passed: true },
+    })).toBe(false);
+    expect(helpers.everyEvidenceRegionFails({})).toBe(false);
+  });
+
   it('follows the CanvasPainter quadratic midpoint path for curved lines', () => {
     const command: LineDrawCommand = {
       kind: 'curve-midpoint-control',

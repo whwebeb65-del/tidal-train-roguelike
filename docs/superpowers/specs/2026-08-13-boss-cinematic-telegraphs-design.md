@@ -21,7 +21,7 @@
 - Boss 周围出现三个错位的“回声浮标”，用双环与短波纹表现援军正在汇聚。
 - `phaseRemainingMs / phaseDurationMs` 只决定浮标中心的规则收束程度；普通模式允许缓慢呼吸和波纹偏移，减少动态模式冻结呼吸但保留规则收束。
 - 高／中／低画质分别使用三／二／一道附加回声波，但三枚主浮标在所有画质都保留。
-- 阶段切入沿用现有 `boss-phase-changed` 事件，船长短呼号为“船长：回响集结 · 留意援军”。
+- `boss-intro-ended` 事件驱动召唤阶段入场短呼号“船长：回响集结 · 留意援军”；`boss-phase-changed` 仅驱动断潮与狂暴阶段切入短呼号。
 
 ### 断潮航道：潮汐阶段
 
@@ -86,7 +86,7 @@ export function createBossTelegraphView(input: {
 
 ### 阶段呼号
 
-`EffectSystem` 继续消费既有 `boss-phase-changed` 与 `boss-tide-warning` 事件，不新增事件。它在帧视图中公开只读的真实预警信号并更新短呼号文案；`BattleRenderer.drawCinematicOverlay` 对以“船长：”开头的短呼号增加两道不闭合的手绘浪线和一个小结绳标记，命令名为 `boss-callout-stroke` 与 `boss-callout-knot`。不增加矩形底板，不改变标题存活时间。
+`EffectSystem` 继续消费既有 `boss-intro-ended`、`boss-phase-changed` 与 `boss-tide-warning` 事件，不新增事件。`boss-intro-ended` 事件驱动召唤阶段入场短呼号；`boss-phase-changed` 仅驱动断潮与狂暴阶段切入短呼号。它在帧视图中公开只读的真实预警信号并更新短呼号文案；`BattleRenderer.drawCinematicOverlay` 对以“船长：”开头的短呼号增加两道不闭合的手绘浪线和一个小结绳标记，命令名为 `boss-callout-stroke` 与 `boss-callout-knot`。不增加矩形底板，不改变标题存活时间。
 
 ## 画质、性能与减少动态
 

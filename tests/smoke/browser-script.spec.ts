@@ -266,7 +266,23 @@ describe('browser smoke script', () => {
     expect(source).toContain('assertBossCanvasPixelEvidence');
     expect(source).toContain('assertBossCanvasNegativeEvidence');
     expect(source).toContain('assertBossWarningCountdownDelta');
-    expect(source).toContain('normalTideCountdownSample');
+    expect(source).toContain('normalTideCountdownSamplesByLane');
+    expect(source).toContain('createCanvasEvidenceViewport');
+    expect(source).toContain('logicalRectToPixelRect');
+    expect(source).toContain('getBoundingClientRect');
+    expect(source).toContain('pixelRatioX');
+    expect(source).toContain('pixelRatioY');
+    expect(source).toContain('everyEvidenceRegionFails');
+    expect(source).toContain('targetPixelRect');
+    expect(source).toContain('controlPixelRect');
+    expect(source).toContain('targetPixelSegments');
+    expect(source).toContain('controlPixelSegments');
+    expect(source).toContain('distanceToSegment');
+    expect(source).toContain('assert.deepEqual');
+    expect(source).toContain('settledCamera');
+    expect(source).toContain('weakpoint-burst');
+    expect(source).toContain('weakpoint-flare');
+    expect(source).toContain('精准破潮');
     expect(source).toContain('negativeGateResults');
     expect(source).toContain('warningCountdown');
     expect(source).toContain('openPalette');
@@ -284,17 +300,29 @@ describe('browser smoke script', () => {
     expect(source).toContain('controlRegions');
     expect(source).toContain("safeSecondary: '#d8fff3'");
     expect(source).toContain("dangerSecondary: '#ffb07a'");
+    expect(source).toContain('const laneXs = [92, 195, 298]');
+    expect(source).toContain('state.diagnostics.qualityLevel');
+    expect(source).toContain('chevronScan');
+    expect(source).toContain('bestChevronCount');
+    expect(source).toContain('distance <= paletteDistance');
+    expect(source).toContain('`lane-${lane}-chevron-${index}`');
     expect(source).toContain('await advanceBattle(client, 50)');
     expect(source).toContain('const secondState = await snapshot(client)');
     expect(source).toContain('relativePixelDrift');
-    const paletteDistance = source.match(/const paletteDistance = (\d+);/);
-    expect(Number(paletteDistance?.[1])).toBeLessThan(72);
+    expect(source).toContain(
+      'paletteDistance: thresholds.paletteDistance ?? 60',
+    );
+    expect(source).toContain('bossCanvasCombatClear');
+    expect(source).toContain('projectile.y > 620');
     expect(source).toContain('phaseDurationMs');
     expect(source).toContain('.json`');
     expect(source).toContain(
       "captureQaScreenshot(client, `390x844-boss-${phase}`)",
     );
     expect(source).toContain("['open', 'closed']");
+    expect(source).not.toContain(
+      ".filter((tip) => open || tip.label !== 'eye-top-petal')",
+    );
     expect(source).not.toContain('setBossPhase');
     const fullBattle = source.slice(
       source.indexOf('async function finishFullBattle'),
@@ -308,6 +336,22 @@ describe('browser smoke script', () => {
     expect(fullBattle).toContain('mainCannonAim');
     expect(fullBattle).not.toMatch(
       /bossTideWarningSeen\s*=\s*[^;]*phaseRemainingMs\s*<=\s*1200/,
+    );
+  });
+
+  it('documents the production summon and later phase event ownership', () => {
+    const design = readFileSync(
+      'docs/superpowers/specs/2026-08-13-boss-cinematic-telegraphs-design.md',
+      'utf8',
+    );
+    expect(design).toContain(
+      '`boss-intro-ended` 事件驱动召唤阶段入场短呼号',
+    );
+    expect(design).toContain(
+      '`boss-phase-changed` 仅驱动断潮与狂暴阶段切入短呼号',
+    );
+    expect(design).not.toContain(
+      '阶段切入沿用现有 `boss-phase-changed` 事件，船长短呼号为“船长：回响集结 · 留意援军”',
     );
   });
 

@@ -20,7 +20,9 @@ import {
 import {
   buildBattleDynamicBounds,
   boundsIntersectRect,
+  createCanvasEvidenceViewport,
   createEvidenceViewport,
+  everyEvidenceRegionFails,
   logicalRectToPixelRect,
   passesDefeatCueEvidence,
   passesObjectEvidence,
@@ -87,11 +89,363 @@ async function writeBossEvidenceSidecar(
   );
 }
 
-async function measureBossCanvasEvidence(client, evidenceKind, state) {
+function buildBossEvidenceRegions(
+  evidenceKind,
+  boss,
+  {
+    qualityLevel,
+    safeLane: safeLaneOverride,
+  },
+) {
+  const centerY = boss.y + 178 * 0.05;
+  const pairedRegion = (label, color, target, control, thresholds = {}) => ({
+    label,
+    color,
+    target,
+    control,
+    minTarget: thresholds.minTarget ?? 8,
+    minDelta: thresholds.minDelta ?? 6,
+    minRatio: thresholds.minRatio ?? 1.5,
+    paletteDistance: thresholds.paletteDistance ?? 60,
+  });
+  const phaseProgress = boss.behaviour.phaseDurationMs > 0
+    ? Math.min(1, Math.max(
+      0,
+      1 - boss.behaviour.phaseRemainingMs
+        / boss.behaviour.phaseDurationMs,
+    ))
+    : 0;
+  const contraction = 1 - phaseProgress * 0.38;
+  const summonCenters = [0, 1, 2].map((index) => {
+    const angle = -Math.PI / 2 + index * Math.PI * 2 / 3;
+    return {
+      x: boss.x + Math.cos(angle) * 238 * 0.36 * contraction,
+      y: centerY + Math.sin(angle) * 178 * 0.34 * contraction,
+    };
+  });
+  const summonRegions = summonCenters.map((center, index) => pairedRegion(
+    `summon-beacon-${index}`,
+    '#8a7dff',
+    { x: center.x - 18, y: center.y - 27, width: 36, height: 54 },
+    { x: center.x - 18, y: center.y + 42, width: 36, height: 54 },
+    { minTarget: 12, minDelta: 8, minRatio: 1.6 },
+  ));
+  summonRegions.push(pairedRegion(
+    'summon-echo-left',
+    '#78e8ff',
+    { x: boss.x - 84, y: centerY - 18, width: 54, height: 36 },
+    { x: boss.x - 84, y: centerY + 72, width: 54, height: 36 },
+    {
+      minTarget: 10,
+      minDelta: 7,
+      minRatio: 1.5,
+      paletteDistance: 70,
+    },
+  ));
+  const laneXs = [92, 195, 298];
+  const colors = {
+    safeSecondary: '#d8fff3',
+    dangerSecondary: '#ffb07a',
+  };
+  const safeLane = safeLaneOverride ?? boss.behaviour.safeLane;
+  const bossChevronDetail = qualityLevel === 'high'
+    ? 3
+    : qualityLevel === 'medium' ? 2 : 1;
+  const tideRegions = laneXs.flatMap((x, lane) => {
+    const safe = lane === safeLane;
+    const primary = safe ? '#6fffd4' : '#ff6f67';
+    const secondary = safe
+      ? colors.safeSecondary
+      : colors.dangerSecondary;
+    const curveControlX = lane === 2 ? x + 36 : x - 36;
+    const chevronControlX = lane === 1 ? x - 58 : x + 58;
+    const chevronRegions = [bossChevronDetail - 1]
+      .map((index) => {
+        const width = 9 + index * 2;
+        return {
+          ...pairedRegion(
+            `lane-${lane}-chevron-${index}`,
+            secondary,
+            {
+              x: x - width - 4,
+              y: 168,
+              width: width * 2 + 8,
+              height: 411,
+            },
+            {
+              x: chevronControlX - width - 4,
+              y: 168,
+              width: width * 2 + 8,
+              height: 411,
+            },
+            {
+              minTarget: 80,
+              minDelta: 50,
+              minRatio: 1.6,
+              paletteDistance: safe ? 30 : 20,
+            },
+          ),
+          chevronScan: {
+            targetCenterX: x,
+            controlCenterX: chevronControlX,
+            width,
+            minCenterY: 175,
+            maxCenterY: 565,
+            verticalRadius: 7,
+            strokeWidth: 3,
+          },
+        };
+      });
+    return [
+      pairedRegion(
+        `lane-${lane}-curve`, primary,
+        { x: x - 11, y: 320, width: 22, height: 250 },
+        { x: curveControlX - 11, y: 320, width: 22, height: 250 },
+        { minTarget: 100, minDelta: 60, minRatio: 1.8 },
+      ),
+      ...chevronRegions,
+    ];
+  });
+  const calloutRegions = [
+    pairedRegion(
+      'callout-cyan-stroke', '#78e8ff',
+      { x: 74, y: 132, width: 242, height: 17 },
+      { x: 74, y: 110, width: 242, height: 17 },
+      { minTarget: 18, minDelta: 12, minRatio: 1.5 },
+    ),
+    pairedRegion(
+      'callout-coral-knot', '#ff8d73',
+      { x: 52, y: 150, width: 20, height: 20 },
+      { x: 28, y: 150, width: 20, height: 20 },
+      { minTarget: 8, minDelta: 6, minRatio: 1.5 },
+    ),
+  ];
+  const warningRegions = [0, 1, 2, 3].map((index) => {
+    const x = laneXs[safeLane] - 24 + index * 16;
+    return pairedRegion(
+      `warning-notch-${index}`, '#d8fff3',
+      { x: x - 3, y: 579, width: 6, height: 26 },
+      { x: x - 3, y: 610, width: 6, height: 26 },
+      {
+        minTarget: 8,
+        minDelta: 6,
+        minRatio: 1.5,
+        paletteDistance: 50,
+      },
+    );
+  });
+  const eyeRegions = (open) => {
+    const radius = open ? 49 : 29;
+    const box = open ? 20 : 16;
+    const openThresholds = {
+      'eye-top-petal': { minTarget: 150, minDelta: 100, minRatio: 1.45 },
+      'eye-bottom-petal': { minTarget: 150, minDelta: 100, minRatio: 1.45 },
+      'eye-left-petal': {
+        minTarget: 150,
+        minDelta: 100,
+        minRatio: 1.45,
+        paletteDistance: 40,
+      },
+      'eye-right-petal': { minTarget: 150, minDelta: 100, minRatio: 1.45 },
+    };
+    return [
+      { label: 'eye-top-petal', petalIndex: 0, color: open ? '#fff2a2' : '#786ee8', x: boss.x, y: centerY - radius },
+      { label: 'eye-bottom-petal', petalIndex: 2, color: open ? '#fff2a2' : '#786ee8', x: boss.x, y: centerY + radius },
+      { label: 'eye-left-petal', petalIndex: 3, color: open ? '#ff8d73' : '#78cfff', x: boss.x - radius, y: centerY },
+      { label: 'eye-right-petal', petalIndex: 1, color: open ? '#ff8d73' : '#78cfff', x: boss.x + radius, y: centerY },
+    ].map((tip) => {
+        const target = {
+          x: tip.x - box / 2,
+          y: tip.y - box / 2,
+          width: box,
+          height: box,
+        };
+        const control = {
+          x: tip.label === 'eye-right-petal' ? 350 : 20,
+          y: tip.y - box / 2,
+          width: box,
+          height: box,
+        };
+        const angle = -Math.PI / 2 + tip.petalIndex * Math.PI / 2;
+        const cosine = Math.cos(angle);
+        const sine = Math.sin(angle);
+        const perpendicularX = -sine;
+        const perpendicularY = cosine;
+        const fold = open ? 24 : 8;
+        const targetSegments = [
+          [
+            {
+              x: boss.x + perpendicularX * fold,
+              y: centerY + perpendicularY * fold,
+            },
+            { x: tip.x, y: tip.y },
+          ],
+          [
+            { x: tip.x, y: tip.y },
+            {
+              x: boss.x - perpendicularX * fold,
+              y: centerY - perpendicularY * fold,
+            },
+          ],
+        ];
+        const controlOffsetX = control.x - target.x;
+        return {
+          ...pairedRegion(
+            tip.label,
+            tip.color,
+            target,
+            control,
+            open
+              ? openThresholds[tip.label]
+              : { minTarget: 80, minDelta: 60, minRatio: 1.45 },
+          ),
+          strokeWidth: open ? 4 : 3,
+          targetSegments,
+          controlSegments: targetSegments.map((segment) => segment.map(
+            (point) => ({ x: point.x + controlOffsetX, y: point.y }),
+          )),
+        };
+      });
+  };
+  const regions = evidenceKind === 'summon'
+    ? summonRegions
+    : evidenceKind === 'tide'
+      ? tideRegions
+      : evidenceKind === 'callout'
+        ? calloutRegions
+        : evidenceKind === 'warningCountdown'
+          ? warningRegions
+          : evidenceKind === 'openPalette'
+            ? eyeRegions(true)
+            : eyeRegions(false);
+  return { regions, safeLane };
+}
+
+function settledCamera(state) {
+  const camera = state.effects?.camera;
+  return camera != null
+    && Math.abs(camera.x) <= 0.001
+    && Math.abs(camera.y) <= 0.001
+    && Math.abs(camera.rotation) <= 0.00001
+    && Math.abs(camera.amplitude) <= 0.001;
+}
+
+async function measureBossCanvasEvidence(
+  client,
+  evidenceKind,
+  state,
+  { safeLane: safeLaneOverride } = {},
+) {
   const boss = state.battle?.enemies.find((enemy) => (
     enemy.kind === 'deep-echo-boss' && enemy.alive
   ));
   assert.ok(boss?.behaviour, `${evidenceKind} pixel evidence requires a live boss`);
+  assert.equal(
+    settledCamera(state),
+    true,
+    `${boss.behaviour.phase}/${evidenceKind} requires a settled effect camera: `
+      + JSON.stringify(state.effects?.camera),
+  );
+  const canvasMetrics = await evaluate(client, `(() => {
+    const canvas = document.querySelector('[data-battle-canvas]');
+    if (!(canvas instanceof HTMLCanvasElement)) {
+      return { error: 'missing-canvas' };
+    }
+    const rect = canvas.getBoundingClientRect();
+    return {
+      cssWidth: rect.width,
+      cssHeight: rect.height,
+      pixelWidth: canvas.width,
+      pixelHeight: canvas.height,
+    };
+  })()`);
+  assert.equal(
+    canvasMetrics.error,
+    undefined,
+    `${boss.behaviour.phase}/${evidenceKind}: ${canvasMetrics.error}`,
+  );
+  const pixelRatioX = canvasMetrics.pixelWidth / canvasMetrics.cssWidth;
+  const pixelRatioY = canvasMetrics.pixelHeight / canvasMetrics.cssHeight;
+  assert.ok(
+    Math.abs(pixelRatioX - pixelRatioY)
+      <= Math.max(1 / canvasMetrics.cssWidth, 1 / canvasMetrics.cssHeight),
+    `Canvas backing/CSS ratios are incoherent: ${JSON.stringify({
+      canvasMetrics,
+      pixelRatioX,
+      pixelRatioY,
+    })}`,
+  );
+  const evidenceViewport = createCanvasEvidenceViewport({
+    ...canvasMetrics,
+    maxDevicePixelRatio: 2,
+  });
+  const { regions, safeLane } = buildBossEvidenceRegions(
+    evidenceKind,
+    boss,
+    {
+      qualityLevel: state.diagnostics.qualityLevel,
+      safeLane: safeLaneOverride,
+    },
+  );
+  const pixelEvidence = regions.map((region) => {
+    const targetPixelRect = logicalRectToPixelRect(
+      region.target,
+      evidenceViewport,
+    );
+    const controlPixelRect = logicalRectToPixelRect(
+      region.control,
+      evidenceViewport,
+    );
+    for (const [label, rect] of Object.entries({
+      targetPixelRect,
+      controlPixelRect,
+    })) {
+      assert.ok(
+        rect.x >= 0
+          && rect.y >= 0
+          && rect.x + rect.width <= canvasMetrics.pixelWidth
+          && rect.y + rect.height <= canvasMetrics.pixelHeight,
+        `${evidenceKind}/${region.label} ${label} leaves Canvas: `
+          + JSON.stringify({ rect, canvasMetrics, evidenceViewport }),
+      );
+    }
+    const toPixelPoint = (point) => ({
+      x: (
+        evidenceViewport.offsetX + point.x * evidenceViewport.scale
+      ) * evidenceViewport.pixelRatio,
+      y: (
+        evidenceViewport.offsetY + point.y * evidenceViewport.scale
+      ) * evidenceViewport.pixelRatio,
+    });
+    const toPixelSegments = (segments) => segments?.map((segment) => (
+      segment.map(toPixelPoint)
+    ));
+    const pixelScale = evidenceViewport.scale * evidenceViewport.pixelRatio;
+    const toChevronScan = (centerX) => region.chevronScan == null
+      ? null
+      : {
+          centerX: toPixelPoint({ x: centerX, y: 0 }).x,
+          minCenterY: toPixelPoint({ x: 0, y: region.chevronScan.minCenterY }).y,
+          maxCenterY: toPixelPoint({ x: 0, y: region.chevronScan.maxCenterY }).y,
+          width: region.chevronScan.width * pixelScale,
+          verticalRadius: region.chevronScan.verticalRadius * pixelScale,
+          strokeHalfWidth:
+            region.chevronScan.strokeWidth * pixelScale / 2 + 1,
+        };
+    return {
+      ...region,
+      targetPixelRect,
+      controlPixelRect,
+      targetPixelSegments: toPixelSegments(region.targetSegments),
+      controlPixelSegments: toPixelSegments(region.controlSegments),
+      pixelStrokeHalfWidth: region.strokeWidth == null
+        ? null
+        : region.strokeWidth * evidenceViewport.scale
+          * evidenceViewport.pixelRatio / 2 + 1,
+      targetChevronScan: toChevronScan(region.chevronScan?.targetCenterX),
+      controlChevronScan: toChevronScan(region.chevronScan?.controlCenterX),
+    };
+  });
   const result = await evaluate(client, `(() => {
     const canvas = document.querySelector('[data-battle-canvas]');
     if (!(canvas instanceof HTMLCanvasElement)) {
@@ -102,167 +456,108 @@ async function measureBossCanvasEvidence(client, evidenceKind, state) {
       return { error: 'missing-2d-context' };
     }
     const evidenceKind = ${JSON.stringify(evidenceKind)};
-    const boss = ${JSON.stringify({
-    x: boss.x,
-    y: boss.y,
-    phase: boss.behaviour.phase,
-    phaseRemainingMs: boss.behaviour.phaseRemainingMs,
-    phaseDurationMs: boss.behaviour.phaseDurationMs,
-    safeLane: boss.behaviour.safeLane,
-    weakPointOpen: boss.behaviour.weakPointOpen,
-  })};
-    const centerY = boss.y + 178 * 0.05;
-    const pairedRegion = (label, color, target, control, thresholds = {}) => ({
-      label,
-      color,
-      target,
-      control,
-      minTarget: thresholds.minTarget ?? 8,
-      minDelta: thresholds.minDelta ?? 6,
-      minRatio: thresholds.minRatio ?? 1.5,
-    });
-    const phaseProgress = boss.phaseDurationMs > 0
-      ? Math.min(1, Math.max(0, 1 - boss.phaseRemainingMs / boss.phaseDurationMs))
-      : 0;
-    const contraction = 1 - phaseProgress * 0.38;
-    const summonCenters = [0, 1, 2].map((index) => {
-      const angle = -Math.PI / 2 + index * Math.PI * 2 / 3;
-      return {
-        x: boss.x + Math.cos(angle) * 238 * 0.36 * contraction,
-        y: centerY + Math.sin(angle) * 178 * 0.34 * contraction,
-      };
-    });
-    const summonRegions = summonCenters.map((center, index) => pairedRegion(
-      \`summon-beacon-\${index}\`,
-      '#8a7dff',
-      { x: center.x - 18, y: center.y - 27, width: 36, height: 54 },
-      { x: center.x - 18, y: center.y + 42, width: 36, height: 54 },
-      { minTarget: 12, minDelta: 8, minRatio: 1.6 },
-    ));
-    summonRegions.push(pairedRegion(
-      'summon-echo-left',
-      '#78e8ff',
-      { x: boss.x - 84, y: centerY - 18, width: 54, height: 36 },
-      { x: boss.x - 84, y: centerY + 72, width: 54, height: 36 },
-      { minTarget: 10, minDelta: 7, minRatio: 1.5 },
-    ));
-    const laneXs = [98, 195, 292];
-    const colors = {
-      safeSecondary: '#d8fff3',
-      dangerSecondary: '#ffb07a',
-    };
-    const tideRegions = laneXs.flatMap((x, lane) => {
-      const safe = lane === boss.safeLane;
-      const primary = safe ? '#6fffd4' : '#ff6f67';
-      const secondary = safe
-        ? colors.safeSecondary
-        : colors.dangerSecondary;
-      const curveControlX = lane === 2 ? x + 36 : x - 36;
-      const chevronControlX = lane === 2 ? x + 58 : x - 58;
-      return [
-        pairedRegion(
-          \`lane-\${lane}-curve\`, primary,
-          { x: x - 11, y: 320, width: 22, height: 250 },
-          { x: curveControlX - 11, y: 320, width: 22, height: 250 },
-          { minTarget: 30, minDelta: 20, minRatio: 1.8 },
-        ),
-        pairedRegion(
-          \`lane-\${lane}-chevrons\`, secondary,
-          { x: x - 23, y: 252, width: 46, height: 320 },
-          { x: chevronControlX - 23, y: 252, width: 46, height: 320 },
-          { minTarget: 18, minDelta: 12, minRatio: 1.6 },
-        ),
-      ];
-    });
-    const calloutRegions = [
-      pairedRegion(
-        'callout-cyan-stroke', '#78e8ff',
-        { x: 74, y: 132, width: 242, height: 17 },
-        { x: 74, y: 110, width: 242, height: 17 },
-        { minTarget: 18, minDelta: 12, minRatio: 1.5 },
-      ),
-      pairedRegion(
-        'callout-coral-knot', '#ff8d73',
-        { x: 52, y: 150, width: 20, height: 20 },
-        { x: 28, y: 150, width: 20, height: 20 },
-        { minTarget: 8, minDelta: 6, minRatio: 1.5 },
-      ),
-    ];
-    const warningRegions = [0, 1, 2, 3].map((index) => {
-      const x = laneXs[boss.safeLane] - 24 + index * 16;
-      return pairedRegion(
-        \`warning-notch-\${index}\`, '#d8fff3',
-        { x: x - 5, y: 579, width: 10, height: 26 },
-        { x: x - 5, y: 610, width: 10, height: 26 },
-        { minTarget: 8, minDelta: 6, minRatio: 1.5 },
-      );
-    });
-    const eyeRegions = (open) => {
-      const radius = open ? 49 : 29;
-      const box = open ? 20 : 16;
-      return [
-        { label: 'eye-top-petal', color: open ? '#fff2a2' : '#786ee8', x: boss.x, y: centerY - radius },
-        { label: 'eye-bottom-petal', color: open ? '#fff2a2' : '#786ee8', x: boss.x, y: centerY + radius },
-        { label: 'eye-left-petal', color: open ? '#ff8d73' : '#78cfff', x: boss.x - radius, y: centerY },
-        { label: 'eye-right-petal', color: open ? '#ff8d73' : '#78cfff', x: boss.x + radius, y: centerY },
-      ].filter((tip) => open || tip.label !== 'eye-top-petal')
-        .map((tip, index) => pairedRegion(
-        tip.label, tip.color,
-        { x: tip.x - box / 2, y: tip.y - box / 2, width: box, height: box },
-        {
-          x: index === 3 ? 350 : 20,
-          y: tip.y - box / 2,
-          width: box,
-          height: box,
-        },
-        { minTarget: 7, minDelta: 5, minRatio: 1.45 },
-      ));
-    };
-    const evidence = evidenceKind === 'summon'
-      ? summonRegions
-      : evidenceKind === 'tide'
-        ? tideRegions
-        : evidenceKind === 'callout'
-          ? calloutRegions
-          : evidenceKind === 'warningCountdown'
-            ? warningRegions
-            : evidenceKind === 'openPalette'
-              ? eyeRegions(true)
-              : eyeRegions(false);
-    const scaleX = canvas.width / 390;
-    const scaleY = canvas.height / 844;
-    const toPixelRegion = (region) => {
-      const pixelRegion = {
-        x: Math.max(0, Math.floor(region.x * scaleX)),
-        y: Math.max(0, Math.floor(region.y * scaleY)),
-        width: Math.min(canvas.width, Math.ceil(region.width * scaleX)),
-        height: Math.min(canvas.height, Math.ceil(region.height * scaleY)),
-      };
-      pixelRegion.width = Math.min(pixelRegion.width, canvas.width - pixelRegion.x);
-      pixelRegion.height = Math.min(pixelRegion.height, canvas.height - pixelRegion.y);
-      return pixelRegion;
-    };
+    const phase = ${JSON.stringify(boss.behaviour.phase)};
+    const safeLane = ${JSON.stringify(safeLane)};
+    const evidence = ${JSON.stringify(pixelEvidence)};
     const parseHex = (value) => [
       Number.parseInt(value.slice(1, 3), 16),
       Number.parseInt(value.slice(3, 5), 16),
       Number.parseInt(value.slice(5, 7), 16),
     ];
-    const paletteDistance = 60;
-    const countRegion = (region, color) => {
-      const rgb = parseHex(color);
+    const countRegion = (
+      pixelRegion,
+      evidenceRegion,
+      paletteDistance = evidenceRegion.paletteDistance,
+      pixelSegments = null,
+      chevronScan = null,
+    ) => {
+      const rgb = parseHex(evidenceRegion.color);
       let count = 0;
-      for (const pixelRegion of [toPixelRegion(region)]) {
+      for (const candidate of [pixelRegion]) {
         const pixels = context.getImageData(
-          pixelRegion.x, pixelRegion.y, pixelRegion.width, pixelRegion.height,
+          candidate.x, candidate.y, candidate.width, candidate.height,
         ).data;
+        const distanceToSegment = (pointX, pointY, segment) => {
+          const [start, end] = segment;
+          const deltaX = end.x - start.x;
+          const deltaY = end.y - start.y;
+          const lengthSquared = deltaX * deltaX + deltaY * deltaY;
+          const progress = lengthSquared === 0
+            ? 0
+            : Math.max(0, Math.min(1, (
+              (pointX - start.x) * deltaX
+              + (pointY - start.y) * deltaY
+            ) / lengthSquared));
+          return Math.hypot(
+            pointX - (start.x + progress * deltaX),
+            pointY - (start.y + progress * deltaY),
+          );
+        };
+        const matchingPoints = [];
         for (let index = 0; index < pixels.length; index += 4) {
           if (pixels[index + 3] === 0) continue;
+          const pixelIndex = index / 4;
+          const pointX = candidate.x + pixelIndex % candidate.width + 0.5;
+          const pointY = candidate.y
+            + Math.floor(pixelIndex / candidate.width) + 0.5;
+          if (
+            pixelSegments
+            && pixelSegments.every((segment) => (
+              distanceToSegment(pointX, pointY, segment)
+                > evidenceRegion.pixelStrokeHalfWidth
+            ))
+          ) continue;
           const distance = Math.max(
             Math.abs(pixels[index] - rgb[0]),
             Math.abs(pixels[index + 1] - rgb[1]),
             Math.abs(pixels[index + 2] - rgb[2]),
           );
-          if (distance <= paletteDistance) count += 1;
+          if (distance <= paletteDistance) {
+            count += 1;
+            matchingPoints.push({ x: pointX, y: pointY });
+          }
+        }
+        if (chevronScan) {
+          let bestChevronCount = 0;
+          for (
+            let centerY = chevronScan.minCenterY;
+            centerY <= chevronScan.maxCenterY;
+            centerY += 1
+          ) {
+            const segments = [
+              [
+                {
+                  x: chevronScan.centerX - chevronScan.width,
+                  y: centerY - chevronScan.verticalRadius,
+                },
+                {
+                  x: chevronScan.centerX,
+                  y: centerY + chevronScan.verticalRadius,
+                },
+              ],
+              [
+                {
+                  x: chevronScan.centerX,
+                  y: centerY + chevronScan.verticalRadius,
+                },
+                {
+                  x: chevronScan.centerX + chevronScan.width,
+                  y: centerY - chevronScan.verticalRadius,
+                },
+              ],
+            ];
+            const candidateCount = matchingPoints.filter((point) => (
+              segments.some((segment) => (
+                distanceToSegment(point.x, point.y, segment)
+                  <= chevronScan.strokeHalfWidth
+              ))
+            )).length;
+            bestChevronCount = Math.max(
+              bestChevronCount,
+              candidateCount,
+            );
+          }
+          count = bestChevronCount;
         }
       }
       return count;
@@ -270,10 +565,22 @@ async function measureBossCanvasEvidence(client, evidenceKind, state) {
     const targetRegions = evidence.map((region) => region.target);
     const controlRegions = evidence.map((region) => region.control);
     const targetPixelCounts = Object.fromEntries(evidence.map((region) => [
-      region.label, countRegion(region.target, region.color),
+      region.label, countRegion(
+        region.targetPixelRect,
+        region,
+        region.paletteDistance,
+        region.targetPixelSegments,
+        region.targetChevronScan,
+      ),
     ]));
     const controlPixelCounts = Object.fromEntries(evidence.map((region) => [
-      region.label, countRegion(region.control, region.color),
+      region.label, countRegion(
+        region.controlPixelRect,
+        region,
+        region.paletteDistance,
+        region.controlPixelSegments,
+        region.controlChevronScan,
+      ),
     ]));
     const bossPixelCounts = Object.fromEntries(evidence.map((region) => {
       const target = targetPixelCounts[region.label];
@@ -285,28 +592,55 @@ async function measureBossCanvasEvidence(client, evidenceKind, state) {
         && ratio >= region.minRatio;
       return [region.label, {
         color: region.color,
+        targetPixelRect: region.targetPixelRect,
+        controlPixelRect: region.controlPixelRect,
+        targetPixelSegments: region.targetPixelSegments,
+        controlPixelSegments: region.controlPixelSegments,
+        pixelStrokeHalfWidth: region.pixelStrokeHalfWidth,
+        targetChevronScan: region.targetChevronScan,
+        controlChevronScan: region.controlChevronScan,
         target,
         control,
         ratio,
         pixelDelta,
+        paletteCounts: Object.fromEntries(
+          [20, 30, 40, 50, 60, 70].map((distance) => [distance, {
+            target: countRegion(
+              region.targetPixelRect,
+              region,
+              distance,
+              region.targetPixelSegments,
+              region.targetChevronScan,
+            ),
+            control: countRegion(
+              region.controlPixelRect,
+              region,
+              distance,
+              region.controlPixelSegments,
+              region.controlChevronScan,
+            ),
+          }]),
+        ),
         threshold: {
           minTarget: region.minTarget,
           minDelta: region.minDelta,
           minRatio: region.minRatio,
-          paletteDistance,
+          paletteDistance: region.paletteDistance,
         },
         passed,
       }];
     }));
     return {
       evidenceKind,
-      phase: boss.phase,
+      phase,
+      safeLane,
       passed: Object.values(bossPixelCounts).every((counts) => counts.passed),
       bossPixelCounts,
       targetPixelCounts,
       controlPixelCounts,
       targetRegions,
       controlRegions,
+      evidenceViewport: ${JSON.stringify(evidenceViewport)},
       canvas: {
       width: canvas.width,
       height: canvas.height,
@@ -321,7 +655,13 @@ async function measureBossCanvasEvidence(client, evidenceKind, state) {
   return result;
 }
 
-async function assertBossCanvasPixelEvidence(client, phase, state, kind) {
+async function assertBossCanvasPixelEvidence(
+  client,
+  phase,
+  state,
+  kind,
+  options = {},
+) {
   const boss = state.battle?.enemies.find((enemy) => (
     enemy.kind === 'deep-echo-boss' && enemy.alive
   ));
@@ -338,7 +678,12 @@ async function assertBossCanvasPixelEvidence(client, phase, state, kind) {
         ? 'tide'
         : boss.behaviour.weakPointOpen ? 'openPalette' : 'closedPalette'
   );
-  const result = await measureBossCanvasEvidence(client, evidenceKind, state);
+  const result = await measureBossCanvasEvidence(
+    client,
+    evidenceKind,
+    state,
+    options,
+  );
   for (const [color, counts] of Object.entries(result.bossPixelCounts)) {
     assert.ok(
       counts.passed,
@@ -349,12 +694,32 @@ async function assertBossCanvasPixelEvidence(client, phase, state, kind) {
   return result;
 }
 
-async function assertBossCanvasNegativeEvidence(client, evidenceKind, state) {
-  const result = await measureBossCanvasEvidence(client, evidenceKind, state);
+async function assertBossCanvasNegativeEvidence(
+  client,
+  evidenceKind,
+  state,
+  options = {},
+) {
+  const result = await measureBossCanvasEvidence(
+    client,
+    evidenceKind,
+    state,
+    options,
+  );
+  const unexpectedRegions = Object.fromEntries(
+    Object.entries(result.bossPixelCounts)
+      .filter(([, counts]) => counts.passed),
+  );
+  assert.deepEqual(
+    unexpectedRegions,
+    {},
+    `${result.phase}/${evidenceKind} counterfactual regions unexpectedly `
+      + `passed: ${JSON.stringify(unexpectedRegions)}`,
+  );
   assert.equal(
-    result.passed,
-    false,
-    `${result.phase}/${evidenceKind} cross-phase negative unexpectedly passed: `
+    everyEvidenceRegionFails(result.bossPixelCounts),
+    true,
+    `${result.phase}/${evidenceKind} every cross-phase region must fail: `
       + JSON.stringify(result),
   );
   return result;
@@ -366,11 +731,26 @@ function assertBossWarningCountdownDelta(
 ) {
   assert.equal(normalTideCountdownSample.passed, false);
   assert.equal(warningCountdown.passed, true);
+  assert.equal(
+    normalTideCountdownSample.safeLane,
+    warningCountdown.safeLane,
+    'normal tide and warning countdown must use the same authoritative lane',
+  );
   for (const [region, warning] of Object.entries(
     warningCountdown.bossPixelCounts,
   )) {
     const normal = normalTideCountdownSample.bossPixelCounts[region];
     assert.ok(normal, `normal tide is missing paired countdown region ${region}`);
+    assert.deepEqual(
+      warning.targetPixelRect,
+      normal.targetPixelRect,
+      `paired ${region} target Canvas rect must be identical`,
+    );
+    assert.deepEqual(
+      warning.controlPixelRect,
+      normal.controlPixelRect,
+      `paired ${region} control Canvas rect must be identical`,
+    );
     assert.ok(
       warning.pixelDelta >= normal.pixelDelta + 6
         && warning.ratio >= normal.ratio + 0.5,
@@ -4177,13 +4557,16 @@ async function finishFullBattle(
   const bossWeakPointStates = ['open', 'closed'];
   const bossWeakPointStatesSeen = new Set();
   let bossTideWarningSeen = false;
+  const normalTideCountdownSamplesByLane = {};
   let normalTideCountdownSample = null;
   let normalTideEvidence = null;
   let normalTideState = null;
   let warningCountdown = null;
   let reducedBossEvidenceSeen = false;
   let holdingBossDamageForTideWarning = false;
+  let holdingBossDamageForClosedEvidence = false;
   let bossDamageHoldAimVerified = false;
+  let closedEvidenceHoldAimVerified = false;
   const bossTideSamples = [];
   const captured = new Set();
 
@@ -4219,8 +4602,16 @@ async function finishFullBattle(
       || phase === 'boss-tide'
       || phase === 'boss-enraged'
     ) {
-      const firstPhaseSample = !bossPhasesSeen.has(phase);
-      bossPhasesSeen.add(phase);
+      const cameraReady = settledCamera(state);
+      const bossCanvasCombatClear = battle.projectiles.every((projectile) => (
+        !projectile.active || projectile.y > 620
+      ));
+      const firstPhaseSample = !bossPhasesSeen.has(phase)
+        && cameraReady
+        && (
+          phase !== 'boss-tide'
+          || (bossDamageHoldAimVerified && bossCanvasCombatClear)
+        );
       bossTideWarningSeen ||= phase === 'boss-tide'
         && state.verification.bossTideWarningActive;
       holdingBossDamageForTideWarning ||= phase === 'boss-tide'
@@ -4242,10 +4633,22 @@ async function finishFullBattle(
         weakPointState = bossWeakPointStates[
           aliveBoss.behaviour.weakPointOpen ? 0 : 1
         ];
-        firstWeakPointSample = !bossWeakPointStatesSeen.has(weakPointState);
-        bossWeakPointStatesSeen.add(weakPointState);
+        const closedTransient = weakPointState === 'closed' && (
+          state.verification.cinematicTitle === '精准破潮'
+          || state.verification.effectKinds.includes('weakpoint-burst')
+          || state.verification.effectKinds.includes('weakpoint-flare')
+        );
+        holdingBossDamageForClosedEvidence = weakPointState === 'closed'
+          && (closedTransient || !cameraReady || !bossCanvasCombatClear);
+        firstWeakPointSample = !bossWeakPointStatesSeen.has(weakPointState)
+          && cameraReady
+          && !closedTransient
+          && (weakPointState !== 'closed' || bossCanvasCombatClear);
+      } else {
+        holdingBossDamageForClosedEvidence = false;
       }
       if (firstPhaseSample) {
+        bossPhasesSeen.add(phase);
         await assertBossTelegraphPresentation(client, `390x844 ${phase}`);
         if (phase === 'boss-summon') {
           assert.equal(
@@ -4281,11 +4684,15 @@ async function finishFullBattle(
             negativeGateResults,
           );
         } else if (phase === 'boss-tide') {
-          normalTideCountdownSample = await assertBossCanvasNegativeEvidence(
-            client,
-            'warningCountdown',
-            state,
-          );
+          for (const safeLane of [0, 1, 2]) {
+            normalTideCountdownSamplesByLane[safeLane] =
+              await assertBossCanvasNegativeEvidence(
+                client,
+                'warningCountdown',
+                state,
+                { safeLane },
+              );
+          }
           normalTideEvidence = bossPixelCounts;
           normalTideState = state;
         } else {
@@ -4307,6 +4714,7 @@ async function finishFullBattle(
         }
       }
       if (firstWeakPointSample) {
+        bossWeakPointStatesSeen.add(weakPointState);
         const bossPixelCounts = await assertBossCanvasPixelEvidence(
           client,
           phase,
@@ -4336,8 +4744,13 @@ async function finishFullBattle(
         && state.verification.bossTideWarningActive
         && aliveBoss.behaviour.phaseDurationMs === 1200
         && aliveBoss.behaviour.phaseRemainingMs <= 300
+        && cameraReady
+        && bossCanvasCombatClear
         && !warningCountdown
       ) {
+        const safeLane = aliveBoss.behaviour.safeLane;
+        normalTideCountdownSample =
+          normalTideCountdownSamplesByLane[safeLane];
         assert.ok(
           normalTideCountdownSample && normalTideEvidence && normalTideState,
           'warning countdown requires the stored normal-tide Canvas sample',
@@ -4347,6 +4760,7 @@ async function finishFullBattle(
           phase,
           state,
           'warningCountdown',
+          { safeLane },
         );
         assertBossWarningCountdownDelta(
           normalTideCountdownSample,
@@ -4362,8 +4776,10 @@ async function finishFullBattle(
           },
           {
             normalTideCountdownSample,
+            normalTideCountdownSamplesByLane,
             warningCountdownDelta: {
               passed: true,
+              authoritativeSafeLane: safeLane,
               phaseRemainingMs: aliveBoss.behaviour.phaseRemainingMs,
               phaseDurationMs: aliveBoss.behaviour.phaseDurationMs,
               cinematicTitle: state.verification.cinematicTitle,
@@ -4376,6 +4792,8 @@ async function finishFullBattle(
         && !reducedBossEvidenceSeen
         && phase === 'boss-tide'
         && state.verification.bossTideWarningActive
+        && cameraReady
+        && bossCanvasCombatClear
       ) {
         const firstPresentation = await assertBossTelegraphPresentation(
           client,
@@ -4444,6 +4862,9 @@ async function finishFullBattle(
       && enemy.alive
       && enemy.behaviour?.weakPointOpen
     ));
+    if (!holdingBossDamageForClosedEvidence) {
+      closedEvidenceHoldAimVerified = false;
+    }
     if (holdingBossDamageForTideWarning && !bossDamageHoldAimVerified) {
       assert.equal(
         await callHook(client, 'return hook.setMainCannonAim(195, 780);'),
@@ -4459,9 +4880,26 @@ async function finishFullBattle(
       bossDamageHoldAimVerified = true;
     }
     if (
+      holdingBossDamageForClosedEvidence
+      && !closedEvidenceHoldAimVerified
+    ) {
+      assert.equal(
+        await callHook(client, 'return hook.setMainCannonAim(195, 780);'),
+        true,
+        'real controller must accept the closed-evidence empty-space aim',
+      );
+      const heldAim = (await snapshot(client)).battle?.mainCannonAim;
+      assert.deepEqual(
+        heldAim,
+        { x: 195, y: 716 },
+        'real controller must retain the closed-evidence empty-space aim',
+      );
+      closedEvidenceHoldAimVerified = true;
+    }
+    if (
       openBoss
-      && !precisionWeakPointSeen
       && !holdingBossDamageForTideWarning
+      && !holdingBossDamageForClosedEvidence
     ) {
       await callHook(
         client,
@@ -4527,6 +4965,7 @@ async function finishFullBattle(
 
     if (
       !holdingBossDamageForTideWarning
+      && !holdingBossDamageForClosedEvidence
       && battle.cooldowns['tidal-volley'] <= 0
     ) {
       await callHook(client, `return hook.useSkill('tidal-volley');`);
@@ -4536,6 +4975,7 @@ async function finishFullBattle(
     }
     if (
       !holdingBossDamageForTideWarning
+      && !holdingBossDamageForClosedEvidence
       && !extremeTideUsed
       && battle.energy >= 100
     ) {
@@ -4634,6 +5074,11 @@ async function finishFullBattle(
       warningCountdown,
       bossTideSamples,
     })}`,
+  );
+  assert.deepEqual(
+    Object.keys(normalTideCountdownSamplesByLane).sort(),
+    ['0', '1', '2'],
+    'normal tide must retain a counterfactual countdown sample for every lane',
   );
   if (reducedMotionBossEvidence) {
     assert.equal(

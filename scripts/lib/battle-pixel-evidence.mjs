@@ -65,6 +65,72 @@ export function createEvidenceViewport({
   };
 }
 
+export function createCanvasEvidenceViewport({
+  cssWidth,
+  cssHeight,
+  pixelWidth,
+  pixelHeight,
+  maxDevicePixelRatio,
+}) {
+  for (const [label, value] of Object.entries({
+    cssWidth,
+    cssHeight,
+    pixelWidth,
+    pixelHeight,
+    maxDevicePixelRatio,
+  })) {
+    if (!Number.isFinite(value) || value <= 0) {
+      throw new Error(`${label} must be finite and positive`);
+    }
+  }
+  const pixelRatioX = pixelWidth / cssWidth;
+  const pixelRatioY = pixelHeight / cssHeight;
+  const coherenceTolerance = Math.max(1 / cssWidth, 1 / cssHeight);
+  if (Math.abs(pixelRatioX - pixelRatioY) > coherenceTolerance) {
+    throw new Error(
+      `Canvas backing/CSS pixel ratios must be coherent: ${JSON.stringify({
+        pixelRatioX,
+        pixelRatioY,
+        coherenceTolerance,
+      })}`,
+    );
+  }
+  const effectivePixelRatio = (pixelRatioX + pixelRatioY) / 2;
+  if (effectivePixelRatio > maxDevicePixelRatio + coherenceTolerance) {
+    throw new Error(
+      `Canvas effective pixel ratio exceeds the production cap: ${JSON.stringify({
+        effectivePixelRatio,
+        maxDevicePixelRatio,
+      })}`,
+    );
+  }
+  const viewport = createEvidenceViewport({
+    cssWidth,
+    cssHeight,
+    devicePixelRatio: effectivePixelRatio,
+    maxDevicePixelRatio,
+  });
+  if (
+    Math.abs(viewport.pixelWidth - pixelWidth) > 1
+    || Math.abs(viewport.pixelHeight - pixelHeight) > 1
+  ) {
+    throw new Error(
+      `Derived evidence viewport does not match Canvas backing store: ${JSON.stringify({
+        viewport,
+        pixelWidth,
+        pixelHeight,
+      })}`,
+    );
+  }
+  return viewport;
+}
+
+export function everyEvidenceRegionFails(bossPixelCounts) {
+  const regions = Object.values(bossPixelCounts ?? {});
+  return regions.length > 0
+    && regions.every((counts) => counts?.passed === false);
+}
+
 export function logicalRectToPixelRect(rect, viewport) {
   const left = Math.floor(
     (viewport.offsetX + rect.x * viewport.scale) * viewport.pixelRatio,
