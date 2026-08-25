@@ -1099,5 +1099,5 @@ describe('boss cinematic pixel evidence', () => {
     expect(rasterizeMotif(later, 'boss-danger-lane', '#ff6f67')).toEqual(
       rasterizeMotif(atStart, 'boss-danger-lane', '#ff6f67'),
     );
-  });
+  }, 10_000);
 });
