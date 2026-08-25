@@ -19,14 +19,14 @@
 ### 回响集结：召唤阶段
 
 - Boss 周围出现三个错位的“回声浮标”，用双环与短波纹表现援军正在汇聚。
-- `phaseRemainingMs` 只决定浮标的收束程度；普通模式允许缓慢呼吸和波纹偏移，减少动态模式固定为三个静态浮标。
+- `phaseRemainingMs / phaseDurationMs` 只决定浮标中心的规则收束程度；普通模式允许缓慢呼吸和波纹偏移，减少动态模式冻结呼吸但保留规则收束。
 - 高／中／低画质分别使用三／二／一道附加回声波，但三枚主浮标在所有画质都保留。
 - 阶段切入沿用现有 `boss-phase-changed` 事件，船长短呼号为“船长：回响集结 · 留意援军”。
 
 ### 断潮航道：潮汐阶段
 
 - 现有整条粗红／绿竖线改为有方向感的水流带：安全航道使用薄荷青编织流线，危险航道使用珊瑚红断裂流线。
-- 安全航道始终保留稳定主线；在真实 1200ms 预警窗口内，四道节拍刻度依次点亮，最后一道点亮即对应现有潮汐冲击。
+- 安全航道始终保留稳定主线；仅在 `EffectSystem` 消费既有 `boss-tide-warning` 事件后的真实 1200ms 预警窗口内，四道节拍刻度依次点亮，最后一道点亮即对应现有潮汐冲击。
 - 普通模式的箭羽沿航道缓慢前进；减少动态模式冻结箭羽位置，只让随规则状态变化的节拍数量更新。
 - 三条航道演出最大逻辑 Y 坐标不超过 `610`，不进入底部技能按钮保护区。
 - 预警短呼号为“船长：绿色潮线是安全航道”。
@@ -63,13 +63,14 @@ export function createBossTelegraphView(input: {
   readonly timeMs: number;
   readonly reducedMotion: boolean;
   readonly backgroundLayers: RenderBudget['backgroundLayers'];
+  readonly bossTideWarningActive: boolean;
 }): BossTelegraphView | null;
 ```
 
 - 非存活敌人、非 `deep-echo-boss` 或无行为状态返回 `null`。
 - `boss-summon`、`boss-tide`、`boss-enraged` 分别映射为 `summon`、`tide`、`enraged`。
-- 进度始终限制在 `0..1`；召唤阶段以 8000ms、断潮预警以 1200ms、潮眼开启以 1400ms、关闭以 1800ms 为表现归一化基准。这些常量只解释既有规则，不参与规则更新。
-- `tideWarning` 仅在 `boss-tide` 且 `phaseRemainingMs <= 1200` 时为真。
+- `EnemyBehaviourState.phaseDurationMs` 记录产生当前 `phaseRemainingMs` 的权威阶段时长；进度由两者归一化并限制在 `0..1`，无重复表现常量。
+- `tideWarning` 仅在 `boss-tide` 且 `bossTideWarningActive` 为真时成立；该只读信号只能由 `EffectSystem` 消费既有 `boss-tide-warning` 事件激活、随 `update` 递减并在 `reset` 清除。
 - `motionPhase` 在减少动态时恒为 `0`；普通模式只由 `timeMs` 计算，不使用随机数。
 - `backgroundLayers` 为 4／3／2 时，`detail` 分别为 3／2／1。
 
@@ -85,19 +86,19 @@ export function createBossTelegraphView(input: {
 
 ### 阶段呼号
 
-`EffectSystem` 继续消费既有 `boss-phase-changed` 与 `boss-tide-warning` 事件，不新增事件。只更新短呼号文案；`BattleRenderer.drawCinematicOverlay` 对以“船长：”开头的短呼号增加两道不闭合的手绘浪线和一个小结绳标记，命令名为 `boss-callout-stroke` 与 `boss-callout-knot`。不增加矩形底板，不改变标题存活时间。
+`EffectSystem` 继续消费既有 `boss-phase-changed` 与 `boss-tide-warning` 事件，不新增事件。它在帧视图中公开只读的真实预警信号并更新短呼号文案；`BattleRenderer.drawCinematicOverlay` 对以“船长：”开头的短呼号增加两道不闭合的手绘浪线和一个小结绳标记，命令名为 `boss-callout-stroke` 与 `boss-callout-knot`。不增加矩形底板，不改变标题存活时间。
 
 ## 画质、性能与减少动态
 
 - 高／中／低画质每帧新增 Boss 命令上限分别为 32／24／18；三种画质均保留阶段主轮廓、危险／安全语义和潮眼开闭状态。
 - 不创建新对象池、不修改 `RenderBudget` 接口、不新增图片或音频资源。
 - 普通模式只使用 `timeMs` 产生有限的呼吸、箭羽偏移与准星开合视觉；不把动画值写回引擎。
-- 减少动态模式下不得出现由 `timeMs` 引起的命令位置、旋转、alpha 或尺寸变化；同一权威行为状态在相隔任意时间的两帧必须得到完全相同的 Boss 预兆命令。
+- 减少动态模式下，真实断潮预警不生成移动粒子或扩散／衰减圆环；静态世界预兆和船长呼号保留。不得出现由 `timeMs` 引起的命令位置、旋转、alpha 或尺寸变化；同一权威行为状态在相隔任意时间的两帧必须得到完全相同的完整 Boss 表现命令。
 - 画质与减少动态设置不得改变敌人状态、事件、命中、奖励和结算。
 
 ## 失败与恢复
 
-- 异常或非有限 `phaseRemainingMs` 归一化为安全的 `0` 进度，不抛错、不影响战斗。
+- 异常、非有限或非正数 `phaseDurationMs` 归一化为安全的 `0` 进度；异常 `phaseRemainingMs` 也不抛错、不影响战斗。
 - Boss 死亡或离开帧后语义模型立即返回 `null`，下一帧不再绘制预兆。
 - 位图加载失败时本轮纯 Canvas 预兆仍完整显示。
 - 场景卸载与重开不保存任何预兆状态，因此不会把上一局阶段带入下一局。

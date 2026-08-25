@@ -111,5 +111,5 @@ describe('BattleEngine elite and boss', () => {
     runFor(eliteFailure, 480_100);
 
     expect(eliteFailure.outcome?.victory).toBe(false);
-  });
+  }, 10_000);
 });

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { BattleRenderer } from '../../../web/battle/BattleRenderer';
 import {
   EffectSystem,
+  EMPTY_EFFECT_FRAME_VIEW,
   type EffectParticleView,
   EffectFrameView,
   EffectParticleKind,
@@ -58,6 +59,7 @@ const BOSS_TELEGRAPH_KINDS = new Set([
   'boss-safe-lane', 'boss-danger-lane', 'boss-current-chevron',
   'boss-tide-countdown', 'boss-enraged-aura', 'boss-weakpoint',
   'boss-weakpoint-petal', 'boss-weakpoint-countdown',
+  'boss-callout-stroke', 'boss-callout-knot',
 ]);
 
 function renderBossPhase(
@@ -67,8 +69,11 @@ function renderBossPhase(
     readonly timeMs?: number;
     readonly reducedMotion?: boolean;
     readonly phaseRemainingMs?: number;
+    readonly phaseDurationMs?: number;
     readonly safeLane?: 0 | 1 | 2;
     readonly weakPointOpen?: boolean;
+    readonly tideWarningActive?: boolean;
+    readonly includeCaptainCallout?: boolean;
   } = {},
 ): BattleDrawCommand[] {
   const boss: EnemyState = {
@@ -78,6 +83,7 @@ function renderBossPhase(
     behaviour: {
       phase,
       phaseRemainingMs: options.phaseRemainingMs ?? (phase === 'boss-summon' ? 4000 : phase === 'boss-tide' ? 600 : 700),
+      phaseDurationMs: options.phaseDurationMs ?? (phase === 'boss-summon' ? 8000 : phase === 'boss-tide' ? 1200 : 1800),
       cycle: 3, targetLane: 1, safeLane: options.safeLane ?? 1,
       invulnerable: false,
       damageTakenMultiplier: phase === 'boss-enraged' ? 1.1 : 1,
@@ -88,6 +94,16 @@ function renderBossPhase(
     frame: { enemies: [boss], projectiles: [], loot: [] },
     timeMs: options.timeMs ?? 900,
     reducedMotion: options.reducedMotion ?? false,
+    effects: {
+      ...EMPTY_EFFECT_FRAME_VIEW,
+      cinematic: {
+        ...EMPTY_EFFECT_FRAME_VIEW.cinematic,
+        bossTideWarningActive: options.tideWarningActive ?? phase === 'boss-tide',
+        title: options.includeCaptainCallout
+          ? '船长：断潮来袭 · 顺流换道'
+          : null,
+      },
+    },
   });
   const painter = createRecordingPainter();
   new BattleRenderer(painter).render({
@@ -328,6 +344,64 @@ describe('BattleRenderer', () => {
     expect(Math.max(...tide.flatMap(commandMaxY))).toBeLessThanOrEqual(610);
   });
 
+  it('draws the tide countdown only while the real event signal is active', () => {
+    const normalSegment = renderBossPhase('boss-tide', {
+      phaseRemainingMs: 1100,
+      phaseDurationMs: 3600,
+      tideWarningActive: false,
+    });
+    const realWarning = renderBossPhase('boss-tide', {
+      phaseRemainingMs: 1100,
+      phaseDurationMs: 1200,
+      tideWarningActive: true,
+    });
+
+    expect(normalSegment.filter((command) => (
+      command.kind === 'boss-tide-countdown'
+    ))).toHaveLength(0);
+    expect(realWarning.filter((command) => (
+      command.kind === 'boss-tide-countdown'
+    ))).toHaveLength(4);
+  });
+
+  it('contracts summon beacon centers monotonically using authoritative progress', () => {
+    const centerRadius = (commands: readonly BattleDrawCommand[]): number => {
+      const echoes = commands.filter((command): command is EllipseDrawCommand => (
+        command.kind === 'boss-summon-echo' && 'radiusX' in command
+      ));
+      const centerY = echoes[0]?.y;
+      expect(centerY).toBeTypeOf('number');
+      const beacons = commands.filter((command): command is EllipseDrawCommand => (
+        command.kind === 'boss-summon-beacon' && 'radiusX' in command
+      ));
+      return beacons.reduce((total, beacon) => (
+        total + Math.hypot(beacon.x - 195, beacon.y - centerY!)
+      ), 0) / beacons.length;
+    };
+    const start = renderBossPhase('boss-summon', {
+      phaseRemainingMs: 8000, phaseDurationMs: 8000, timeMs: 0,
+    });
+    const middle = renderBossPhase('boss-summon', {
+      phaseRemainingMs: 4000, phaseDurationMs: 8000, timeMs: 0,
+    });
+    const end = renderBossPhase('boss-summon', {
+      phaseRemainingMs: 0, phaseDurationMs: 8000, timeMs: 0,
+    });
+
+    expect(centerRadius(start)).toBeGreaterThan(centerRadius(middle));
+    expect(centerRadius(middle)).toBeGreaterThan(centerRadius(end));
+
+    const reducedStart = renderBossPhase('boss-summon', {
+      phaseRemainingMs: 8000, phaseDurationMs: 8000,
+      timeMs: 0, reducedMotion: true,
+    });
+    const reducedEnd = renderBossPhase('boss-summon', {
+      phaseRemainingMs: 0, phaseDurationMs: 8000,
+      timeMs: 5000, reducedMotion: true,
+    });
+    expect(centerRadius(reducedStart)).toBeGreaterThan(centerRadius(reducedEnd));
+  });
+
   it('distinguishes open and closed weak points without changing hit geometry', () => {
     const open = renderBossPhase('boss-enraged', { weakPointOpen: true, phaseRemainingMs: 700 });
     const closed = renderBossPhase('boss-enraged', { weakPointOpen: false, phaseRemainingMs: 900 });
@@ -338,12 +412,38 @@ describe('BattleRenderer', () => {
     );
   });
 
+  it.each([
+    [true, '#fff2a2', '#ff8d73'],
+    [false, '#786ee8', '#78cfff'],
+  ] as const)('uses both weak-point colors when open=%s', (
+    weakPointOpen,
+    primary,
+    secondary,
+  ) => {
+    const colors = new Set(renderBossPhase('boss-enraged', {
+      weakPointOpen,
+    }).filter((command): command is LineDrawCommand => (
+      command.kind === 'boss-weakpoint-petal' && 'points' in command
+    )).map((command) => command.stroke));
+
+    expect(colors).toEqual(new Set([primary, secondary]));
+  });
+
   it.each([['high', 32], ['medium', 24], ['low', 18]] as const)(
     'keeps %s boss choreography under %i commands while retaining identity',
     (quality, limit) => {
       for (const phase of ['boss-summon', 'boss-tide', 'boss-enraged'] as const) {
-        const bossCommands = renderBossPhase(phase, { quality }).filter(isBossTelegraphCommand);
+        const bossCommands = renderBossPhase(phase, {
+          quality,
+          includeCaptainCallout: true,
+        }).filter(isBossTelegraphCommand);
         expect(bossCommands.length).toBeGreaterThan(0);
+        expect(bossCommands.filter((command) => (
+          command.kind === 'boss-callout-stroke'
+        ))).toHaveLength(2);
+        expect(bossCommands.filter((command) => (
+          command.kind === 'boss-callout-knot'
+        ))).toHaveLength(1);
         expect(bossCommands.length).toBeLessThanOrEqual(limit);
       }
     },
@@ -413,7 +513,7 @@ describe('BattleRenderer', () => {
           {
             ...base, id: 11, kind: 'tide-shell-hatchling', x: 92, y: 250,
             behaviour: {
-              phase: 'advance', phaseRemainingMs: 900, cycle: 1,
+              phase: 'advance', phaseRemainingMs: 900, phaseDurationMs: 900, cycle: 1,
               targetLane: 1, safeLane: 0, invulnerable: false,
               damageTakenMultiplier: 1, weakPointOpen: false,
             },
@@ -421,7 +521,7 @@ describe('BattleRenderer', () => {
           {
             ...base, id: 12, kind: 'lantern-ray', x: 195, y: 270,
             behaviour: {
-              phase: 'lantern-charge', phaseRemainingMs: 500, cycle: 1,
+              phase: 'lantern-charge', phaseRemainingMs: 500, phaseDurationMs: 800, cycle: 1,
               targetLane: 1, safeLane: 0, invulnerable: false,
               damageTakenMultiplier: 1, weakPointOpen: false,
             },
@@ -430,7 +530,7 @@ describe('BattleRenderer', () => {
             ...base, id: 13, kind: 'tide-parasite-snail', x: 298, y: 310,
             shield: 20,
             behaviour: {
-              phase: 'advance', phaseRemainingMs: 700, cycle: 2,
+              phase: 'advance', phaseRemainingMs: 700, phaseDurationMs: 2000, cycle: 2,
               targetLane: 2, safeLane: 0, invulnerable: false,
               damageTakenMultiplier: 1, weakPointOpen: false,
             },
@@ -438,7 +538,7 @@ describe('BattleRenderer', () => {
           {
             ...base, id: 14, kind: 'storm-ray-elite', x: 195, y: 360,
             behaviour: {
-              phase: 'elite-telegraph', phaseRemainingMs: 600, cycle: 2,
+              phase: 'elite-telegraph', phaseRemainingMs: 600, phaseDurationMs: 800, cycle: 2,
               targetLane: 0, safeLane: 0, invulnerable: false,
               damageTakenMultiplier: 1, weakPointOpen: false,
             },
@@ -446,7 +546,7 @@ describe('BattleRenderer', () => {
           {
             ...base, id: 15, kind: 'deep-echo-boss', x: 195, y: 250,
             behaviour: {
-              phase: 'boss-enraged', phaseRemainingMs: 800, cycle: 3,
+              phase: 'boss-enraged', phaseRemainingMs: 800, phaseDurationMs: 1800, cycle: 3,
               targetLane: 1, safeLane: 2, invulnerable: false,
               damageTakenMultiplier: 1.1, weakPointOpen: true,
             },
@@ -504,7 +604,7 @@ describe('BattleRenderer', () => {
         color: '#9576ff', alpha: 1,
       }],
       camera: { x: 0, y: 0, rotation: 0, amplitude: 0 },
-      cinematic: { darken: 0, title: null, slowMotion: 0 },
+      cinematic: { darken: 0, title: null, slowMotion: 0, bossTideWarningActive: false },
     };
     const commands = renderCommands({ effects });
     expect(commands.map((item) => item.kind)).toEqual(expect.arrayContaining([
@@ -556,7 +656,7 @@ describe('BattleRenderer', () => {
         damageNumbers: [],
         rings: [],
         camera: { x: 0, y: 0, rotation: 0, amplitude: 0 },
-        cinematic: { darken: 0, title: null, slowMotion: 0 },
+        cinematic: { darken: 0, title: null, slowMotion: 0, bossTideWarningActive: false },
       };
       const motif = renderCommands({ effects }).filter(
         (command) => command.kind === drawKind,
@@ -667,7 +767,7 @@ describe('BattleRenderer', () => {
         }],
         damageNumbers: [], rings: [],
         camera: { x: 0, y: 0, rotation: 0, amplitude: 0 },
-        cinematic: { darken: 0, title: null, slowMotion: 0 },
+        cinematic: { darken: 0, title: null, slowMotion: 0, bossTideWarningActive: false },
       };
       const motif = renderCommands({ effects }).filter(
         (command) => command.kind === drawKind,
@@ -723,7 +823,7 @@ describe('BattleRenderer', () => {
       ],
       damageNumbers: [], rings: [],
       camera: { x: 0, y: 0, rotation: 0, amplitude: 0 },
-      cinematic: { darken: 0, title: null, slowMotion: 0 },
+      cinematic: { darken: 0, title: null, slowMotion: 0, bossTideWarningActive: false },
     };
     const commands = renderCommands({ effects });
     const split = commands.filter(
@@ -777,7 +877,7 @@ describe('BattleRenderer', () => {
       }],
       damageNumbers: [], rings: [],
       camera: { x: 0, y: 0, rotation: 0, amplitude: 0 },
-      cinematic: { darken: 0, title: null, slowMotion: 0 },
+      cinematic: { darken: 0, title: null, slowMotion: 0, bossTideWarningActive: false },
     };
     const command = findCommand<LineDrawCommand>(
       renderCommands({ effects }),
@@ -801,7 +901,7 @@ describe('BattleRenderer', () => {
       rings: [{ id: 34, kind: 'boss-entrance-ripple', x: 195, y: 250, radius: 88, color: '#ff7b72', secondaryColor: '#706cff', alpha: 0.8 }],
       damageNumbers: [],
       camera: { x: 0, y: 0, rotation: 0, amplitude: 0 },
-      cinematic: { darken: 0, title: null, slowMotion: 0 },
+      cinematic: { darken: 0, title: null, slowMotion: 0, bossTideWarningActive: false },
     };
     const commands = renderCommands({ effects });
     expect(commands.map((item) => item.kind)).toEqual(expect.arrayContaining([
@@ -955,7 +1055,7 @@ describe('BattleRenderer', () => {
         alpha: 0.4,
       }],
       camera: { x: 0, y: 0, rotation: 0, amplitude: 0 },
-      cinematic: { darken: 0, title: null, slowMotion: 0 },
+      cinematic: { darken: 0, title: null, slowMotion: 0, bossTideWarningActive: false },
     };
 
     const commands = renderCommands({ effects });
@@ -1072,7 +1172,7 @@ describe('BattleRenderer', () => {
         rings: [],
         damageNumbers: [],
         camera: { x: 0, y: 0, rotation: 0, amplitude: 0 },
-        cinematic: { darken: 0, title: null, slowMotion: 0 },
+        cinematic: { darken: 0, title: null, slowMotion: 0, bossTideWarningActive: false },
       };
       const squash = findCommand<EllipseDrawCommand>(
         renderCommands({ effects }),
@@ -1175,7 +1275,7 @@ describe('BattleRenderer', () => {
         rings: [],
         damageNumbers: [],
         camera: { x: 0, y: 0, rotation: 0, amplitude: 0 },
-        cinematic: { darken: 0, title: null, slowMotion: 0 },
+        cinematic: { darken: 0, title: null, slowMotion: 0, bossTideWarningActive: false },
       },
       renderBudget: getRenderBudget('low'),
     });
@@ -1838,6 +1938,7 @@ describe('BattleRenderer', () => {
           darken: 0,
           title: '船长：断潮来袭 · 顺流换道',
           slowMotion: 0,
+          bossTideWarningActive: false,
         },
       },
     });
@@ -1851,7 +1952,7 @@ describe('BattleRenderer', () => {
       effects: {
         particles: [], damageNumbers: [], rings: [],
         camera: { x: 0, y: 0, rotation: 0, amplitude: 0 },
-        cinematic: { darken: 0, title: '深海回响正在靠近', slowMotion: 0 },
+        cinematic: { darken: 0, title: '深海回响正在靠近', slowMotion: 0, bossTideWarningActive: false },
       },
     });
 

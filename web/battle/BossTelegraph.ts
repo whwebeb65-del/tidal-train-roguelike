@@ -18,6 +18,7 @@ export interface BossTelegraphInput {
   readonly timeMs: number;
   readonly reducedMotion: boolean;
   readonly backgroundLayers: RenderBudget['backgroundLayers'];
+  readonly bossTideWarningActive: boolean;
 }
 
 export function createBossTelegraphView(input: BossTelegraphInput): BossTelegraphView | null {
@@ -31,16 +32,17 @@ export function createBossTelegraphView(input: BossTelegraphInput): BossTelegrap
         ? 'enraged'
         : null;
   if (!phase) return null;
-  const tideWarning = phase === 'tide' && behaviour.phaseRemainingMs <= 1200;
-  const durationMs = phase === 'summon'
-    ? 8000
-    : phase === 'tide'
-      ? tideWarning ? 1200 : 3600
-      : behaviour.weakPointOpen ? 1400 : 1800;
+  const tideWarning = phase === 'tide' && input.bossTideWarningActive;
+  const durationMs = Number.isFinite(behaviour.phaseDurationMs)
+    && behaviour.phaseDurationMs > 0
+    ? behaviour.phaseDurationMs
+    : 0;
   const remainingMs = Number.isFinite(behaviour.phaseRemainingMs)
     ? Math.max(0, behaviour.phaseRemainingMs)
     : durationMs;
-  const progress = Math.min(1, Math.max(0, 1 - remainingMs / durationMs));
+  const progress = durationMs > 0
+    ? Math.min(1, Math.max(0, 1 - remainingMs / durationMs))
+    : 0;
   const safeTimeMs = Number.isFinite(input.timeMs) ? input.timeMs : 0;
   return Object.freeze({
     phase,

@@ -103,6 +103,57 @@ describe('EnemyBehaviourSystem', () => {
     expect(cannotRegress.state.phase).toBe('boss-enraged');
   });
 
+  it('records the authoritative duration for every boss timing window', () => {
+    const initial = createEnemyBehaviour('deep-echo-boss', 20, 1);
+    expect(initial).toMatchObject({
+      phase: 'boss-summon',
+      phaseRemainingMs: 8000,
+      phaseDurationMs: 8000,
+    });
+
+    const tide = advanceEnemyBehaviour({
+      kind: 'deep-echo-boss', enemyId: 20, lane: 1, hpRatio: 0.6,
+      stepMs: 0, state: initial,
+    });
+    expect(tide.state).toMatchObject({
+      phase: 'boss-tide', phaseRemainingMs: 3600, phaseDurationMs: 3600,
+    });
+
+    const warning = advanceEnemyBehaviour({
+      kind: 'deep-echo-boss', enemyId: 20, lane: 1, hpRatio: 0.6,
+      stepMs: 3600, state: tide.state,
+    });
+    expect(warning.intent.tideWarning).toBe(true);
+    expect(warning.state).toMatchObject({
+      phase: 'boss-tide', phaseRemainingMs: 1200, phaseDurationMs: 1200,
+    });
+
+    const firstOpen = advanceEnemyBehaviour({
+      kind: 'deep-echo-boss', enemyId: 20, lane: 1, hpRatio: 0.34,
+      stepMs: 0, state: warning.state,
+    });
+    expect(firstOpen.state).toMatchObject({
+      phase: 'boss-enraged', weakPointOpen: true,
+      phaseRemainingMs: 1800, phaseDurationMs: 1800,
+    });
+
+    const closed = advanceEnemyBehaviour({
+      kind: 'deep-echo-boss', enemyId: 20, lane: 1, hpRatio: 0.34,
+      stepMs: 1800, state: firstOpen.state,
+    });
+    expect(closed.state).toMatchObject({
+      weakPointOpen: false, phaseRemainingMs: 1800, phaseDurationMs: 1800,
+    });
+
+    const nextOpen = advanceEnemyBehaviour({
+      kind: 'deep-echo-boss', enemyId: 20, lane: 1, hpRatio: 0.34,
+      stepMs: 1800, state: closed.state,
+    });
+    expect(nextOpen.state).toMatchObject({
+      weakPointOpen: true, phaseRemainingMs: 1400, phaseDurationMs: 1400,
+    });
+  });
+
   it('rejects invalid time steps', () => {
     expect(() => advanceEnemyBehaviour({
       kind: 'bubble-fin', enemyId: 1, lane: 0, hpRatio: 1,

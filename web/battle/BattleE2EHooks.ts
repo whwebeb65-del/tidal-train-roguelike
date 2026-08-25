@@ -68,6 +68,7 @@ export interface BattleE2ESnapshot {
     readonly musicIntensity: BattleMusicIntensity;
     readonly firstRunTutorialStep: FirstRunBattleTutorialStepId | null;
     readonly effectKinds: readonly string[];
+    readonly bossTideWarningActive: boolean;
   };
   readonly progression: {
     readonly runLevel: number;

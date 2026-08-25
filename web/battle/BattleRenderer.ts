@@ -566,6 +566,8 @@ export class BattleRenderer {
       timeMs: input.timeMs,
       reducedMotion: input.reducedMotion,
       backgroundLayers: input.renderBudget.backgroundLayers,
+      bossTideWarningActive:
+        input.effects.cinematic.bossTideWarningActive,
     });
     if (!bossView) return;
     if (bossView.phase === 'summon') {
@@ -588,12 +590,13 @@ export class BattleRenderer {
   ): void {
     const centerY = y + height * 0.05;
     const pulse = Math.sin(view.motionPhase * Math.PI * 2);
+    const contraction = 1 - view.progress * 0.38;
     for (let index = 0; index < 3; index += 1) {
       const angle = -Math.PI / 2 + index * Math.PI * 2 / 3;
       this.painter.ellipse({
         kind: 'boss-summon-beacon', layer: 'front-effects',
-        x: enemy.x + Math.cos(angle) * width * 0.36,
-        y: centerY + Math.sin(angle) * height * 0.34,
+        x: enemy.x + Math.cos(angle) * width * 0.36 * contraction,
+        y: centerY + Math.sin(angle) * height * 0.34 * contraction,
         radiusX: 12 + pulse * 2, radiusY: 19 + pulse * 3,
         stroke: BOSS_TELEGRAPH_COLORS.summonPrimary, lineWidth: 3,
         alpha: 0.66 + pulse * 0.12,
@@ -654,6 +657,7 @@ export class BattleRenderer {
   ): void {
     const centerY = y + height * 0.05;
     const primary = view.weakPointOpen ? BOSS_TELEGRAPH_COLORS.weakOpenPrimary : BOSS_TELEGRAPH_COLORS.weakClosedPrimary;
+    const secondary = view.weakPointOpen ? BOSS_TELEGRAPH_COLORS.weakOpenSecondary : BOSS_TELEGRAPH_COLORS.weakClosedSecondary;
     const pulse = Math.sin(view.motionPhase * Math.PI * 2);
     this.painter.ellipse({
       kind: 'boss-enraged-aura', layer: 'front-effects', x: enemy.x, y: centerY,
@@ -677,7 +681,8 @@ export class BattleRenderer {
           { x: tipX, y: tipY },
           { x: enemy.x - perpendicularX * fold, y: centerY - perpendicularY * fold },
         ],
-        stroke: primary, lineWidth: view.weakPointOpen ? 4 : 3, alpha: 0.9, lineCap: 'round',
+        stroke: index % 2 === 0 ? primary : secondary,
+        lineWidth: view.weakPointOpen ? 4 : 3, alpha: 0.9, lineCap: 'round',
       });
     }
     const brightNotches = Math.ceil(view.progress * 4);
@@ -691,7 +696,8 @@ export class BattleRenderer {
           { x: enemy.x + cosine * 64, y: centerY + sine * 64 },
           { x: enemy.x + cosine * 76, y: centerY + sine * 76 },
         ],
-        stroke: primary, lineWidth: 3, alpha: index < brightNotches ? 0.95 : 0.3, lineCap: 'round',
+        stroke: index % 2 === 0 ? primary : secondary,
+        lineWidth: 3, alpha: index < brightNotches ? 0.95 : 0.3, lineCap: 'round',
       });
     }
     const weakPoint = getBossWeakPoint(enemy);

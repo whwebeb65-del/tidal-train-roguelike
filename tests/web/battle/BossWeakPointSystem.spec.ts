@@ -23,6 +23,7 @@ function boss(weakPointOpen: boolean): EnemyState {
     behaviour: {
       phase: 'boss-enraged',
       phaseRemainingMs: 900,
+      phaseDurationMs: 1800,
       cycle: 1,
       targetLane: 1,
       safeLane: 0,

@@ -95,6 +95,7 @@ export interface EffectCinematicView {
   readonly darken: number;
   readonly title: string | null;
   readonly slowMotion: number;
+  readonly bossTideWarningActive: boolean;
 }
 
 export interface EffectFrameView {
@@ -119,6 +120,7 @@ export const EMPTY_EFFECT_FRAME_VIEW: EffectFrameView = {
     darken: 0,
     title: null,
     slowMotion: 0,
+    bossTideWarningActive: false,
   },
 };
 
@@ -205,6 +207,7 @@ export class EffectSystem {
   private darkenRemainingMs = 0;
   private title: string | null = null;
   private titleRemainingMs = 0;
+  private bossTideWarningRemainingMs = 0;
   private slowMotionRemainingMs = 0;
   private lastEventX = 195;
   private lastEventY = 360;
@@ -360,6 +363,7 @@ export class EffectSystem {
         darken: this.darken,
         title: this.title,
         slowMotion: Math.min(1, this.slowMotionRemainingMs / 500),
+        bossTideWarningActive: this.bossTideWarningRemainingMs > 0,
       },
     };
   }
@@ -542,8 +546,11 @@ export class EffectSystem {
       }
       if (event.type === 'boss-tide-warning') {
         const x = LANE_X[event.safeLane];
-        this.spawnBurst(x, 390, this.majorCount(10), '#69ffd1', 'boss-tide', event.durationMs, 9, 'front-effects');
-        this.addRing(x, 390, 28, 120, '#79ffda', 9);
+        this.bossTideWarningRemainingMs = event.durationMs;
+        if (!this.reducedMotion) {
+          this.spawnBurst(x, 390, this.majorCount(10), '#69ffd1', 'boss-tide', event.durationMs, 9, 'front-effects');
+          this.addRing(x, 390, 28, 120, '#79ffda', 9);
+        }
         this.title = '船长：绿色潮线是安全航道';
         this.titleRemainingMs = event.durationMs;
       }
@@ -743,6 +750,10 @@ export class EffectSystem {
     if (this.cameraRemainingMs === 0) this.cameraAmplitude = 0;
     this.titleRemainingMs = Math.max(0, this.titleRemainingMs - deltaMs);
     if (this.titleRemainingMs === 0) this.title = null;
+    this.bossTideWarningRemainingMs = Math.max(
+      0,
+      this.bossTideWarningRemainingMs - deltaMs,
+    );
     this.darkenRemainingMs = Math.max(
       0,
       this.darkenRemainingMs - deltaMs,
@@ -770,6 +781,7 @@ export class EffectSystem {
     this.cameraRemainingMs = 0;
     this.title = null;
     this.titleRemainingMs = 0;
+    this.bossTideWarningRemainingMs = 0;
     this.darken = 0;
     this.darkenRemainingMs = 0;
     this.slowMotionRemainingMs = 0;

@@ -9,7 +9,7 @@ function boss(overrides: Partial<EnemyState> = {}): EnemyState {
     shield: 0, speedPerSecond: 0, defenceBroken: false,
     attackCooldownMs: 1000, ageMs: 0,
     behaviour: {
-      phase: 'boss-summon', phaseRemainingMs: 8000, cycle: 1,
+      phase: 'boss-summon', phaseRemainingMs: 8000, phaseDurationMs: 8000, cycle: 1,
       targetLane: 1, safeLane: 2, invulnerable: false,
       damageTakenMultiplier: 1, weakPointOpen: false,
     },
@@ -19,14 +19,14 @@ function boss(overrides: Partial<EnemyState> = {}): EnemyState {
 
 describe('boss telegraph semantic model', () => {
   it('maps the three authoritative phases without inventing gameplay state', () => {
-    const summon = createBossTelegraphView({ enemy: boss(), timeMs: 900, reducedMotion: false, backgroundLayers: 4 });
+    const summon = createBossTelegraphView({ enemy: boss(), timeMs: 900, reducedMotion: false, backgroundLayers: 4, bossTideWarningActive: false });
     const tide = createBossTelegraphView({
-      enemy: boss({ behaviour: { ...boss().behaviour!, phase: 'boss-tide', phaseRemainingMs: 600 } }),
-      timeMs: 900, reducedMotion: false, backgroundLayers: 3,
+      enemy: boss({ behaviour: { ...boss().behaviour!, phase: 'boss-tide', phaseRemainingMs: 600, phaseDurationMs: 1200 } }),
+      timeMs: 900, reducedMotion: false, backgroundLayers: 3, bossTideWarningActive: true,
     });
     const enraged = createBossTelegraphView({
-      enemy: boss({ behaviour: { ...boss().behaviour!, phase: 'boss-enraged', phaseRemainingMs: 700, weakPointOpen: true } }),
-      timeMs: 900, reducedMotion: false, backgroundLayers: 2,
+      enemy: boss({ behaviour: { ...boss().behaviour!, phase: 'boss-enraged', phaseRemainingMs: 700, phaseDurationMs: 1800, weakPointOpen: true } }),
+      timeMs: 900, reducedMotion: false, backgroundLayers: 2, bossTideWarningActive: false,
     });
     expect(summon).toMatchObject({ phase: 'summon', detail: 3, tideWarning: false, weakPointOpen: false });
     expect(tide).toMatchObject({ phase: 'tide', detail: 2, tideWarning: true, safeLane: 2 });
@@ -34,16 +34,55 @@ describe('boss telegraph semantic model', () => {
     expect(Object.isFrozen(summon)).toBe(true);
   });
 
+  it('does not infer a real tide warning from the normal segment countdown', () => {
+    const view = createBossTelegraphView({
+      enemy: boss({
+        behaviour: {
+          ...boss().behaviour!,
+          phase: 'boss-tide',
+          phaseRemainingMs: 1100,
+          phaseDurationMs: 3600,
+        },
+      }),
+      timeMs: 900,
+      reducedMotion: false,
+      backgroundLayers: 4,
+      bossTideWarningActive: false,
+    });
+
+    expect(view).toMatchObject({ phase: 'tide', tideWarning: false });
+  });
+
+  it('starts the first enraged open window at zero progress', () => {
+    const view = createBossTelegraphView({
+      enemy: boss({
+        behaviour: {
+          ...boss().behaviour!,
+          phase: 'boss-enraged',
+          phaseRemainingMs: 1800,
+          phaseDurationMs: 1800,
+          weakPointOpen: true,
+        },
+      }),
+      timeMs: 0,
+      reducedMotion: false,
+      backgroundLayers: 4,
+      bossTideWarningActive: false,
+    });
+
+    expect(view?.progress).toBe(0);
+  });
+
   it('returns null for dead, non-boss, missing-behaviour, and non-boss phases', () => {
-    expect(createBossTelegraphView({ enemy: boss({ alive: false }), timeMs: 0, reducedMotion: false, backgroundLayers: 4 })).toBeNull();
-    expect(createBossTelegraphView({ enemy: boss({ kind: 'bubble-fin' }), timeMs: 0, reducedMotion: false, backgroundLayers: 4 })).toBeNull();
-    expect(createBossTelegraphView({ enemy: boss({ behaviour: undefined }), timeMs: 0, reducedMotion: false, backgroundLayers: 4 })).toBeNull();
-    expect(createBossTelegraphView({ enemy: boss({ behaviour: { ...boss().behaviour!, phase: 'advance' } }), timeMs: 0, reducedMotion: false, backgroundLayers: 4 })).toBeNull();
+    expect(createBossTelegraphView({ enemy: boss({ alive: false }), timeMs: 0, reducedMotion: false, backgroundLayers: 4, bossTideWarningActive: false })).toBeNull();
+    expect(createBossTelegraphView({ enemy: boss({ kind: 'bubble-fin' }), timeMs: 0, reducedMotion: false, backgroundLayers: 4, bossTideWarningActive: false })).toBeNull();
+    expect(createBossTelegraphView({ enemy: boss({ behaviour: undefined }), timeMs: 0, reducedMotion: false, backgroundLayers: 4, bossTideWarningActive: false })).toBeNull();
+    expect(createBossTelegraphView({ enemy: boss({ behaviour: { ...boss().behaviour!, phase: 'advance' } }), timeMs: 0, reducedMotion: false, backgroundLayers: 4, bossTideWarningActive: false })).toBeNull();
   });
 
   it('clamps progress and freezes motion for reduced motion', () => {
-    const reduced = createBossTelegraphView({ enemy: boss({ behaviour: { ...boss().behaviour!, phaseRemainingMs: 4000 } }), timeMs: 5000, reducedMotion: true, backgroundLayers: 4 });
-    const invalid = createBossTelegraphView({ enemy: boss({ behaviour: { ...boss().behaviour!, phaseRemainingMs: Number.NaN } }), timeMs: Number.NaN, reducedMotion: false, backgroundLayers: 4 });
+    const reduced = createBossTelegraphView({ enemy: boss({ behaviour: { ...boss().behaviour!, phaseRemainingMs: 4000 } }), timeMs: 5000, reducedMotion: true, backgroundLayers: 4, bossTideWarningActive: false });
+    const invalid = createBossTelegraphView({ enemy: boss({ behaviour: { ...boss().behaviour!, phaseRemainingMs: 4000, phaseDurationMs: Number.NaN } }), timeMs: Number.NaN, reducedMotion: false, backgroundLayers: 4, bossTideWarningActive: false });
     expect(reduced).toMatchObject({ progress: 0.5, motionPhase: 0 });
     expect(invalid).toMatchObject({ progress: 0, motionPhase: 0 });
     expect(invalid!.progress).toBeGreaterThanOrEqual(0);

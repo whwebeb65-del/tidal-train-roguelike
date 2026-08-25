@@ -41,9 +41,11 @@ export function createEnemyBehaviour(
   lane: 0 | 1 | 2,
 ): EnemyBehaviourState {
   const phase = kind === 'deep-echo-boss' ? 'boss-summon' : 'advance';
+  const durationMs = initialDuration(kind);
   return makeState({
     phase,
-    phaseRemainingMs: initialDuration(kind),
+    phaseRemainingMs: durationMs,
+    phaseDurationMs: durationMs,
     cycle: 0,
     targetLane: lane,
     safeLane: deterministicLane(enemyId, 0),
@@ -80,32 +82,48 @@ function transitionExpired(input: EnemyBehaviourInput): EnemyBehaviourResult {
     const cycle = state.cycle + 1;
     const targetLane = adjacentLane(input.lane, input.enemyId, cycle);
     return {
-      state: makeState({ ...state, cycle, targetLane, phaseRemainingMs: 2000 }),
+      state: makeState({
+        ...state, cycle, targetLane,
+        phaseRemainingMs: 2000, phaseDurationMs: 2000,
+      }),
       intent: { targetLane },
     };
   }
   if (kind === 'lantern-ray') {
     if (state.phase === 'lantern-charge') {
       return {
-        state: makeState({ ...state, phase: 'advance', phaseRemainingMs: 2500 }),
+        state: makeState({
+          ...state, phase: 'advance',
+          phaseRemainingMs: 2500, phaseDurationMs: 2500,
+        }),
         intent: { rangedFire: true },
       };
     }
     return {
-      state: makeState({ ...state, phase: 'lantern-charge', phaseRemainingMs: 800 }),
+      state: makeState({
+        ...state, phase: 'lantern-charge',
+        phaseRemainingMs: 800, phaseDurationMs: 800,
+      }),
       intent: { rangedWarning: true },
     };
   }
   if (kind === 'tide-parasite-snail') {
     return {
-      state: makeState({ ...state, cycle: state.cycle + 1, phaseRemainingMs: 2000 }),
+      state: makeState({
+        ...state, cycle: state.cycle + 1,
+        phaseRemainingMs: 2000, phaseDurationMs: 2000,
+      }),
       intent: { supportPulse: true },
     };
   }
   if (kind === 'storm-ray-elite') return transitionElite(input);
   if (kind === 'deep-echo-boss') return transitionBossTimer(input);
   return {
-    state: makeState({ ...state, phaseRemainingMs: Number.MAX_SAFE_INTEGER }),
+    state: makeState({
+      ...state,
+      phaseRemainingMs: Number.MAX_SAFE_INTEGER,
+      phaseDurationMs: Number.MAX_SAFE_INTEGER,
+    }),
     intent: {},
   };
 }
@@ -118,6 +136,7 @@ function transitionElite(input: EnemyBehaviourInput): EnemyBehaviourResult {
         ...state,
         phase: 'elite-charge',
         phaseRemainingMs: 450,
+        phaseDurationMs: 450,
         invulnerable: true,
       }),
       intent: { eliteCharge: true, targetLane: state.targetLane },
@@ -129,6 +148,7 @@ function transitionElite(input: EnemyBehaviourInput): EnemyBehaviourResult {
         ...state,
         phase: 'elite-exposed',
         phaseRemainingMs: 1200,
+        phaseDurationMs: 1200,
         invulnerable: false,
         damageTakenMultiplier: 1.25,
       }),
@@ -141,6 +161,7 @@ function transitionElite(input: EnemyBehaviourInput): EnemyBehaviourResult {
         ...state,
         phase: 'advance',
         phaseRemainingMs: 3000,
+        phaseDurationMs: 3000,
         damageTakenMultiplier: 1,
       }),
       intent: {},
@@ -153,6 +174,7 @@ function transitionElite(input: EnemyBehaviourInput): EnemyBehaviourResult {
       ...state,
       phase: 'elite-telegraph',
       phaseRemainingMs: 800,
+      phaseDurationMs: 800,
       cycle,
       targetLane,
     }),
@@ -174,11 +196,13 @@ function transitionBossByHealth(
   if (bossPhaseRank(desired) <= currentRank) return null;
   const cycle = input.state.cycle + 1;
   const safeLane = deterministicLane(input.enemyId, cycle);
+  const durationMs = desired === 'boss-tide' ? 3600 : 1800;
   return {
     state: makeState({
       ...input.state,
       phase: desired,
-      phaseRemainingMs: desired === 'boss-tide' ? 3600 : 1800,
+      phaseRemainingMs: durationMs,
+      phaseDurationMs: durationMs,
       cycle,
       safeLane,
       weakPointOpen: desired === 'boss-enraged',
@@ -192,30 +216,37 @@ function transitionBossTimer(input: EnemyBehaviourInput): EnemyBehaviourResult {
   const state = input.state;
   if (state.phase === 'boss-summon') {
     return {
-      state: makeState({ ...state, cycle: state.cycle + 1, phaseRemainingMs: 8000 }),
+      state: makeState({
+        ...state, cycle: state.cycle + 1,
+        phaseRemainingMs: 8000, phaseDurationMs: 8000,
+      }),
       intent: { bossSummon: true },
     };
   }
   if (state.phase === 'boss-tide') {
     const warning = state.cycle % 2 === 1;
     const cycle = state.cycle + 1;
+    const durationMs = warning ? 1200 : 3600;
     return {
       state: makeState({
         ...state,
         cycle,
         safeLane: warning ? deterministicLane(input.enemyId, cycle) : state.safeLane,
-        phaseRemainingMs: warning ? 1200 : 3600,
+        phaseRemainingMs: durationMs,
+        phaseDurationMs: durationMs,
       }),
       intent: warning ? { tideWarning: true } : { tideImpact: true },
     };
   }
   const cycle = state.cycle + 1;
+  const durationMs = state.weakPointOpen ? 1800 : 1400;
   return {
     state: makeState({
       ...state,
       cycle,
       weakPointOpen: !state.weakPointOpen,
-      phaseRemainingMs: state.weakPointOpen ? 1800 : 1400,
+      phaseRemainingMs: durationMs,
+      phaseDurationMs: durationMs,
     }),
     intent: {},
   };

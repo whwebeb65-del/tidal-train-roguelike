@@ -263,11 +263,41 @@ describe('browser smoke script', () => {
     expect(source).toContain('bossTideWarningSeen');
     expect(source).toContain('bossWeakPointStatesSeen');
     expect(source).toContain('assertBossTelegraphPresentation');
+    expect(source).toContain('assertBossCanvasPixelEvidence');
+    expect(source).toContain('CanvasRenderingContext2D');
+    expect(source).toContain('getImageData');
+    expect(source).toContain('bossTideWarningActive');
+    expect(source).toContain('bossPixelCounts');
+    expect(source).toContain('targetPixelCounts');
+    expect(source).toContain('controlPixelCounts');
+    expect(source).toContain('pixelDelta');
+    expect(source).toContain('targetRegions');
+    expect(source).toContain('controlRegions');
+    expect(source).toContain("safeSecondary: '#d8fff3'");
+    expect(source).toContain("dangerSecondary: '#ffb07a'");
+    expect(source).toContain('await advanceBattle(client, 50)');
+    expect(source).toContain('const secondState = await snapshot(client)');
+    expect(source).toContain('relativePixelDrift');
+    expect(source).toContain('phaseDurationMs');
+    expect(source).toContain('.json`');
     expect(source).toContain(
       "captureQaScreenshot(client, `390x844-boss-${phase}`)",
     );
     expect(source).toContain("['open', 'closed']");
     expect(source).not.toContain('setBossPhase');
+    const fullBattle = source.slice(
+      source.indexOf('async function finishFullBattle'),
+      source.indexOf('async function assertTidalArchiveDiscoveryFeedback'),
+    );
+    expect(fullBattle).toContain(
+      'state.verification.bossTideWarningActive',
+    );
+    expect(fullBattle).toContain('holdingBossDamageForTideWarning');
+    expect(fullBattle).toContain('setMainCannonAim(195, 780)');
+    expect(fullBattle).toContain('mainCannonAim');
+    expect(fullBattle).not.toMatch(
+      /bossTideWarningSeen\s*=\s*[^;]*phaseRemainingMs\s*<=\s*1200/,
+    );
   });
 
   it('guards the complete tidal archive discovery feedback lifecycle', () => {

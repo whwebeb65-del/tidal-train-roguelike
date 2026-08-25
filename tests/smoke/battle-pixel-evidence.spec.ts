@@ -82,14 +82,61 @@ function distanceToSegment(
   );
 }
 
+type RasterSegment = readonly [
+  { readonly x: number; readonly y: number },
+  { readonly x: number; readonly y: number },
+];
+
+const rasterSegmentCache = new WeakMap<LineDrawCommand, readonly RasterSegment[]>();
+
+function rasterSegments(command: LineDrawCommand): readonly RasterSegment[] {
+  const cached = rasterSegmentCache.get(command);
+  if (cached) return cached;
+  const segments: RasterSegment[] = [];
+  if (command.curve && command.points.length > 2) {
+    let start = command.points[0]!;
+    for (let index = 1; index < command.points.length - 1; index += 1) {
+      const control = command.points[index]!;
+      const next = command.points[index + 1]!;
+      const end = {
+        x: (control.x + next.x) / 2,
+        y: (control.y + next.y) / 2,
+      };
+      let prior = start;
+      for (let sample = 1; sample <= 24; sample += 1) {
+        const amount = sample / 24;
+        const inverse = 1 - amount;
+        const point = {
+          x: inverse ** 2 * start.x
+            + 2 * inverse * amount * control.x
+            + amount ** 2 * end.x,
+          y: inverse ** 2 * start.y
+            + 2 * inverse * amount * control.y
+            + amount ** 2 * end.y,
+        };
+        segments.push([prior, point]);
+        prior = point;
+      }
+      start = end;
+    }
+    segments.push([start, command.points.at(-1)!]);
+  } else {
+    command.points.slice(1).forEach((point, index) => {
+      segments.push([command.points[index]!, point]);
+    });
+  }
+  rasterSegmentCache.set(command, segments);
+  return segments;
+}
+
 function commandPaintsPixel(
   command: LineDrawCommand | EllipseDrawCommand,
   x: number,
   y: number,
 ): boolean {
   if ('points' in command) {
-    return command.points.slice(1).some((point, index) => (
-      distanceToSegment(x, y, command.points[index]!, point)
+    return rasterSegments(command).some(([start, end]) => (
+      distanceToSegment(x, y, start, end)
         <= command.lineWidth / 2
     ));
   }
@@ -201,7 +248,12 @@ function renderEvolutionMotif(
     }],
     damageNumbers: [], rings: [],
     camera: { x: 0, y: 0, rotation: 0, amplitude: 0 },
-    cinematic: { darken: 0, title: null, slowMotion: 0 },
+    cinematic: {
+      darken: 0,
+      title: null,
+      slowMotion: 0,
+      bossTideWarningActive: false,
+    },
   };
   const painter = createRecordingPainter();
   new BattleRenderer(painter).render(createPresentationFixture({ effects }));
@@ -240,6 +292,7 @@ function renderBossPixelState(
     defenceBroken: false, attackCooldownMs: 1000, ageMs: 0, alive: true,
     behaviour: {
       phase, phaseRemainingMs: phase === 'boss-summon' ? 4000 : 600,
+      phaseDurationMs: phase === 'boss-summon' ? 8000 : phase === 'boss-tide' ? 1200 : 1800,
       cycle: 3, targetLane: 1, safeLane: 1, invulnerable: false,
       damageTakenMultiplier: phase === 'boss-enraged' ? 1.1 : 1,
       weakPointOpen,
@@ -249,6 +302,16 @@ function renderBossPixelState(
     frame: { projectiles: [], loot: [], enemies: [enemy] },
     reducedMotion: options.reducedMotion ?? false,
     timeMs: options.timeMs ?? 900,
+    effects: {
+      particles: [], damageNumbers: [], rings: [],
+      camera: { x: 0, y: 0, rotation: 0, amplitude: 0 },
+      cinematic: {
+        darken: 0,
+        title: null,
+        slowMotion: 0,
+        bossTideWarningActive: phase === 'boss-tide',
+      },
+    },
   });
   const painter = createRecordingPainter();
   new BattleRenderer(painter).render(input);
@@ -264,7 +327,9 @@ const bossPixelCases = [
   ['safe tide current', 'boss-tide', 'boss-safe-lane', '#6fffd4', { x: 120, y: 150, width: 150, height: 460 }],
   ['danger tide current', 'boss-tide', 'boss-danger-lane', '#ff6f67', { x: 30, y: 150, width: 330, height: 460 }],
   ['open tide eye', 'boss-enraged-open', 'boss-weakpoint-petal', '#fff2a2', { x: 140, y: 180, width: 110, height: 150 }],
+  ['open tide eye secondary', 'boss-enraged-open', 'boss-weakpoint-petal', '#ff8d73', { x: 140, y: 180, width: 110, height: 150 }],
   ['closed tide eye', 'boss-enraged-closed', 'boss-weakpoint-petal', '#786ee8', { x: 140, y: 180, width: 110, height: 150 }],
+  ['closed tide eye secondary', 'boss-enraged-closed', 'boss-weakpoint-petal', '#78cfff', { x: 140, y: 180, width: 110, height: 150 }],
 ] as const satisfies readonly (readonly [
   string,
   BossPixelState,
@@ -826,6 +891,24 @@ describe('battle pixel evidence helpers', () => {
 });
 
 describe('boss cinematic pixel evidence', () => {
+  it('follows the CanvasPainter quadratic midpoint path for curved lines', () => {
+    const command: LineDrawCommand = {
+      kind: 'curve-midpoint-control',
+      layer: 'front-effects',
+      points: [
+        { x: 50, y: 50 },
+        { x: 150, y: 150 },
+        { x: 250, y: 50 },
+      ],
+      stroke: '#ffffff',
+      lineWidth: 6,
+      curve: true,
+    };
+
+    expect(commandPaintsPixel(command, 138, 113)).toBe(true);
+    expect(commandPaintsPixel(command, 138, 138)).toBe(false);
+  });
+
   it.each(bossPixelCases)(
     'captures %s from real renderer commands without a battle-sized filled rectangle',
     (_name, state, kind, color, region) => {

@@ -58,6 +58,158 @@ async function captureQaScreenshot(client, name) {
   await writeFile(path.join(qaDirectory, `${name}.png`), shot.data, 'base64');
 }
 
+async function writeBossEvidenceSidecar(name, state, bossPixelCounts) {
+  const boss = state.battle?.enemies.find((enemy) => (
+    enemy.kind === 'deep-echo-boss' && enemy.alive
+  ));
+  assert.ok(boss?.behaviour, `${name} boss evidence requires live behaviour`);
+  const phase = boss.behaviour.phase;
+  await writeFile(
+    path.join(qaDirectory, `${name}.json`),
+    `${JSON.stringify({
+      phase,
+      phaseRemainingMs: boss.behaviour.phaseRemainingMs,
+      phaseDurationMs: boss.behaviour.phaseDurationMs,
+      bossTideWarningActive: state.verification.bossTideWarningActive,
+      weakPointState: phase === 'boss-enraged'
+        ? boss.behaviour.weakPointOpen ? 'open' : 'closed'
+        : 'not-applicable',
+      bossPixelCounts,
+    }, null, 2)}\n`,
+    'utf8',
+  );
+}
+
+async function assertBossCanvasPixelEvidence(client, phase, state) {
+  const boss = state.battle?.enemies.find((enemy) => (
+    enemy.kind === 'deep-echo-boss' && enemy.alive
+  ));
+  assert.ok(boss?.behaviour, `${phase} pixel evidence requires a live boss`);
+  assert.equal(
+    boss.behaviour.phase,
+    phase,
+    `${phase} pixel evidence must bind to the same authoritative snapshot`,
+  );
+  const weakPointState = phase === 'boss-enraged'
+    ? boss.behaviour.weakPointOpen ? 'open' : 'closed'
+    : null;
+  const result = await evaluate(client, `(() => {
+    const canvas = document.querySelector('[data-battle-canvas]');
+    if (!(canvas instanceof HTMLCanvasElement)) {
+      return { error: 'missing-canvas' };
+    }
+    const context = canvas.getContext('2d');
+    if (!(context instanceof CanvasRenderingContext2D)) {
+      return { error: 'missing-2d-context' };
+    }
+    const phase = ${JSON.stringify(phase)};
+    const weakPointState = ${JSON.stringify(weakPointState)};
+    const evidence = phase === 'boss-summon'
+      ? {
+        targetRegions: [{ x: 45, y: 145, width: 300, height: 180 }],
+        controlRegions: [{ x: 45, y: 410, width: 300, height: 180 }],
+        colors: { primary: '#8a7dff', secondary: '#78e8ff' },
+      }
+      : phase === 'boss-tide'
+        ? {
+          targetRegions: [98, 195, 292].map((x) => ({
+            x: x - 20, y: 145, width: 40, height: 470,
+          })),
+          controlRegions: [49, 146, 244].map((x) => ({
+            x: x - 20, y: 145, width: 40, height: 470,
+          })),
+          colors: {
+            safePrimary: '#6fffd4',
+            safeSecondary: '#d8fff3',
+            dangerPrimary: '#ff6f67',
+            dangerSecondary: '#ffb07a',
+          },
+        }
+        : weakPointState === 'open'
+          ? {
+            targetRegions: [{ x: 120, y: 150, width: 150, height: 165 }],
+            controlRegions: [{ x: 120, y: 390, width: 150, height: 165 }],
+            colors: { primary: '#fff2a2', secondary: '#ff8d73' },
+          }
+          : {
+            targetRegions: [{ x: 120, y: 150, width: 150, height: 165 }],
+            controlRegions: [{ x: 120, y: 390, width: 150, height: 165 }],
+            colors: { primary: '#786ee8', secondary: '#78cfff' },
+          };
+    const scaleX = canvas.width / 390;
+    const scaleY = canvas.height / 844;
+    const toPixelRegion = (region) => {
+      const pixelRegion = {
+        x: Math.max(0, Math.floor(region.x * scaleX)),
+        y: Math.max(0, Math.floor(region.y * scaleY)),
+        width: Math.min(canvas.width, Math.ceil(region.width * scaleX)),
+        height: Math.min(canvas.height, Math.ceil(region.height * scaleY)),
+      };
+      pixelRegion.width = Math.min(pixelRegion.width, canvas.width - pixelRegion.x);
+      pixelRegion.height = Math.min(pixelRegion.height, canvas.height - pixelRegion.y);
+      return pixelRegion;
+    };
+    const parseHex = (value) => [
+      Number.parseInt(value.slice(1, 3), 16),
+      Number.parseInt(value.slice(3, 5), 16),
+      Number.parseInt(value.slice(5, 7), 16),
+    ];
+    const targets = Object.entries(evidence.colors).map(([name, color]) => ({
+      name,
+      rgb: parseHex(color),
+    }));
+    const paletteDistance = 72;
+    const countRegions = (regions) => {
+      const counts = Object.fromEntries(targets.map(({ name }) => [name, 0]));
+      for (const region of regions.map(toPixelRegion)) {
+        const pixels = context.getImageData(
+          region.x, region.y, region.width, region.height,
+        ).data;
+        for (let index = 0; index < pixels.length; index += 4) {
+          if (pixels[index + 3] === 0) continue;
+          let nearest = null;
+          let nearestDistance = Infinity;
+          for (const target of targets) {
+            const distance = Math.max(
+              Math.abs(pixels[index] - target.rgb[0]),
+              Math.abs(pixels[index + 1] - target.rgb[1]),
+              Math.abs(pixels[index + 2] - target.rgb[2]),
+            );
+            if (distance < nearestDistance) {
+              nearest = target.name;
+              nearestDistance = distance;
+            }
+          }
+          if (nearest !== null && nearestDistance <= paletteDistance) {
+            counts[nearest] += 1;
+          }
+        }
+      }
+      return counts;
+    };
+    const targetPixelCounts = countRegions(evidence.targetRegions);
+    const controlPixelCounts = countRegions(evidence.controlRegions);
+    const bossPixelCounts = Object.fromEntries(targets.map(({ name }) => [name, {
+      target: targetPixelCounts[name],
+      control: controlPixelCounts[name],
+      pixelDelta: targetPixelCounts[name] - controlPixelCounts[name],
+    }]));
+    return { bossPixelCounts, targetPixelCounts, controlPixelCounts, canvas: {
+      width: canvas.width,
+      height: canvas.height,
+    } };
+  })()`);
+  assert.equal(result.error, undefined, `${phase} canvas evidence: ${result.error}`);
+  for (const [color, counts] of Object.entries(result.bossPixelCounts)) {
+    assert.ok(
+      counts.target >= 8 && counts.pixelDelta >= 4,
+      `${phase}/${weakPointState ?? 'phase'} ${color} needs >=8 causal pixels: `
+        + JSON.stringify(result),
+    );
+  }
+  return result.bossPixelCounts;
+}
+
 function captureChildOutput(child, label) {
   let output = '';
   const append = (chunk) => {
@@ -2710,6 +2862,10 @@ async function assertReducedMotionResilience(client, label) {
   );
   await returnToStation(client, baseline.diagnostics.activeListeners);
   await assertReducedMotionArchive(client, label);
+  await finishFullBattle(client, {
+    claimSalvage: false,
+    reducedMotionBossEvidence: true,
+  });
   await setDisplaySettings(
     client,
     { qualityPreference: 'high', reducedMotion: false },
@@ -3800,7 +3956,12 @@ async function claimRepeatedSalvage(client) {
 
 async function finishFullBattle(
   client,
-  { claimSalvage, afterBattleStart, inspectSettlement },
+  {
+    claimSalvage,
+    afterBattleStart,
+    inspectSettlement,
+    reducedMotionBossEvidence = false,
+  },
 ) {
   const before = await snapshot(client);
   const listenerBaseline = before.diagnostics.activeListeners;
@@ -3842,6 +4003,10 @@ async function finishFullBattle(
   const bossWeakPointStates = ['open', 'closed'];
   const bossWeakPointStatesSeen = new Set();
   let bossTideWarningSeen = false;
+  let reducedBossEvidenceSeen = false;
+  let holdingBossDamageForTideWarning = false;
+  let bossDamageHoldAimVerified = false;
+  const bossTideSamples = [];
   const captured = new Set();
 
   for (let iteration = 0; iteration < 2_500; iteration += 1) {
@@ -3878,11 +4043,20 @@ async function finishFullBattle(
     ) {
       const firstPhaseSample = !bossPhasesSeen.has(phase);
       bossPhasesSeen.add(phase);
-      if (
-        phase === 'boss-tide'
-        && aliveBoss.behaviour.phaseRemainingMs <= 1200
-      ) {
-        bossTideWarningSeen = true;
+      bossTideWarningSeen ||= phase === 'boss-tide'
+        && state.verification.bossTideWarningActive;
+      holdingBossDamageForTideWarning ||= phase === 'boss-tide'
+        && !state.verification.bossTideWarningActive;
+      if (state.verification.bossTideWarningActive) {
+        holdingBossDamageForTideWarning = false;
+      }
+      if (phase === 'boss-tide') {
+        bossTideSamples.push({
+          phaseRemainingMs: aliveBoss.behaviour.phaseRemainingMs,
+          phaseDurationMs: aliveBoss.behaviour.phaseDurationMs,
+          bossTideWarningActive:
+            state.verification.bossTideWarningActive,
+        });
       }
       let firstWeakPointSample = false;
       let weakPointState = null;
@@ -3895,13 +4069,75 @@ async function finishFullBattle(
       }
       if (firstPhaseSample) {
         await assertBossTelegraphPresentation(client, `390x844 ${phase}`);
+        const bossPixelCounts = await assertBossCanvasPixelEvidence(
+          client,
+          phase,
+          state,
+        );
         await captureQaScreenshot(client, `390x844-boss-${phase}`);
+        const name = `390x844-boss-${phase}`;
+        await writeBossEvidenceSidecar(name, state, bossPixelCounts);
       }
       if (firstWeakPointSample) {
-        await captureQaScreenshot(
+        const bossPixelCounts = await assertBossCanvasPixelEvidence(
           client,
-          `390x844-boss-eye-${weakPointState}`,
+          phase,
+          state,
         );
+        const name = `390x844-boss-eye-${weakPointState}`;
+        await captureQaScreenshot(client, name);
+        await writeBossEvidenceSidecar(name, state, bossPixelCounts);
+      }
+      if (
+        reducedMotionBossEvidence
+        && !reducedBossEvidenceSeen
+        && phase === 'boss-tide'
+        && state.verification.bossTideWarningActive
+      ) {
+        const firstPresentation = await assertBossTelegraphPresentation(
+          client,
+          '390x844 reduced boss tide warning first sample',
+        );
+        const firstPixels = await assertBossCanvasPixelEvidence(client, phase, state);
+        await advanceBattle(client, 50);
+        const secondState = await snapshot(client);
+        const secondBoss = secondState.battle?.enemies.find((enemy) => (
+          enemy.kind === 'deep-echo-boss' && enemy.alive
+        ));
+        assert.equal(secondBoss?.behaviour?.phase, 'boss-tide');
+        assert.equal(secondBoss?.behaviour?.phaseDurationMs, 1200);
+        assert.equal(secondState.verification.bossTideWarningActive, true);
+        assert.ok(
+          secondBoss.behaviour.phaseRemainingMs
+            < aliveBoss.behaviour.phaseRemainingMs,
+          'reduced warning second frame must advance authoritative time',
+        );
+        const secondPresentation = await assertBossTelegraphPresentation(
+          client,
+          '390x844 reduced boss tide warning second sample',
+        );
+        const secondPixels = await assertBossCanvasPixelEvidence(
+          client,
+          phase,
+          secondState,
+        );
+        assert.deepEqual(
+          secondPresentation,
+          firstPresentation,
+          'reduced boss warning presentation must remain static over real time',
+        );
+        for (const [color, firstCounts] of Object.entries(firstPixels)) {
+          const secondCounts = secondPixels[color];
+          const relativePixelDrift = Math.abs(
+            secondCounts.pixelDelta - firstCounts.pixelDelta,
+          ) / Math.max(1, firstCounts.pixelDelta);
+          assert.ok(
+            relativePixelDrift <= 0.1,
+            `reduced boss warning ${color} localized pixel drift exceeds 10%: `
+              + JSON.stringify({ firstCounts, secondCounts, relativePixelDrift }),
+          );
+        }
+        reducedBossEvidenceSeen = true;
       }
     }
     const capture = async (name) => {
@@ -3923,7 +4159,25 @@ async function finishFullBattle(
       && enemy.alive
       && enemy.behaviour?.weakPointOpen
     ));
-    if (openBoss && !precisionWeakPointSeen) {
+    if (holdingBossDamageForTideWarning && !bossDamageHoldAimVerified) {
+      assert.equal(
+        await callHook(client, 'return hook.setMainCannonAim(195, 780);'),
+        true,
+        'real controller must accept the temporary empty-space boss aim',
+      );
+      const heldAim = (await snapshot(client)).battle?.mainCannonAim;
+      assert.deepEqual(
+        heldAim,
+        { x: 195, y: 716 },
+        'real controller must clamp and retain the empty-space boss aim',
+      );
+      bossDamageHoldAimVerified = true;
+    }
+    if (
+      openBoss
+      && !precisionWeakPointSeen
+      && !holdingBossDamageForTideWarning
+    ) {
       await callHook(
         client,
         `return hook.setMainCannonAim(${openBoss.x}, ${openBoss.y + 9});`,
@@ -3986,20 +4240,29 @@ async function finishFullBattle(
       state = await snapshot(client);
     }
 
-    if (battle.cooldowns['tidal-volley'] <= 0) {
+    if (
+      !holdingBossDamageForTideWarning
+      && battle.cooldowns['tidal-volley'] <= 0
+    ) {
       await callHook(client, `return hook.useSkill('tidal-volley');`);
     }
     if (battle.cooldowns['bubble-barrier'] <= 0) {
       await callHook(client, `return hook.useSkill('bubble-barrier');`);
     }
-    if (!extremeTideUsed && battle.energy >= 100) {
+    if (
+      !holdingBossDamageForTideWarning
+      && !extremeTideUsed
+      && battle.energy >= 100
+    ) {
       extremeTideUsed = await callHook(
         client,
         `return hook.useSkill('extreme-tide');`,
       );
     }
 
-    const stepMs = battle.elapsedMs >= 125_000 ? 250 : 1_000;
+    const stepMs = aliveBoss
+      ? 100
+      : battle.elapsedMs >= 125_000 ? 250 : 1_000;
     await advanceBattle(client, stepMs);
   }
 
@@ -4074,7 +4337,18 @@ async function finishFullBattle(
     [...bossPhasesSeen].sort(),
     ['boss-enraged', 'boss-summon', 'boss-tide'],
   );
-  assert.equal(bossTideWarningSeen, true);
+  assert.equal(
+    bossTideWarningSeen,
+    true,
+    `real boss tide warning signal was not sampled: ${JSON.stringify(bossTideSamples)}`,
+  );
+  if (reducedMotionBossEvidence) {
+    assert.equal(
+      reducedBossEvidenceSeen,
+      true,
+      'reduced full battle must sample a real boss tide warning twice',
+    );
+  }
   assert.deepEqual(
     [...bossWeakPointStatesSeen].sort(),
     ['closed', 'open'],

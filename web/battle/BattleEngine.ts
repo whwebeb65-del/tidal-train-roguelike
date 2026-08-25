@@ -670,13 +670,17 @@ export class BattleEngine {
         stepMs: behaviourStepMs,
         state: enemy.behaviour,
       });
-      enemy.behaviour = result.intent.eliteExposed
-        ? Object.freeze({
+      if (result.intent.eliteExposed) {
+        const exposureDurationMs = result.state.phaseRemainingMs
+          * this.mapProfile.eliteExposureMultiplier;
+        enemy.behaviour = Object.freeze({
           ...result.state,
-          phaseRemainingMs: result.state.phaseRemainingMs
-            * this.mapProfile.eliteExposureMultiplier,
-        })
-        : result.state;
+          phaseRemainingMs: exposureDurationMs,
+          phaseDurationMs: exposureDurationMs,
+        });
+      } else {
+        enemy.behaviour = result.state;
+      }
       this.applyEnemyBehaviourIntent(enemy, result.intent);
       if (this.status !== 'running') return;
     }

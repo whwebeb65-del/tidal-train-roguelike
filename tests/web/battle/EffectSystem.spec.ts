@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { EffectSystem } from '../../../web/battle/EffectSystem';
+import { BattleRenderer } from '../../../web/battle/BattleRenderer';
 import type {
   BattleEvent,
   BattleFrameView,
@@ -17,7 +18,11 @@ import {
   type BattleSkillId,
   type SkillVariantId,
 } from '../../../src/domain/skill/SkillProgressionTypes';
-import { createFrameFixture } from './helpers/BattleFixtures';
+import {
+  createFrameFixture,
+  createPresentationFixture,
+} from './helpers/BattleFixtures';
+import { createRecordingPainter } from './helpers/RecordingPainter';
 
 const DEDICATED_EVOLUTION_EVENTS: Readonly<Partial<Record<
   SkillVariantId,
@@ -145,7 +150,11 @@ describe('EffectSystem', () => {
     ], createFrameFixture());
 
     expect(effects.view.camera.amplitude).toBe(0);
-    expect(effects.view.rings.length).toBeGreaterThanOrEqual(2);
+    expect(effects.view.rings).toHaveLength(1);
+    expect(effects.view.particles.some((particle) => (
+      particle.kind === 'boss-tide'
+    ))).toBe(false);
+    expect(effects.view.cinematic.bossTideWarningActive).toBe(true);
   });
 
   it('adds brush smears to weapon fire and projectile impacts', () => {
@@ -1083,5 +1092,83 @@ describe('EffectSystem', () => {
     expect(effects.view.cinematic.title).not.toBeNull();
     effects.update(1);
     expect(effects.view.cinematic.title).toBeNull();
+  });
+
+  it('exposes the existing tide-warning event for exactly its authoritative duration', () => {
+    const effects = createEffectsForQuality('high');
+    effects.consume(
+      [{ type: 'boss-tide-warning', safeLane: 1, durationMs: 1200 }],
+      createFrameFixture(),
+    );
+
+    expect(effects.view.cinematic.bossTideWarningActive).toBe(true);
+    effects.update(1199);
+    expect(effects.view.cinematic.bossTideWarningActive).toBe(true);
+    effects.update(1);
+    expect(effects.view.cinematic.bossTideWarningActive).toBe(false);
+    effects.reset();
+    expect(effects.view.cinematic.bossTideWarningActive).toBe(false);
+  });
+
+  it('keeps the complete reduced-motion boss warning presentation static', () => {
+    const frame = createFrameFixture({
+      enemies: [{
+        id: 77, kind: 'deep-echo-boss', lane: 1, x: 195, y: 250,
+        hp: 600, maxHp: 1000, shield: 0, speedPerSecond: 0,
+        defenceBroken: false, attackCooldownMs: 1000, ageMs: 0, alive: true,
+        behaviour: {
+          phase: 'boss-tide', phaseRemainingMs: 1100, phaseDurationMs: 1200,
+          cycle: 2, targetLane: 1, safeLane: 1, invulnerable: false,
+          damageTakenMultiplier: 1, weakPointOpen: false,
+        },
+      }],
+      projectiles: [],
+      loot: [],
+    });
+    const effects = createEffectsForQuality('high', true);
+    effects.consume([
+      { type: 'boss-phase-changed', phase: 'boss-tide' },
+      { type: 'boss-tide-warning', safeLane: 1, durationMs: 1200 },
+    ], frame);
+
+    const capture = (timeMs: number) => {
+      const view = effects.view;
+      const painter = createRecordingPainter();
+      new BattleRenderer(painter).render(createPresentationFixture({
+        frame,
+        effects: view,
+        reducedMotion: true,
+        timeMs,
+      }));
+      return {
+        view,
+        commands: painter.commands.filter((command) => (
+          command.kind.startsWith('boss-')
+          || command.kind === 'effect-boss-tide'
+          || command.kind === 'effect-impact-ring'
+        )),
+      };
+    };
+
+    effects.update(300);
+    const first = capture(300);
+    effects.update(300);
+    const second = capture(600);
+
+    expect(first.view).toEqual(second.view);
+    expect(first.commands).toEqual(second.commands);
+    expect(first.view.particles).toEqual([]);
+    expect(first.view.rings).toEqual([]);
+    expect(first.view.cinematic).toMatchObject({
+      title: '船长：绿色潮线是安全航道',
+      bossTideWarningActive: true,
+    });
+
+    effects.update(600);
+    const expired = capture(1200);
+    expect(expired.view.cinematic.bossTideWarningActive).toBe(false);
+    expect(expired.commands.some(
+      (command) => command.kind === 'boss-tide-countdown',
+    )).toBe(false);
   });
 });

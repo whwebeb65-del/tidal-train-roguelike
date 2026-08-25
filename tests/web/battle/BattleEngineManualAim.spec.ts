@@ -231,7 +231,7 @@ describe('BattleEngine manual main-cannon aim', () => {
       target.maxHp = 10_000;
       target.speedPerSecond = 0;
       target.behaviour = {
-        phase: 'boss-enraged', phaseRemainingMs: 5000, cycle: 1,
+        phase: 'boss-enraged', phaseRemainingMs: 5000, phaseDurationMs: 5000, cycle: 1,
         targetLane: 1, safeLane: 0, invulnerable: false,
         damageTakenMultiplier: 1, weakPointOpen: true,
       };

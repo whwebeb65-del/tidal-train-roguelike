@@ -20,6 +20,24 @@ function createBehaviourEngine(mainCannonDamage = 0): BattleEngine {
   });
 }
 
+function createRouteBehaviourEngine(mapId: 'old-port' | 'deep-tunnel'): BattleEngine {
+  return new BattleEngine({
+    battleId: `behaviour-${mapId}`,
+    seed: 22,
+    mode: 'normal',
+    mapId,
+    maxTrainHp: 1_000_000,
+    mainCannonDamage: 0,
+    initialEnergy: 0,
+    repairBonus: 0,
+    enemyHpFlatBonus: 0,
+    enemyHpMultiplier: 1,
+    enemyDamageMultiplier: 1,
+    skillMasteryPower: { 'tidal-volley': 1, 'bubble-barrier': 1, 'extreme-tide': 1 },
+    unlockedSkillVariants: [],
+  });
+}
+
 describe('BattleEngine enemy behaviours', () => {
   it('applies lane shifts, cancellable ranged fire and support shields in simulation time', () => {
     const engine = createBehaviourEngine();
@@ -49,5 +67,27 @@ describe('BattleEngine enemy behaviours', () => {
     for (let index = 0; index < 120; index += 1) engine.update(FIXED_STEP_MS);
 
     expect(engine.frame.enemies.map((enemy) => enemy.behaviour?.phaseRemainingMs)).toEqual(before);
+  });
+
+  it.each([
+    ['old-port', 1440],
+    ['deep-tunnel', 1080],
+  ] as const)('keeps scaled %s elite exposure duration authoritative', (mapId, expected) => {
+    const engine = createRouteBehaviourEngine(mapId);
+    const elite = (engine as unknown as {
+      spawnEnemy: (kind: 'storm-ray-elite', lane: 1) => {
+        behaviour?: { phase: string; phaseRemainingMs: number; phaseDurationMs: number };
+      };
+    }).spawnEnemy('storm-ray-elite', 1);
+
+    engine.update(4_000);
+    engine.update(800);
+    engine.update(450);
+
+    expect(elite.behaviour).toMatchObject({
+      phase: 'elite-exposed',
+      phaseRemainingMs: expected,
+      phaseDurationMs: expected,
+    });
   });
 });

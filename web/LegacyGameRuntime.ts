@@ -2703,6 +2703,8 @@ function e2eSnapshot(): BattleE2ESnapshot {
           )?.stepId ?? null
           : null,
       effectKinds,
+      bossTideWarningActive:
+        effectView?.cinematic.bossTideWarningActive ?? false,
     },
     progression: {
       runLevel: activeBattleEngine?.frame.runLevel ?? 1,

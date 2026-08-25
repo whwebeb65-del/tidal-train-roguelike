@@ -43,6 +43,7 @@ function createController(): BattleE2EController {
         musicIntensity: 0,
         firstRunTutorialStep: 'aim',
         effectKinds: Object.freeze([]),
+        bossTideWarningActive: false,
       },
       progression: {
         runLevel: 1,
@@ -110,6 +111,10 @@ describe('BattleE2EHooks', () => {
     expect(Object.isFrozen(
       target.__TIDAL_TRAIN_E2E__?.snapshot().verification.effectKinds,
     )).toBe(true);
+    expect(
+      target.__TIDAL_TRAIN_E2E__?.snapshot().verification
+        .bossTideWarningActive,
+    ).toBe(false);
     expect(target.__TIDAL_TRAIN_E2E__?.snapshot().progression).toEqual({
       runLevel: 1,
       ranks: { 'tidal-volley': 1 },

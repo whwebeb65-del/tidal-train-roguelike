@@ -36,6 +36,7 @@ export type EnemyBehaviourPhase =
 export interface EnemyBehaviourState {
   readonly phase: EnemyBehaviourPhase;
   readonly phaseRemainingMs: number;
+  readonly phaseDurationMs: number;
   readonly cycle: number;
   readonly targetLane: 0 | 1 | 2;
   readonly safeLane: 0 | 1 | 2;
