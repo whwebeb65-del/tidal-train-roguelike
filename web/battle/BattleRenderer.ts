@@ -26,6 +26,10 @@ import type { TrainMotionFrameView } from './TrainMotionTypes';
 import { ENEMY_GEOMETRY, ENEMY_LABELS } from './EnemyGeometry';
 import { getBossWeakPoint } from './BossWeakPointSystem';
 import { getBattleAtmosphere } from './BattleAtmosphere';
+import {
+  createBossTelegraphView,
+  type BossTelegraphView,
+} from './BossTelegraph';
 
 export interface BattleRenderInput {
   readonly frame: BattleFrameView;
@@ -41,6 +45,19 @@ export interface BattleRenderInput {
 
 const TRAIN_PIVOT_X = 195;
 const TRAIN_PIVOT_Y = 842;
+
+const BOSS_TELEGRAPH_COLORS = Object.freeze({
+  summonPrimary: '#8a7dff',
+  summonSecondary: '#78e8ff',
+  safePrimary: '#6fffd4',
+  safeSecondary: '#d8fff3',
+  dangerPrimary: '#ff6f67',
+  dangerSecondary: '#ffb07a',
+  weakOpenPrimary: '#fff2a2',
+  weakOpenSecondary: '#ff8d73',
+  weakClosedPrimary: '#786ee8',
+  weakClosedSecondary: '#78cfff',
+});
 
 const ENEMY_ART: Readonly<Record<EnemyKind, BattleArtId>> = {
   'bubble-fin': 'bubbleFin',
@@ -372,7 +389,7 @@ export class BattleRenderer {
       this.drawFallbackEyes(enemy.x, y, size.width);
     }
 
-    this.drawEnemyBehaviour(enemy, y, size.width, size.height);
+    this.drawEnemyBehaviour(input, enemy, y, size.width, size.height);
 
     const barWidth = size.width * 0.72;
     const hpRatio = enemy.maxHp > 0 ? enemy.hp / enemy.maxHp : 0;
@@ -444,6 +461,7 @@ export class BattleRenderer {
   }
 
   private drawEnemyBehaviour(
+    input: BattleRenderInput,
     enemy: EnemyState,
     y: number,
     width: number,
@@ -543,41 +561,148 @@ export class BattleRenderer {
         lineWidth: 5,
       });
     }
-    if (
-      enemy.kind === 'deep-echo-boss'
-      && (enemy.behaviour?.phase === 'boss-tide' || enemy.behaviour?.phase === 'boss-enraged')
-    ) {
-      const safeLane = enemy.behaviour.safeLane;
-      for (const lane of [0, 1, 2] as const) {
+    const bossView = createBossTelegraphView({
+      enemy,
+      timeMs: input.timeMs,
+      reducedMotion: input.reducedMotion,
+      backgroundLayers: input.renderBudget.backgroundLayers,
+    });
+    if (!bossView) return;
+    if (bossView.phase === 'summon') {
+      this.drawBossSummonTelegraph(enemy, y, width, height, bossView);
+      return;
+    }
+    if (bossView.phase === 'tide') {
+      this.drawBossTideTelegraph(bossView);
+      return;
+    }
+    this.drawBossEnragedTelegraph(enemy, y, width, height, bossView);
+  }
+
+  private drawBossSummonTelegraph(
+    enemy: EnemyState,
+    y: number,
+    width: number,
+    height: number,
+    view: BossTelegraphView,
+  ): void {
+    const centerY = y + height * 0.05;
+    const pulse = Math.sin(view.motionPhase * Math.PI * 2);
+    for (let index = 0; index < 3; index += 1) {
+      const angle = -Math.PI / 2 + index * Math.PI * 2 / 3;
+      this.painter.ellipse({
+        kind: 'boss-summon-beacon', layer: 'front-effects',
+        x: enemy.x + Math.cos(angle) * width * 0.36,
+        y: centerY + Math.sin(angle) * height * 0.34,
+        radiusX: 12 + pulse * 2, radiusY: 19 + pulse * 3,
+        stroke: BOSS_TELEGRAPH_COLORS.summonPrimary, lineWidth: 3,
+        alpha: 0.66 + pulse * 0.12,
+      });
+    }
+    for (let index = 0; index < view.detail; index += 1) {
+      const radius = 42 + index * 18 + pulse * 5;
+      this.painter.ellipse({
+        kind: 'boss-summon-echo', layer: 'front-effects', x: enemy.x, y: centerY,
+        radiusX: radius, radiusY: radius * 0.58,
+        stroke: BOSS_TELEGRAPH_COLORS.summonSecondary, lineWidth: 2,
+        alpha: 0.5 - index * 0.09 + pulse * 0.08,
+      });
+    }
+  }
+
+  private drawBossTideTelegraph(view: BossTelegraphView): void {
+    for (const lane of [0, 1, 2] as const) {
+      const safe = lane === view.safeLane;
+      const x = laneX(lane);
+      this.painter.line({
+        kind: safe ? 'boss-safe-lane' : 'boss-danger-lane', layer: 'front-effects',
+        points: [{ x, y: 150 }, { x: x + (lane - 1) * 14, y: 375 }, { x, y: 600 }],
+        stroke: safe ? BOSS_TELEGRAPH_COLORS.safePrimary : BOSS_TELEGRAPH_COLORS.dangerPrimary,
+        lineWidth: safe ? 9 : 16, alpha: safe ? 0.76 : 0.68, curve: true,
+      });
+      for (let index = 0; index < view.detail; index += 1) {
+        const progress = (index + 1 + view.motionPhase) / (view.detail + 1);
+        const chevronY = 175 + progress * 390;
+        const width = 9 + index * 2;
         this.painter.line({
-          kind: lane === safeLane ? 'boss-safe-lane' : 'boss-danger-lane',
-          layer: 'front-effects',
-          points: [
-            { x: laneX(lane), y: 124 },
-            { x: laneX(lane), y: 686 },
-          ],
-          stroke: lane === safeLane
-            ? 'rgba(111, 255, 212, 0.72)'
-            : 'rgba(255, 93, 78, 0.64)',
-          lineWidth: lane === safeLane ? 9 : 18,
-          alpha: 0.78,
+          kind: 'boss-current-chevron', layer: 'front-effects',
+          points: [{ x: x - width, y: chevronY - 7 }, { x, y: chevronY + 7 }, { x: x + width, y: chevronY - 7 }],
+          stroke: safe ? BOSS_TELEGRAPH_COLORS.safeSecondary : BOSS_TELEGRAPH_COLORS.dangerSecondary,
+          lineWidth: 3, alpha: 0.82, lineCap: 'round',
         });
       }
     }
-    const weakPoint = getBossWeakPoint(enemy);
-    if (weakPoint) {
-      this.painter.ellipse({
-        kind: 'boss-weakpoint',
-        layer: 'front-effects',
-        x: weakPoint.x,
-        y: weakPoint.y + (y - enemy.y),
-        radiusX: weakPoint.radius,
-        radiusY: weakPoint.radius,
-        fill: 'rgba(255, 247, 185, 0.34)',
-        stroke: '#fff2a2',
-        lineWidth: 5,
+    if (!view.tideWarning) return;
+    const brightNotches = Math.ceil(view.progress * 4);
+    for (let index = 0; index < 4; index += 1) {
+      const x = laneX(view.safeLane) - 24 + index * 16;
+      this.painter.line({
+        kind: 'boss-tide-countdown', layer: 'front-effects',
+        points: [{ x, y: 584 }, { x, y: 600 }],
+        stroke: BOSS_TELEGRAPH_COLORS.safeSecondary, lineWidth: 4,
+        alpha: index < brightNotches ? 0.94 : 0.28, lineCap: 'round',
       });
     }
+  }
+
+  private drawBossEnragedTelegraph(
+    enemy: EnemyState,
+    y: number,
+    width: number,
+    height: number,
+    view: BossTelegraphView,
+  ): void {
+    const centerY = y + height * 0.05;
+    const primary = view.weakPointOpen ? BOSS_TELEGRAPH_COLORS.weakOpenPrimary : BOSS_TELEGRAPH_COLORS.weakClosedPrimary;
+    const secondary = view.weakPointOpen ? BOSS_TELEGRAPH_COLORS.weakOpenSecondary : BOSS_TELEGRAPH_COLORS.weakClosedSecondary;
+    const pulse = Math.sin(view.motionPhase * Math.PI * 2);
+    this.painter.ellipse({
+      kind: 'boss-enraged-aura', layer: 'front-effects', x: enemy.x, y: centerY,
+      radiusX: width * (0.5 + pulse * 0.025), radiusY: height * (0.42 + pulse * 0.025),
+      stroke: primary, lineWidth: 5, alpha: 0.46 + pulse * 0.1,
+    });
+    const petalRadius = view.weakPointOpen ? 49 : 29;
+    const fold = view.weakPointOpen ? 24 : 8;
+    for (let index = 0; index < 4; index += 1) {
+      const angle = -Math.PI / 2 + index * Math.PI / 2;
+      const cosine = Math.cos(angle);
+      const sine = Math.sin(angle);
+      const perpendicularX = -sine;
+      const perpendicularY = cosine;
+      const tipX = enemy.x + cosine * petalRadius;
+      const tipY = centerY + sine * petalRadius;
+      this.painter.line({
+        kind: 'boss-weakpoint-petal', layer: 'front-effects',
+        points: [
+          { x: enemy.x + perpendicularX * fold, y: centerY + perpendicularY * fold },
+          { x: tipX, y: tipY },
+          { x: enemy.x - perpendicularX * fold, y: centerY - perpendicularY * fold },
+        ],
+        stroke: secondary, lineWidth: view.weakPointOpen ? 4 : 3, alpha: 0.9, lineCap: 'round',
+      });
+    }
+    const brightNotches = Math.ceil(view.progress * 4);
+    for (let index = 0; index < 4; index += 1) {
+      const angle = -Math.PI / 4 + index * Math.PI / 2;
+      const cosine = Math.cos(angle);
+      const sine = Math.sin(angle);
+      this.painter.line({
+        kind: 'boss-weakpoint-countdown', layer: 'front-effects',
+        points: [
+          { x: enemy.x + cosine * 64, y: centerY + sine * 64 },
+          { x: enemy.x + cosine * 76, y: centerY + sine * 76 },
+        ],
+        stroke: primary, lineWidth: 3, alpha: index < brightNotches ? 0.95 : 0.3, lineCap: 'round',
+      });
+    }
+    const weakPoint = getBossWeakPoint(enemy);
+    if (!weakPoint) return;
+    this.painter.ellipse({
+      kind: 'boss-weakpoint', layer: 'front-effects',
+      x: weakPoint.x, y: weakPoint.y + (y - enemy.y),
+      radiusX: weakPoint.radius, radiusY: weakPoint.radius,
+      fill: 'rgba(255, 247, 185, 0.34)', stroke: BOSS_TELEGRAPH_COLORS.weakOpenPrimary, lineWidth: 5,
+    });
   }
 
   private drawFallbackEyes(x: number, y: number, width: number): void {

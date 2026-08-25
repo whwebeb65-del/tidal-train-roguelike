@@ -20,12 +20,17 @@ import {
 } from './helpers/BattleFixtures';
 import { createRecordingPainter } from './helpers/RecordingPainter';
 import { getRenderBudget } from '../../../web/battle/QualityMonitor';
+import type { QualityLevel } from '../../../web/battle/QualityMonitor';
 import {
   ENEMY_GEOMETRY,
   enemySpawnY,
 } from '../../../web/battle/EnemyGeometry';
-import type { EnemyKind } from '../../../web/battle/BattleTypes';
-import type { BattleEvent } from '../../../web/battle/BattleTypes';
+import type {
+  BattleEvent,
+  EnemyBehaviourPhase,
+  EnemyKind,
+  EnemyState,
+} from '../../../web/battle/BattleTypes';
 import {
   SKILL_VARIANT_IDS,
   type SkillVariantId,
@@ -46,6 +51,64 @@ function renderCommands(
   const painter = createRecordingPainter();
   new BattleRenderer(painter).render(createPresentationFixture(input));
   return painter.commands;
+}
+
+const BOSS_TELEGRAPH_KINDS = new Set([
+  'boss-summon-beacon', 'boss-summon-echo',
+  'boss-safe-lane', 'boss-danger-lane', 'boss-current-chevron',
+  'boss-tide-countdown', 'boss-enraged-aura', 'boss-weakpoint',
+  'boss-weakpoint-petal', 'boss-weakpoint-countdown',
+]);
+
+function renderBossPhase(
+  phase: Extract<EnemyBehaviourPhase, 'boss-summon' | 'boss-tide' | 'boss-enraged'>,
+  options: {
+    readonly quality?: QualityLevel;
+    readonly timeMs?: number;
+    readonly reducedMotion?: boolean;
+    readonly phaseRemainingMs?: number;
+    readonly safeLane?: 0 | 1 | 2;
+    readonly weakPointOpen?: boolean;
+  } = {},
+): BattleDrawCommand[] {
+  const boss: EnemyState = {
+    id: 77, kind: 'deep-echo-boss', lane: 1, x: 195, y: 250,
+    hp: 800, maxHp: 1000, shield: 0, speedPerSecond: 0,
+    defenceBroken: false, attackCooldownMs: 1000, ageMs: 0, alive: true,
+    behaviour: {
+      phase,
+      phaseRemainingMs: options.phaseRemainingMs ?? (phase === 'boss-summon' ? 4000 : phase === 'boss-tide' ? 600 : 700),
+      cycle: 3, targetLane: 1, safeLane: options.safeLane ?? 1,
+      invulnerable: false,
+      damageTakenMultiplier: phase === 'boss-enraged' ? 1.1 : 1,
+      weakPointOpen: options.weakPointOpen ?? phase === 'boss-enraged',
+    },
+  };
+  const input = createPresentationFixture({
+    frame: { enemies: [boss], projectiles: [], loot: [] },
+    timeMs: options.timeMs ?? 900,
+    reducedMotion: options.reducedMotion ?? false,
+  });
+  const painter = createRecordingPainter();
+  new BattleRenderer(painter).render({
+    ...input,
+    renderBudget: getRenderBudget(options.quality ?? 'high'),
+  });
+  return painter.commands;
+}
+
+function isBossTelegraphCommand(command: BattleDrawCommand): boolean {
+  return BOSS_TELEGRAPH_KINDS.has(command.kind);
+}
+
+function onlyBossTelegraphCommands(commands: readonly BattleDrawCommand[]) {
+  return commands.filter(isBossTelegraphCommand);
+}
+
+function commandMaxY(command: BattleDrawCommand): readonly number[] {
+  if ('points' in command) return command.points.map((point) => point.y);
+  if ('radiusY' in command) return [command.y + command.radiusY + (command.lineWidth ?? 0) / 2];
+  return [];
 }
 
 function findCommand<T extends BattleDrawCommand>(
@@ -234,6 +297,52 @@ function trainSignatureFeature(commands: readonly BattleDrawCommand[]) {
 }
 
 describe('BattleRenderer', () => {
+  it.each([
+    ['boss-summon', ['boss-summon-beacon', 'boss-summon-echo']],
+    ['boss-tide', ['boss-safe-lane', 'boss-danger-lane', 'boss-current-chevron', 'boss-tide-countdown']],
+    ['boss-enraged', ['boss-enraged-aura', 'boss-weakpoint-petal', 'boss-weakpoint-countdown']],
+  ] as const)('draws a distinct %s world telegraph', (phase, expectedKinds) => {
+    const commands = renderBossPhase(phase, { quality: 'high' });
+    expect(commands.map((command) => command.kind)).toEqual(expect.arrayContaining([...expectedKinds]));
+  });
+
+  it('keeps exactly one safe lane, two danger lanes, and all tide geometry above y 610', () => {
+    const commands = renderBossPhase('boss-tide', { phaseRemainingMs: 600, safeLane: 1 });
+    expect(commands.filter((command) => command.kind === 'boss-safe-lane')).toHaveLength(1);
+    expect(commands.filter((command) => command.kind === 'boss-danger-lane')).toHaveLength(2);
+    const tide = commands.filter((command) => command.kind.startsWith('boss-') && ['boss-safe-lane', 'boss-danger-lane', 'boss-current-chevron', 'boss-tide-countdown'].includes(command.kind));
+    expect(Math.max(...tide.flatMap(commandMaxY))).toBeLessThanOrEqual(610);
+  });
+
+  it('distinguishes open and closed weak points without changing hit geometry', () => {
+    const open = renderBossPhase('boss-enraged', { weakPointOpen: true, phaseRemainingMs: 700 });
+    const closed = renderBossPhase('boss-enraged', { weakPointOpen: false, phaseRemainingMs: 900 });
+    expect(open.some((command) => command.kind === 'boss-weakpoint')).toBe(true);
+    expect(closed.some((command) => command.kind === 'boss-weakpoint')).toBe(false);
+    expect(open.filter((command) => command.kind === 'boss-weakpoint-petal')).not.toEqual(
+      closed.filter((command) => command.kind === 'boss-weakpoint-petal'),
+    );
+  });
+
+  it.each([['high', 32], ['medium', 24], ['low', 18]] as const)(
+    'keeps %s boss choreography under %i commands while retaining identity',
+    (quality, limit) => {
+      for (const phase of ['boss-summon', 'boss-tide', 'boss-enraged'] as const) {
+        const bossCommands = renderBossPhase(phase, { quality }).filter(isBossTelegraphCommand);
+        expect(bossCommands.length).toBeGreaterThan(0);
+        expect(bossCommands.length).toBeLessThanOrEqual(limit);
+      }
+    },
+  );
+
+  it('freezes every boss telegraph command in reduced motion', () => {
+    const before = renderBossPhase('boss-tide', { reducedMotion: true, timeMs: 0 });
+    const after = renderBossPhase('boss-tide', { reducedMotion: true, timeMs: 5000 });
+    expect(onlyBossTelegraphCommands(after)).toEqual(onlyBossTelegraphCommands(before));
+    const animated = renderBossPhase('boss-tide', { reducedMotion: false, timeMs: 5000 });
+    expect(onlyBossTelegraphCommands(animated)).not.toEqual(onlyBossTelegraphCommands(before));
+  });
+
   it('layers atmosphere and one grounded shadow below every living enemy', () => {
     const commands = renderCommands({ reducedMotion: true });
     expect(commands.map((command) => command.kind)).toEqual(expect.arrayContaining([
@@ -339,13 +448,13 @@ describe('BattleRenderer', () => {
       'snail-spiral',
       'enemy-shield',
       'elite-lane-telegraph',
-      'boss-danger-lane',
-      'boss-safe-lane',
+      'boss-enraged-aura',
+      'boss-weakpoint-petal',
+      'boss-weakpoint-countdown',
       'boss-weakpoint',
     ]));
-    const laneWarnings = commands.filter((item) => item.kind === 'boss-danger-lane');
-    expect(laneWarnings).toHaveLength(2);
-    expect(commands.filter((item) => item.kind === 'boss-safe-lane')).toHaveLength(1);
+    expect(commands.filter((item) => item.kind === 'boss-weakpoint-petal')).toHaveLength(4);
+    expect(commands.filter((item) => item.kind === 'boss-weakpoint-countdown')).toHaveLength(4);
   });
 
   it('draws rank and variant effect semantics as distinct bounded commands', () => {
