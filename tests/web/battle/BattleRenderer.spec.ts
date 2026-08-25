@@ -106,7 +106,9 @@ function onlyBossTelegraphCommands(commands: readonly BattleDrawCommand[]) {
 }
 
 function commandMaxY(command: BattleDrawCommand): readonly number[] {
-  if ('points' in command) return command.points.map((point) => point.y);
+  if ('points' in command) {
+    return command.points.map((point) => point.y + (command.lineWidth ?? 0) / 2);
+  }
   if ('radiusY' in command) return [command.y + command.radiusY + (command.lineWidth ?? 0) / 2];
   return [];
 }
@@ -304,6 +306,18 @@ describe('BattleRenderer', () => {
   ] as const)('draws a distinct %s world telegraph', (phase, expectedKinds) => {
     const commands = renderBossPhase(phase, { quality: 'high' });
     expect(commands.map((command) => command.kind)).toEqual(expect.arrayContaining([...expectedKinds]));
+  });
+
+  it('includes the tide line stroke extent in its maximum Y bound', () => {
+    const command: LineDrawCommand = {
+      kind: 'boss-danger-lane',
+      layer: 'front-effects',
+      points: [{ x: 195, y: 600 }],
+      stroke: '#ff6f67',
+      lineWidth: 21,
+    };
+
+    expect(commandMaxY(command)).toEqual([610.5]);
   });
 
   it('keeps exactly one safe lane, two danger lanes, and all tide geometry above y 610', () => {
