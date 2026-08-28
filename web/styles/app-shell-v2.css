@@ -201,9 +201,73 @@
 
 .app-shell--battle .app-notice.station-announcement {
   top: auto;
-  bottom: calc(210px + env(safe-area-inset-bottom));
-  width: min(340px, calc(100% - 32px));
+  right: auto;
+  left: calc(12px + env(safe-area-inset-left));
+  bottom: calc(18px + env(safe-area-inset-bottom));
+  width: min(236px, calc(100% - 96px));
+  max-width: 236px;
+  min-height: 0;
+  height: 46px;
+  max-height: 46px;
   margin: 0;
+  padding: 6px 10px 6px 8px;
+  overflow: hidden;
+  border: 1px solid #e1b85c;
+  border-radius: 4px;
+  color: #f7ebc9;
+  background: rgb(5 39 60 / 91%);
+  box-shadow: 0 4px 14px rgb(2 14 25 / 48%), inset 0 0 0 1px rgb(168 220 228 / 12%);
+  font-size: 10px;
+  line-height: 1.25;
+  pointer-events: none;
+  transform: translateY(8px);
+}
+
+.app-shell--battle .app-notice.station-announcement.is-visible {
+  transform: translateY(0);
+}
+
+.app-shell--battle .app-notice.station-announcement::before {
+  width: auto;
+  height: auto;
+  padding: 2px 4px;
+  border: 1px solid rgb(246 208 111 / 76%);
+  border-radius: 2px;
+  color: #ffe7a0;
+  background: rgb(11 62 82 / 88%);
+  box-shadow: none;
+  content: 'RADIO';
+  font-size: 7px;
+  font-weight: 900;
+  letter-spacing: .08em;
+}
+
+.app-shell--battle .app-notice.station-announcement::after {
+  top: 5px;
+  right: 5px;
+  bottom: auto;
+  width: 24px;
+  height: 36px;
+  border: 0;
+  background: repeating-radial-gradient(
+    ellipse at 100% 50%,
+    transparent 0 7px,
+    rgb(163 214 221 / 42%) 7px 8px,
+    transparent 8px 12px,
+    rgb(163 214 221 / 42%) 12px 13px,
+    transparent 13px 18px
+  );
+  box-shadow: none;
+  transform: none;
+}
+
+.app-shell--battle .app-notice.station-announcement [data-notice-copy] {
+  min-width: 0;
+  padding-right: 15px;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 .app-hub-nav {
@@ -316,6 +380,12 @@
   .app-notice.is-visible {
     transition: none;
     transform: translateX(-50%);
+  }
+
+  .app-shell--battle .app-notice.station-announcement,
+  .app-shell--battle .app-notice.station-announcement.is-visible {
+    transition: none;
+    transform: none;
   }
 
   .hub-nav__item[aria-current="page"],

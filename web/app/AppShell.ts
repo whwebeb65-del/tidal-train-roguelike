@@ -5,6 +5,9 @@ import {
   type SettingsPanelModel,
 } from '../views/SettingsPanelView';
 
+const STATION_NOTICE_DURATION_MS = 4200;
+const BATTLE_NOTICE_DURATION_MS = 2400;
+
 export interface CurrencySnapshot {
   readonly gears: number;
   readonly routeMarks: number;
@@ -92,7 +95,7 @@ export function renderAppShell(snapshot: CurrencySnapshot): string {
     </header>
     <main class="scene-viewport">
       <div id="scene-host" class="scene-host" aria-live="polite"></div>
-      <div id="app-notice" class="notice app-notice station-announcement" role="status" aria-atomic="true"></div>
+      <div id="app-notice" class="notice app-notice station-announcement" role="status" aria-atomic="true"><span data-notice-copy></span></div>
     </main>
     <nav class="hub-nav app-hub-nav" aria-label="主要功能">
       ${navigationItem('station', '⌂', '车站')}
@@ -112,6 +115,7 @@ export function mountAppShell(
   root.innerHTML = renderAppShell(snapshot);
   const sceneHost = requireElement<HTMLElement>(root, '#scene-host');
   const noticeHost = requireElement<HTMLElement>(root, '#app-notice');
+  const noticeCopy = requireElement<HTMLElement>(noticeHost, '[data-notice-copy]');
   const navigation = requireElement<HTMLElement>(root, '.hub-nav');
   const settingsHost = requireElement<HTMLElement>(root, '#settings-host');
   let noticeTimer: ReturnType<typeof globalThis.setTimeout> | null = null;
@@ -161,14 +165,19 @@ export function mountAppShell(
         globalThis.clearTimeout(noticeTimer);
         noticeTimer = null;
       }
-      noticeHost.textContent = message;
+      noticeCopy.textContent = message;
       noticeHost.classList.toggle('is-visible', message.length > 0);
-      if (message.length > 0) {
-        noticeTimer = globalThis.setTimeout(() => {
-          noticeHost.classList.remove('is-visible');
-          noticeTimer = null;
-        }, 4200);
-      }
+      if (message.length === 0) return;
+
+      const isBattle = root.firstElementChild?.classList
+        .contains('app-shell--battle') ?? false;
+      const duration = isBattle
+        ? BATTLE_NOTICE_DURATION_MS
+        : STATION_NOTICE_DURATION_MS;
+      noticeTimer = globalThis.setTimeout(() => {
+        noticeHost.classList.remove('is-visible');
+        noticeTimer = null;
+      }, duration);
     },
 
     setNavigationHidden(hidden): void {

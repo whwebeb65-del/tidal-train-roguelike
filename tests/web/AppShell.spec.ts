@@ -1,15 +1,22 @@
+// @vitest-environment jsdom
 import { readFileSync } from 'node:fs';
-import { describe, expect, it } from 'vitest';
-import { renderAppShell } from '../../web/app/AppShell';
+import { resolve } from 'node:path';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { mountAppShell, renderAppShell } from '../../web/app/AppShell';
 
 const appShellCss = readFileSync(
-  new URL('../../web/styles/app-shell-v2.css', import.meta.url),
+  resolve(process.cwd(), 'web/styles/app-shell-v2.css'),
   'utf8',
 );
 const responsiveCss = readFileSync(
-  new URL('../../web/styles/responsive.css', import.meta.url),
+  resolve(process.cwd(), 'web/styles/responsive.css'),
   'utf8',
 );
+
+afterEach(() => {
+  vi.useRealTimers();
+  document.body.replaceChildren();
+});
 
 describe('AppShell', () => {
   it('renders five independent scene actions and one scene host', () => {
@@ -76,8 +83,8 @@ describe('AppShell', () => {
 
   it('styles navigation as an accessible station wayfinding rail', () => {
     const css = [
-      readFileSync(new URL('../../web/styles/shell.css', import.meta.url), 'utf8'),
-      readFileSync(new URL('../../web/styles/app-shell-v2.css', import.meta.url), 'utf8'),
+      readFileSync(resolve(process.cwd(), 'web/styles/shell.css'), 'utf8'),
+      readFileSync(resolve(process.cwd(), 'web/styles/app-shell-v2.css'), 'utf8'),
     ].join('\n');
 
     expect(css).toContain('.app-hub-nav::before');
@@ -87,9 +94,9 @@ describe('AppShell', () => {
 
   it('keeps topbar actions at least 44px on both axes in mobile overrides', () => {
     const css = [
-      readFileSync(new URL('../../web/styles/responsive.css', import.meta.url), 'utf8'),
-      readFileSync(new URL('../../web/styles/app-shell-v2.css', import.meta.url), 'utf8'),
-      readFileSync(new URL('../../web/styles/settings-panel.css', import.meta.url), 'utf8'),
+      readFileSync(resolve(process.cwd(), 'web/styles/responsive.css'), 'utf8'),
+      readFileSync(resolve(process.cwd(), 'web/styles/app-shell-v2.css'), 'utf8'),
+      readFileSync(resolve(process.cwd(), 'web/styles/settings-panel.css'), 'utf8'),
     ].join('\n');
 
     expect(css).toMatch(
@@ -99,7 +106,7 @@ describe('AppShell', () => {
 
   it('gives the settings close control one CSS pixel of cross-platform touch slack', () => {
     const css = readFileSync(
-      new URL('../../web/styles/settings-panel.css', import.meta.url),
+      resolve(process.cwd(), 'web/styles/settings-panel.css'),
       'utf8',
     );
 
@@ -111,6 +118,48 @@ describe('AppShell', () => {
   it('removes notice transition and vertical displacement for reduced motion', () => {
     expect(appShellCss).toMatch(
       /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.app-notice,[\s\S]*?\.app-notice\.is-visible\s*\{[^}]*transition:\s*none;[^}]*transform:\s*translateX\(-50%\);/,
+    );
+  });
+
+  it('uses a shorter battle radio timer and restarts it for new copy', () => {
+    vi.useFakeTimers();
+    const root = document.createElement('div');
+    const shell = mountAppShell(root, { gears: 0, routeMarks: 0, starTickets: 0 });
+
+    shell.setNotice('车站公告');
+    vi.advanceTimersByTime(4199);
+    expect(shell.noticeHost.classList.contains('is-visible')).toBe(true);
+    vi.advanceTimersByTime(1);
+    expect(shell.noticeHost.classList.contains('is-visible')).toBe(false);
+
+    shell.setBattleChrome(true);
+    shell.setNotice('第一条电台短讯');
+    vi.advanceTimersByTime(2300);
+    shell.setNotice('第二条电台短讯');
+    vi.advanceTimersByTime(2399);
+    expect(shell.noticeHost.classList.contains('is-visible')).toBe(true);
+    expect(shell.noticeHost.querySelector('[data-notice-copy]')?.textContent)
+      .toBe('第二条电台短讯');
+    expect(shell.noticeHost.getAttribute('role')).toBe('status');
+    vi.advanceTimersByTime(1);
+    expect(shell.noticeHost.classList.contains('is-visible')).toBe(false);
+  });
+
+  it('styles battle notices as compact noninteractive radio strips', () => {
+    expect(appShellCss).toMatch(
+      /\.app-shell--battle \.app-notice\.station-announcement\s*\{[^}]*left:\s*calc\(12px \+ env\(safe-area-inset-left\)\);[^}]*bottom:\s*calc\(18px \+ env\(safe-area-inset-bottom\)\);[^}]*width:\s*min\(236px, calc\(100% - 96px\)\);[^}]*max-width:\s*236px;[^}]*height:\s*46px;[^}]*max-height:\s*46px;[^}]*pointer-events:\s*none;/s,
+    );
+    expect(appShellCss).toMatch(
+      /\.app-shell--battle \.app-notice\.station-announcement::before\s*\{[^}]*content:\s*'RADIO';/s,
+    );
+    expect(appShellCss).toMatch(
+      /\.app-shell--battle \.app-notice\.station-announcement::after\s*\{[^}]*repeating-radial-gradient/s,
+    );
+    expect(appShellCss).toMatch(
+      /\.app-shell--battle \.app-notice\.station-announcement \[data-notice-copy\]\s*\{[^}]*-webkit-line-clamp:\s*2;/s,
+    );
+    expect(appShellCss).toMatch(
+      /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.app-shell--battle \.app-notice\.station-announcement,[\s\S]*?\.app-shell--battle \.app-notice\.station-announcement\.is-visible\s*\{[^}]*transition:\s*none;[^}]*transform:\s*none;/,
     );
   });
 
