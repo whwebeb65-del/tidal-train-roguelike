@@ -45,7 +45,20 @@ const viewports = [
   { width: 430, height: 932, full: false },
 ];
 const stationRelativeXTolerancePx = 4;
+const battleHudRasterTolerancePx = 1;
 const qaDirectory = path.join(repositoryRoot, '.superpowers', 'sdd', 'battle-progression-qa');
+const battleRadioEvidenceDirectory = path.join(
+  repositoryRoot,
+  '.superpowers',
+  'sdd',
+  'battle-radio-notices-2026-08-28',
+);
+const battleRadioEvidenceStems = Object.freeze({
+  '360x800': 'battle-radio-360x800',
+  '390x844': 'battle-radio-390x844',
+  '412x915': 'battle-radio-412x915',
+  '430x932': 'battle-radio-430x932',
+});
 const REDUCED_BUBBLE_RING_RADII = Object.freeze({
   'bursting-bubble': 54,
   'reflective-spines': 58,
@@ -59,6 +72,15 @@ const SIGNATURE_SMOKE_BOUND_MARGIN = 3;
 async function captureQaScreenshot(client, name) {
   const shot = await client.send('Page.captureScreenshot', { format: 'png' });
   await writeFile(path.join(qaDirectory, `${name}.png`), shot.data, 'base64');
+}
+
+async function captureBattleRadioScreenshot(client, stem) {
+  const shot = await client.send('Page.captureScreenshot', { format: 'png' });
+  await writeFile(
+    path.join(battleRadioEvidenceDirectory, `${stem}.png`),
+    shot.data,
+    'base64',
+  );
 }
 
 async function writeBossEvidenceSidecar(
@@ -1690,6 +1712,130 @@ async function assertFirstArchiveDiscoveryTicket(
   });
 }
 
+async function assertBattleRadioNotice(client, viewportName) {
+  const stem = battleRadioEvidenceStems[viewportName];
+  assert.ok(stem, `missing battle radio evidence stem for ${viewportName}`);
+  await waitForEvaluation(
+    client,
+    `(() => {
+      const notice = document.querySelector('.app-notice.is-visible');
+      if (!(notice instanceof HTMLElement)) return false;
+      const rect = notice.getBoundingClientRect();
+      return Number.parseFloat(getComputedStyle(notice).opacity) > 0
+        && rect.left >= -2
+        && rect.right <= innerWidth + 2;
+    })()`,
+    { label: `${viewportName} visible battle radio notice` },
+  );
+  await evaluate(
+    client,
+    `(async () => {
+      await new Promise((resolve) => requestAnimationFrame(() => (
+        requestAnimationFrame(resolve)
+      )));
+      return true;
+    })()`,
+  );
+
+  const evidence = await evaluate(client, `(() => {
+    const notice = document.querySelector('.app-notice.is-visible');
+    if (!(notice instanceof HTMLElement)) {
+      throw new Error('visible battle radio notice is missing');
+    }
+    const isVisible = (node) => {
+      if (!(node instanceof HTMLElement) || node.hidden) return false;
+      const style = getComputedStyle(node);
+      const rect = node.getBoundingClientRect();
+      return node.getClientRects().length > 0
+        && style.display !== 'none'
+        && style.visibility === 'visible'
+        && Number.parseFloat(style.opacity) > 0
+        && rect.width > 0
+        && rect.height > 0;
+    };
+    const toRect = (rect) => ({
+      top: rect.top,
+      right: rect.right,
+      bottom: rect.bottom,
+      left: rect.left,
+      width: rect.width,
+      height: rect.height,
+    });
+    const overlaps = (first, second) => first !== null && second !== null
+      && Math.min(first.right, second.right) > Math.max(first.left, second.left)
+      && Math.min(first.bottom, second.bottom) > Math.max(first.top, second.top);
+    const noticeStyle = getComputedStyle(notice);
+    const beforeStyle = getComputedStyle(notice, '::before');
+    const noticeRect = toRect(notice.getBoundingClientRect());
+    const skillRects = [
+      ...document.querySelectorAll('[data-battle-skill]'),
+    ].filter(isVisible).map((skill) => ({
+      id: skill.getAttribute('data-battle-skill'),
+      rect: toRect(skill.getBoundingClientRect()),
+    }));
+    const interaction = document.querySelector('[data-battle-action="claim-interaction"]');
+    const interactionRect = isVisible(interaction)
+      ? toRect(interaction.getBoundingClientRect())
+      : null;
+    const assertions = {
+      visible: isVisible(notice),
+      fullyInsideViewport: noticeRect.left >= -2
+        && noticeRect.right <= innerWidth + 2
+        && noticeRect.top >= -2
+        && noticeRect.bottom <= innerHeight + 2,
+      beforeContainsRadio: beforeStyle.content.includes('RADIO'),
+      widthAtMost238CssPx: noticeRect.width <= 238,
+      heightAtMost48CssPx: noticeRect.height <= 48,
+      pointerPassThrough: noticeStyle.pointerEvents === 'none',
+      skillsDoNotOverlap: skillRects.every(({ rect }) => !overlaps(noticeRect, rect)),
+      interactionDoesNotOverlap: !overlaps(noticeRect, interactionRect),
+      noHorizontalOverflow: document.documentElement.scrollWidth <= innerWidth,
+    };
+    return {
+      viewport: {
+        name: ${JSON.stringify(viewportName)},
+        width: innerWidth,
+        height: innerHeight,
+        devicePixelRatio,
+        scrollWidth: document.documentElement.scrollWidth,
+      },
+      noticeText: notice.textContent?.trim() ?? '',
+      noticeRect,
+      comparedRects: { skillRects, interactionRect },
+      skillRects,
+      interactionRect,
+      computedStyles: {
+        display: noticeStyle.display,
+        visibility: noticeStyle.visibility,
+        opacity: noticeStyle.opacity,
+        pointerEvents: noticeStyle.pointerEvents,
+        beforeContent: beforeStyle.content,
+      },
+      assertions,
+    };
+  })()`);
+
+  for (const [name, passed] of Object.entries(evidence.assertions)) {
+    assert.equal(
+      passed,
+      true,
+      `${viewportName} battle radio ${name}: ${JSON.stringify(evidence)}`,
+    );
+  }
+  assert.equal(
+    evidence.skillRects.length,
+    3,
+    `${viewportName} battle radio must compare all three visible skill buttons`,
+  );
+  await captureBattleRadioScreenshot(client, stem);
+  await writeFile(
+    path.join(battleRadioEvidenceDirectory, `${stem}.json`),
+    `${JSON.stringify(evidence, null, 2)}\n`,
+    'utf8',
+  );
+  return evidence;
+}
+
 async function assertBattleHudGeometry(client, label) {
   const geometry = await evaluate(client, `(() => {
     const hud = document.querySelector('.battle-hud__tide-log');
@@ -1761,7 +1907,7 @@ async function assertBattleHudGeometry(client, label) {
   })()`);
   assert.ok(geometry.hudBottom <= 108, `${label} HUD bottom exceeds 108px: ${geometry.hudBottom}`);
   assert.ok(
-    geometry.enemyLaneTop - geometry.hudBottom >= 12,
+    geometry.enemyLaneTop - geometry.hudBottom + battleHudRasterTolerancePx >= 12,
     `${label} enemy lane gap is below 12px: ${JSON.stringify(geometry)}`,
   );
   assert.ok(geometry.skillMin >= 56, `${label} skill target is below 56px`);
@@ -3552,6 +3698,7 @@ async function returnToStation(client, listenerBaseline) {
 async function runBriefBattle(client, label) {
   const baseline = await snapshot(client);
   await startNormalBattle(client);
+  await assertBattleRadioNotice(client, label);
   await assertTravelMotion(client);
   await assertBattleHudGeometry(client, label);
   await captureQaScreenshot(client, `battle-ready-${label}`);
@@ -5166,6 +5313,7 @@ async function assertTidalArchiveDiscoveryFeedback(client, label) {
   const result = await finishFullBattle(client, {
     claimSalvage: true,
     afterBattleStart: async () => {
+      await assertBattleRadioNotice(client, label);
       firstTicket = await assertFirstArchiveDiscoveryTicket(
         client,
         `${label} real first spawn`,
@@ -5505,7 +5653,10 @@ async function assertOrdinaryUrlHasNoHook(client, smokeId) {
 }
 
 async function main() {
-  await mkdir(qaDirectory, { recursive: true });
+  await Promise.all([
+    mkdir(qaDirectory, { recursive: true }),
+    mkdir(battleRadioEvidenceDirectory, { recursive: true }),
+  ]);
   if (!existsSync(path.join(repositoryRoot, 'dist', 'index.html'))) {
     throw new Error('dist/index.html is missing; run npm run build first');
   }

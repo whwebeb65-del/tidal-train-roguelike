@@ -37,6 +37,48 @@ async function close(server: ReturnType<typeof createServer>): Promise<void> {
 }
 
 describe('browser smoke script', () => {
+  it('captures battle radio geometry evidence at every mobile viewport', () => {
+    const source = readFileSync('scripts/smoke-browser.mjs', 'utf8');
+    const helperStart = source.indexOf(
+      'async function assertBattleRadioNotice',
+    );
+    const helperEnd = source.indexOf(
+      'async function assertBattleHudGeometry',
+      helperStart,
+    );
+    const helperSource = source.slice(helperStart, helperEnd);
+
+    expect(helperStart).toBeGreaterThanOrEqual(0);
+    expect(helperSource).toContain('.app-notice.is-visible');
+    expect(helperSource).toContain("getComputedStyle(notice, '::before')");
+    expect(helperSource).toContain('getBoundingClientRect');
+    expect(helperSource).toContain("querySelectorAll('[data-battle-skill]')");
+    expect(helperSource).toContain(
+      "querySelector('[data-battle-action=\"claim-interaction\"]')",
+    );
+    expect(helperSource).toContain('document.documentElement.scrollWidth');
+    expect(helperSource).toContain('pointerEvents');
+    expect(helperSource).toContain('noticeRect');
+    expect(helperSource).toContain('skillRects');
+    expect(helperSource).toContain('interactionRect');
+    expect(helperSource).toContain('assertions');
+    expect(helperSource).toContain('fullyInsideViewport');
+    expect(helperSource).toContain('rect.left >= -2');
+    expect(helperSource).toContain('rect.right <= innerWidth + 2');
+    expect(source).toContain('battleHudRasterTolerancePx = 1');
+    expect(source).toContain(
+      'geometry.enemyLaneTop - geometry.hudBottom + battleHudRasterTolerancePx >= 12',
+    );
+    for (const stem of [
+      'battle-radio-360x800',
+      'battle-radio-390x844',
+      'battle-radio-412x915',
+      'battle-radio-430x932',
+    ]) {
+      expect(source).toContain(stem);
+    }
+  });
+
   it('uses strict preview, four mobile viewports and e2e hooks', () => {
     const source = readFileSync('scripts/smoke-browser.mjs', 'utf8');
     const releaseCapture = readFileSync(

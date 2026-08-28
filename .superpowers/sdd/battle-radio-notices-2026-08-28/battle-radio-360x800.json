@@ -1,0 +1,110 @@
+{
+  "viewport": {
+    "name": "360x800",
+    "width": 360,
+    "height": 800,
+    "devicePixelRatio": 3,
+    "scrollWidth": 360
+  },
+  "noticeText": "漂流郊区 已发车，潮汐种子 17。",
+  "noticeRect": {
+    "top": 736,
+    "right": 248,
+    "bottom": 782,
+    "left": 12,
+    "width": 236,
+    "height": 46
+  },
+  "comparedRects": {
+    "skillRects": [
+      {
+        "id": "tidal-volley",
+        "rect": {
+          "top": 610.99072265625,
+          "right": 131.1057891845703,
+          "bottom": 674.98828125,
+          "left": 67.10820007324219,
+          "width": 63.997589111328125,
+          "height": 63.99755859375
+        }
+      },
+      {
+        "id": "bubble-barrier",
+        "rect": {
+          "top": 596.9912109375,
+          "right": 209.1028289794922,
+          "bottom": 666.9886474609375,
+          "left": 139.10548400878906,
+          "width": 69.99734497070312,
+          "height": 69.9974365234375
+        }
+      },
+      {
+        "id": "extreme-tide",
+        "rect": {
+          "top": 598.9912109375,
+          "right": 293.09967041015625,
+          "bottom": 674.98828125,
+          "left": 217.1025390625,
+          "width": 75.99713134765625,
+          "height": 75.9970703125
+        }
+      }
+    ],
+    "interactionRect": null
+  },
+  "skillRects": [
+    {
+      "id": "tidal-volley",
+      "rect": {
+        "top": 610.99072265625,
+        "right": 131.1057891845703,
+        "bottom": 674.98828125,
+        "left": 67.10820007324219,
+        "width": 63.997589111328125,
+        "height": 63.99755859375
+      }
+    },
+    {
+      "id": "bubble-barrier",
+      "rect": {
+        "top": 596.9912109375,
+        "right": 209.1028289794922,
+        "bottom": 666.9886474609375,
+        "left": 139.10548400878906,
+        "width": 69.99734497070312,
+        "height": 69.9974365234375
+      }
+    },
+    {
+      "id": "extreme-tide",
+      "rect": {
+        "top": 598.9912109375,
+        "right": 293.09967041015625,
+        "bottom": 674.98828125,
+        "left": 217.1025390625,
+        "width": 75.99713134765625,
+        "height": 75.9970703125
+      }
+    }
+  ],
+  "interactionRect": null,
+  "computedStyles": {
+    "display": "grid",
+    "visibility": "visible",
+    "opacity": "1",
+    "pointerEvents": "none",
+    "beforeContent": "\"RADIO\""
+  },
+  "assertions": {
+    "visible": true,
+    "fullyInsideViewport": true,
+    "beforeContainsRadio": true,
+    "widthAtMost238CssPx": true,
+    "heightAtMost48CssPx": true,
+    "pointerPassThrough": true,
+    "skillsDoNotOverlap": true,
+    "interactionDoesNotOverlap": true,
+    "noHorizontalOverflow": true
+  }
+}
