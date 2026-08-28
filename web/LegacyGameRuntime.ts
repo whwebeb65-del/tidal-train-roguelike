@@ -1805,8 +1805,8 @@ async function requestBattleRevive(): Promise<{
   });
   if (resultName !== 'completed') {
     notice = resultName === 'cancelled'
-      ? '已取消广告，复活机会没有消耗。'
-      : '广告播放失败，复活机会没有消耗。';
+      ? '已退出补给短片，复活机会没有消耗。'
+      : '补给短片暂时无法播放，复活机会没有消耗。';
     track('revive_result', {
       type: 'ad',
       result: resultName,
@@ -1840,7 +1840,7 @@ async function requestBattleRevive(): Promise<{
 
   recoveryState = revived.state;
   lastRunRecovery = 'ad';
-  notice = `广告完成，列车恢复 ${revived.hpRestored} 点耐久并获得短暂无敌。`;
+  notice = `补给短片播放完成，列车恢复 ${revived.hpRestored} 点耐久并获得短暂无敌。`;
   track('revive_result', {
     type: 'ad',
     result: revived.result,
@@ -1882,8 +1882,8 @@ async function requestBattleSkillRefresh(): Promise<boolean> {
   });
   if (resultName !== 'completed') {
     notice = resultName === 'cancelled'
-      ? '已取消广告，技能刷新机会仍然保留。'
-      : '广告播放失败，技能刷新机会仍然保留。';
+      ? '已退出补给短片，两个主动技能的冷却刷新机会仍然保留。'
+      : '补给短片暂时无法播放，两个主动技能的冷却刷新机会仍然保留。';
     track('skill_refresh_result', {
       result: resultName,
       chargesGranted: 0,
@@ -1897,7 +1897,7 @@ async function requestBattleSkillRefresh(): Promise<boolean> {
     skillRefreshUsed: true,
     skillCharges: 0,
   };
-  notice = '广告完成，两个主动技能的冷却即将清零。';
+  notice = '补给短片播放完成，两个主动技能的冷却即将清零。';
   track('skill_refresh_result', {
     result: 'completed',
     chargesGranted: 1,
@@ -1929,12 +1929,12 @@ async function requestBattleUpgradeReroll(): Promise<boolean> {
   });
   if (resultName !== 'completed') {
     notice = resultName === 'cancelled'
-      ? '已取消广告，本次三选一重抽机会仍然保留。'
-      : '广告播放失败，本次三选一重抽机会仍然保留。';
+      ? '已退出补给短片，三项货箱选择的重开机会仍然保留。'
+      : '补给短片暂时无法播放，三项货箱选择的重开机会仍然保留。';
     render();
     return false;
   }
-  notice = '广告完成，三张构筑卡即将重新生成。';
+  notice = '补给短片播放完成，三项货箱选择即将重新生成。';
   render();
   return true;
 }
@@ -2024,8 +2024,8 @@ async function requestBattleDoubleSettlement(
   }
   if (resultName !== 'completed') {
     notice = resultName === 'cancelled'
-      ? '已取消广告，追加奖励机会仍然保留。'
-      : '广告播放失败，追加奖励机会仍然保留。';
+      ? '已退出补给短片，追加奖励机会仍然保留。'
+      : '补给短片暂时无法播放，追加奖励机会仍然保留。';
     render();
     return null;
   }
@@ -2056,7 +2056,7 @@ async function requestBattleDoubleSettlement(
     routeMarks: 2,
     starTickets: 0,
   });
-  notice = `广告完成，已追加 ${gears} 齿轮和 2 航线徽记。`;
+  notice = `补给短片播放完成，已追加 ${gears} 齿轮和 2 航线徽记。`;
   render();
   return doubledSettlement;
 }

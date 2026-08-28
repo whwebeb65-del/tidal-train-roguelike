@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { readFileSync } from 'node:fs';
 import { describe, expect, it, onTestFinished, vi } from 'vitest';
 import { appSceneForAction } from '../../web/app/GameApp';
 import { createLegacyGameRuntime, progressionTelemetryForUpgrade } from '../../web/LegacyGameRuntime';
@@ -131,7 +132,14 @@ describe('LegacyGameRuntime E2E snapshots', () => {
     await vi.waitFor(() => {
       expect(snapshots.at(-1)?.activeBattleSettlement).not.toBeNull();
     });
-    return { app, runtime, snapshots, storage };
+    return {
+      app,
+      runtime,
+      snapshots,
+      storage,
+      getBattleScene: () => battleScene,
+      getBattleEngine: () => battleEngine,
+    };
   }
 
   it('drops a completed settlement double after its battle exits', async () => {
@@ -203,6 +211,139 @@ describe('LegacyGameRuntime E2E snapshots', () => {
       .toEqual(['enemy:bubble-fin']);
     expect(savedAfterDouble.gears).toBe(savedBeforeDouble.gears + 80);
     expect(savedAfterDouble.routeMarks).toBe(savedBeforeDouble.routeMarks + 2);
+  });
+
+  it('uses supply-film completion wording for rewarded revive, skill refresh, reroll, and double settlement', async () => {
+    const showRewardedAd = vi.spyOn(MockAds.prototype, 'showRewardedAd')
+      .mockResolvedValue('completed');
+    onTestFinished(() => showRewardedAd.mockRestore());
+
+    const {
+      app,
+      runtime,
+      snapshots,
+      storage,
+      getBattleScene,
+      getBattleEngine,
+    } =
+      await setupRepeatVictoryWithDiscovery();
+    const doubleButton = app.querySelector<HTMLButtonElement>(
+      '[data-battle-action="double-settlement"]',
+    );
+    expect(doubleButton).not.toBeNull();
+    doubleButton?.click();
+    await vi.waitFor(() => {
+      expect(snapshots.at(-1)?.activeBattleSettlement?.doubled).toBe(true);
+      expect(app.querySelector('[data-notice-copy]')?.textContent)
+        .toBe('补给短片播放完成，已追加 80 齿轮和 2 航线徽记。');
+    });
+
+    await runtime.e2eReturnToStation();
+    await runtime.e2eStartNormalBattle();
+    runtime.e2eAdvanceBattle(1_000);
+    expect(runtime.e2eUseSkill('tidal-volley')).toBe(true);
+    runtime.e2eAdvanceBattle(17);
+    const refreshButton = app.querySelector<HTMLButtonElement>(
+      '[data-battle-action="skill-refresh"]',
+    );
+    expect(refreshButton?.hidden).toBe(false);
+    refreshButton?.click();
+    await vi.waitFor(() => {
+      expect(app.querySelector('[data-notice-copy]')?.textContent)
+        .toBe('补给短片播放完成，两个主动技能的冷却即将清零。');
+    });
+    runtime.e2eAdvanceBattle(17);
+    expect(runtime.e2eSnapshot().battle?.cooldowns).toMatchObject({
+      'tidal-volley': 0,
+      'bubble-barrier': 0,
+    });
+
+    for (let index = 0; index < 80; index += 1) {
+      if (runtime.e2eSnapshot().battle?.status === 'upgrade') break;
+      runtime.e2eAdvanceBattle(1_000);
+    }
+    const rerollButton = app.querySelector<HTMLButtonElement>(
+      '[data-battle-action="upgrade-reroll"]',
+    );
+    expect(rerollButton?.hidden).toBe(false);
+    rerollButton?.click();
+    await vi.waitFor(() => {
+      expect(app.querySelector('[data-notice-copy]')?.textContent)
+        .toBe('补给短片播放完成，三项货箱选择即将重新生成。');
+    });
+
+    const battleScene = getBattleScene();
+    const battleEngine = getBattleEngine();
+    expect(battleScene).not.toBeNull();
+    expect(battleEngine).not.toBeNull();
+    (battleEngine as unknown as { finish(victory: boolean): void }).finish(false);
+    (battleScene as unknown as { updateBattle(stepMs: number): void })
+      .updateBattle(17);
+    battleScene?.advanceForE2E(0);
+    const reviveButton = app.querySelector<HTMLButtonElement>(
+      '[data-battle-action="revive"]',
+    );
+    expect(reviveButton?.hidden).toBe(false);
+    reviveButton?.click();
+    await vi.waitFor(() => {
+      expect(app.querySelector('[data-notice-copy]')?.textContent)
+        .toBe('补给短片播放完成，列车恢复 60 点耐久并获得短暂无敌。');
+    });
+    expect(showRewardedAd).toHaveBeenCalledWith('double-settlement');
+    expect(showRewardedAd).toHaveBeenCalledWith('skill-refresh');
+    expect(showRewardedAd).toHaveBeenCalledWith('reroll');
+    expect(showRewardedAd).toHaveBeenCalledWith('revive');
+    expect(JSON.parse(storage.getItem(APP_STORAGE_KEYS.player) ?? '{}').gears)
+      .toBeGreaterThan(1_000);
+  }, 15_000);
+
+  it('uses supply-film cancellation and failure wording without consuming the available chance', async () => {
+    const showRewardedAd = vi.spyOn(MockAds.prototype, 'showRewardedAd')
+      .mockResolvedValue('closed');
+    onTestFinished(() => showRewardedAd.mockRestore());
+    const { app, runtime } = await setupRepeatVictoryWithDiscovery();
+
+    await runtime.e2eReturnToStation();
+    await runtime.e2eStartNormalBattle();
+    for (let index = 0; index < 80; index += 1) {
+      if (runtime.e2eSnapshot().battle?.status === 'upgrade') break;
+      runtime.e2eAdvanceBattle(1_000);
+    }
+    const rerollButton = app.querySelector<HTMLButtonElement>(
+      '[data-battle-action="upgrade-reroll"]',
+    );
+    expect(rerollButton?.hidden).toBe(false);
+    rerollButton?.click();
+    await vi.waitFor(() => {
+      expect(app.querySelector('[data-notice-copy]')?.textContent)
+        .toBe('已退出补给短片，三项货箱选择的重开机会仍然保留。');
+    });
+    expect(rerollButton?.hidden).toBe(false);
+
+    showRewardedAd.mockResolvedValue('failed');
+    rerollButton?.click();
+    await vi.waitFor(() => {
+      expect(app.querySelector('[data-notice-copy]')?.textContent)
+        .toBe('补给短片暂时无法播放，三项货箱选择的重开机会仍然保留。');
+    });
+    expect(rerollButton?.hidden).toBe(false);
+    expect(showRewardedAd).toHaveBeenNthCalledWith(1, 'reroll');
+    expect(showRewardedAd).toHaveBeenNthCalledWith(2, 'reroll');
+  }, 15_000);
+
+  it('keeps legacy raw ad-result wording out of rewarded result assignments', () => {
+    const runtimeSource = readFileSync(
+      'web/LegacyGameRuntime.ts',
+      'utf8',
+    );
+    const rewardedResultAssignments = runtimeSource.slice(
+      runtimeSource.indexOf('async function requestBattleRevive()'),
+      runtimeSource.indexOf('function exitBattle(): void'),
+    );
+
+    expect(rewardedResultAssignments).not.toContain('广告完成');
+    expect(rewardedResultAssignments).not.toContain('已取消广告');
+    expect(rewardedResultAssignments).not.toContain('广告播放失败');
   });
 
   it('keeps the battle-engine inspection seam behind the exact e2e=1 gate', async () => {
