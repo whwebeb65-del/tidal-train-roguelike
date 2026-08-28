@@ -75,6 +75,61 @@ describe('BattleHUD', () => {
     expect(html).not.toContain('data-boss-label');
   });
 
+  it('labels rewarded battle actions as radio supplies with explicit ad disclosure', () => {
+    const host = document.createElement('div');
+    host.innerHTML = renderBattleHudShell();
+    const rewardedActions = [
+      ['skill-refresh', '补给短片 · 重整技能'],
+      ['upgrade-reroll', '补给短片 · 重开货箱'],
+      ['revive', '救援短片 · 紧急修复'],
+      ['double-settlement', '补给短片 · 双倍托运'],
+    ] as const;
+
+    for (const [action, label] of rewardedActions) {
+      const button = host.querySelector<HTMLButtonElement>(
+        `[data-battle-action="${action}"]`,
+      );
+      expect(button?.textContent?.trim()).toBe(label);
+      expect(button?.getAttribute('aria-label')).toContain('观看激励广告');
+    }
+
+    expect(host.querySelector<HTMLButtonElement>(
+      '[data-battle-action="skill-refresh"]',
+    )?.hidden).toBe(true);
+    expect(host.querySelector<HTMLButtonElement>(
+      '[data-battle-action="upgrade-reroll"]',
+    )?.hidden).toBe(true);
+    expect(host.querySelector<HTMLButtonElement>(
+      '[data-battle-action="double-settlement"]',
+    )?.hidden).toBe(true);
+    expect(host.querySelector<HTMLButtonElement>(
+      '[data-failure-overlay] [data-battle-action="revive"]',
+    )).not.toBeNull();
+    expect([...host.querySelectorAll<HTMLButtonElement>(
+      '[data-battle-action="skill-refresh"], [data-battle-action="upgrade-reroll"], [data-battle-action="revive"], [data-battle-action="double-settlement"]',
+    )].map((button) => button.dataset.battleAction)).toEqual(
+      rewardedActions.map(([action]) => action),
+    );
+    expect(host.textContent).not.toContain('广告刷新技能');
+    expect(host.textContent).not.toContain('看广告刷新三选一');
+    expect(host.textContent).not.toContain('看广告复活');
+    expect(host.textContent).not.toContain('看广告领取重复通关双倍');
+  });
+
+  it('styles the skill refresh as a compact radio supply chip', () => {
+    expect(battleHudCss).toMatch(
+      /\.battle-hud__refresh\s*\{[^}]*min-width:\s*48px[^}]*min-height:\s*48px[^}]*border:\s*2px solid #f0bd62[^}]*color:\s*#fff3ce[^}]*background:\s*linear-gradient\(135deg, #071f34, #0d4054\)/s,
+    );
+    expect(battleHudCss).toContain('.battle-hud__refresh::after');
+    expect(battleHudCss).toMatch(
+      /\.battle-hud__refresh::after\s*\{[^}]*z-index:\s*0[^}]*pointer-events:\s*none/s,
+    );
+    expect(battleHudCss).toContain('@keyframes battle-refresh-signal');
+    expect(battleHudCss).toMatch(
+      /@media \(prefers-reduced-motion: reduce\)\s*\{[^}]*\.battle-hud__refresh::after[^}]*animation:\s*none/s,
+    );
+  });
+
   it('renders one noninteractive polite archive ticket and updates its hidden state and copy', () => {
     const hud = new BattleHUD(createCallbacks(), window);
     const host = document.createElement('div');

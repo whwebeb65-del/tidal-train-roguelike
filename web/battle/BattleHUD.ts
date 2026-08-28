@@ -152,7 +152,7 @@ export function renderBattleHudShell(): string {
       ${skillButton('tidal-volley', '潮汐齐射', '1', BATTLE_ART_URLS.skillTidalVolley)}
       ${skillButton('bubble-barrier', '泡泡屏障', '2', BATTLE_ART_URLS.skillBubbleBarrier)}
       ${skillButton('extreme-tide', '极潮爆发', '3', BATTLE_ART_URLS.skillExtremeTide)}
-      <button class="battle-hud__refresh" type="button" data-battle-action="skill-refresh" hidden>广告刷新技能</button>
+      <button class="battle-hud__refresh" type="button" data-battle-action="skill-refresh" aria-label="观看激励广告，重整技能冷却" hidden>补给短片 · 重整技能</button>
     </div>
 
     <section class="battle-overlay battle-overlay--pause" data-pause-overlay hidden>
@@ -176,7 +176,7 @@ export function renderBattleHudShell(): string {
           ${Array.from({ length: 3 }, (_, index) => upgradeSlot(index)).join('')}
         </div>
         <div class="battle-upgrade-countdown" data-upgrade-countdown hidden>3 · 2 · 1</div>
-        <button type="button" class="battle-button battle-button--ghost" data-battle-action="upgrade-reroll" hidden>看广告刷新三选一</button>
+        <button type="button" class="battle-button battle-button--ghost" data-battle-action="upgrade-reroll" aria-label="观看激励广告，重开本次升级货箱" hidden>补给短片 · 重开货箱</button>
       </div>
     </section>
 
@@ -187,7 +187,7 @@ export function renderBattleHudShell(): string {
         <h2>列车进入维修库</h2>
         <div class="damage-report"><span>损伤报告</span><p data-failure-summary></p></div>
         <div class="battle-dialog__actions repair-actions">
-          <button type="button" class="battle-button battle-button--primary" data-battle-action="revive">看广告复活</button>
+          <button type="button" class="battle-button battle-button--primary" data-battle-action="revive" aria-label="观看激励广告，紧急修复并复活列车">救援短片 · 紧急修复</button>
           <button type="button" class="battle-button battle-button--ghost" data-battle-action="give-up">放弃本局并结算</button>
         </div>
       </div>
@@ -216,7 +216,7 @@ export function renderBattleHudShell(): string {
           <span data-settlement-expedition hidden></span>
         </div>
         <div class="battle-dialog__actions">
-          <button type="button" class="battle-button battle-button--accent" data-battle-action="double-settlement" hidden>看广告领取重复通关双倍</button>
+          <button type="button" class="battle-button battle-button--accent" data-battle-action="double-settlement" aria-label="观看激励广告，领取本次重复通关双倍奖励" hidden>补给短片 · 双倍托运</button>
           <button type="button" class="battle-button battle-button--primary" data-battle-action="return-station">返回车站</button>
         </div>
       </div>
