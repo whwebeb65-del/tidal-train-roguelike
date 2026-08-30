@@ -30,7 +30,7 @@ describe('prototype tooling', () => {
       'run: npm run check:assets',
       'run: npm run build',
       'run: npm run smoke:browser',
-      'uses: actions/upload-pages-artifact@v3',
+      'uses: actions/upload-pages-artifact@v5',
     ];
     let previousIndex = -1;
     for (const marker of orderedMarkers) {
@@ -45,7 +45,7 @@ describe('prototype tooling', () => {
       '.github/workflows/deploy-pages.yml',
       'utf8',
     );
-    const setupPython = workflow.indexOf('uses: actions/setup-python@v5');
+    const setupPython = workflow.indexOf('uses: actions/setup-python@v7');
     const installPillow = workflow.indexOf(
       'run: python -m pip install Pillow',
     );
@@ -54,5 +54,19 @@ describe('prototype tooling', () => {
     expect(setupPython).toBeGreaterThan(-1);
     expect(installPillow).toBeGreaterThan(setupPython);
     expect(runTests).toBeGreaterThan(installPillow);
+  });
+
+  it('uses the official Node 24 generation of every GitHub Action', () => {
+    const workflow = readFileSync(
+      '.github/workflows/deploy-pages.yml',
+      'utf8',
+    );
+
+    expect(workflow).toContain('uses: actions/checkout@v7');
+    expect(workflow).toContain('uses: actions/setup-node@v7');
+    expect(workflow).toContain('uses: actions/setup-python@v7');
+    expect(workflow).toContain('uses: actions/configure-pages@v6');
+    expect(workflow).toContain('uses: actions/upload-pages-artifact@v5');
+    expect(workflow).toContain('uses: actions/deploy-pages@v5');
   });
 });
