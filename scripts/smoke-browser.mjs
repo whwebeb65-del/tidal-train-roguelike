@@ -1715,26 +1715,79 @@ async function assertFirstArchiveDiscoveryTicket(
 async function assertBattleRadioNotice(client, viewportName) {
   const stem = battleRadioEvidenceStems[viewportName];
   assert.ok(stem, `missing battle radio evidence stem for ${viewportName}`);
-  await waitForEvaluation(
-    client,
-    `(() => {
-      const notice = document.querySelector('.app-notice.is-visible');
-      if (!(notice instanceof HTMLElement)) return false;
-      const rect = notice.getBoundingClientRect();
-      return Number.parseFloat(getComputedStyle(notice).opacity) > 0
-        && rect.left >= -2
-        && rect.right <= innerWidth + 2;
-    })()`,
-    { label: `${viewportName} visible battle radio notice` },
-  );
-  await evaluate(
+  const battleRadioSettleTimeoutMs = 1_000;
+  const battleRadioStableSampleCount = 3;
+  const settled = await evaluate(
     client,
     `(async () => {
-      await new Promise((resolve) => requestAnimationFrame(() => (
-        requestAnimationFrame(resolve)
-      )));
-      return true;
+      const startedAt = performance.now();
+      const settleDeadline = startedAt + ${battleRadioSettleTimeoutMs};
+      let previousRect = null;
+      let stableConsecutiveRectangles = 0;
+      let observedSamples = 0;
+      let lastDeltaPx = null;
+      while (performance.now() <= settleDeadline) {
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+        const notice = document.querySelector('.app-notice.is-visible');
+        if (!(notice instanceof HTMLElement)) {
+          return {
+            settled: false,
+            reason: 'visible-notice-missing',
+            observedSamples,
+            stableConsecutiveRectangles,
+          };
+        }
+        const style = getComputedStyle(notice);
+        const rect = notice.getBoundingClientRect();
+        const currentRect = {
+          top: rect.top,
+          right: rect.right,
+          bottom: rect.bottom,
+          left: rect.left,
+          width: rect.width,
+          height: rect.height,
+        };
+        observedSamples += 1;
+        if (previousRect !== null) {
+          lastDeltaPx = Math.max(
+            ...Object.keys(currentRect).map((key) => (
+              Math.abs(currentRect[key] - previousRect[key])
+            )),
+          );
+          stableConsecutiveRectangles = lastDeltaPx <= 0.01
+            ? stableConsecutiveRectangles + 1
+            : 0;
+        }
+        previousRect = currentRect;
+        if (
+          Number.parseFloat(style.opacity) > 0
+          && stableConsecutiveRectangles >= ${battleRadioStableSampleCount}
+        ) {
+          return {
+            settled: true,
+            elapsedMs: performance.now() - startedAt,
+            observedSamples,
+            stableConsecutiveRectangles,
+            lastDeltaPx,
+            noticeRect: currentRect,
+          };
+        }
+      }
+      return {
+        settled: false,
+        reason: 'settle-timeout',
+        elapsedMs: performance.now() - startedAt,
+        observedSamples,
+        stableConsecutiveRectangles,
+        lastDeltaPx,
+        noticeRect: previousRect,
+      };
     })()`,
+  );
+  assert.equal(
+    settled.settled,
+    true,
+    `${viewportName} battle radio rectangle did not settle: ${JSON.stringify(settled)}`,
   );
 
   const evidence = await evaluate(client, `(() => {
@@ -1779,10 +1832,10 @@ async function assertBattleRadioNotice(client, viewportName) {
       : null;
     const assertions = {
       visible: isVisible(notice),
-      fullyInsideViewport: noticeRect.left >= -2
-        && noticeRect.right <= innerWidth + 2
-        && noticeRect.top >= -2
-        && noticeRect.bottom <= innerHeight + 2,
+      fullyInsideViewport: noticeRect.left >= 0
+        && noticeRect.right <= innerWidth
+        && noticeRect.top >= 0
+        && noticeRect.bottom <= innerHeight,
       beforeContainsRadio: beforeStyle.content.includes('RADIO'),
       widthAtMost238CssPx: noticeRect.width <= 238,
       heightAtMost48CssPx: noticeRect.height <= 48,
@@ -1800,6 +1853,7 @@ async function assertBattleRadioNotice(client, viewportName) {
         scrollWidth: document.documentElement.scrollWidth,
       },
       noticeText: notice.textContent?.trim() ?? '',
+      settling: ${JSON.stringify(settled)},
       noticeRect,
       comparedRects: { skillRects, interactionRect },
       skillRects,

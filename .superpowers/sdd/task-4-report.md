@@ -72,7 +72,7 @@ All four sidecars report:
 - horizontal overflow is absent;
 - every recorded assertion is `true`.
 
-Final notice horizontal bounds are 12–248px at 360×800, 12–248px at 390×844, 8.31–244.31px at 412×915, and 12–248px at 430×932.
+The original 2026-08-28 evidence recorded horizontal bounds of 12–248px at 360×800, 12–248px at 390×844, 8.31–244.31px at 412×915, and 12–248px at 430×932. The 412px in-flight result is superseded by the strict settled evidence appended below.
 
 ## Visual inspection
 
@@ -96,10 +96,71 @@ Inspected the final `battle-radio-360x800.png` and `battle-radio-430x932.png` wi
 - The radio capture is embedded into the existing short-battle start and the 390×844 first full-battle callback; it does not add a redundant battle or bypass real progression.
 - Existing two-victory, Boss canvas/palette, ordinary-URL isolation, reward/revive/salvage, station motion, archive, and browser-error checks remain present.
 - The helper records plain JSON-serializable viewport, rectangles, computed styles, and assertions before writing evidence.
-- The capture wait is bounded by the existing `waitForEvaluation` timeout and observes production geometry; it does not mutate production state.
+- The capture wait is bounded and observes production geometry; it does not mutate production state.
 - No production source, CSS, reward logic, telemetry, action identifiers, or E2E hook surface changed in Task 4.
 - No merge, push, Pages wait, or publication verification was performed, per controller instruction.
 
 ## Concerns
 
 None blocking. Route-start evidence is intentionally captured before the interaction reward schedule opens, so `interactionRect` is `null`; the helper still measures and rejects overlap whenever that production card is visible. The controller still owns final whole-branch review, merge/push, GitHub Actions, Pages, and public asset-hash verification.
+
+## Review fixes — 2026-08-30
+
+Addressed both Important findings from the Task 4 review without changing production code or loosening the radio width, height, overlap, pointer, or overflow gates.
+
+### Strict TDD evidence
+
+- Updated the focused source contract before changing the smoke helper.
+- RED command: `npx vitest run tests/smoke/browser-script.spec.ts`
+- RED result: exit 1; 1 failed / 24 passed. The expected failure was the missing `battleRadioSettleTimeoutMs = 1_000` contract; the existing helper still contained the old ±2px viewport expressions and no bounded stable-rectangle sampling.
+- GREEN command: `npx vitest run tests/smoke/browser-script.spec.ts`
+- GREEN result: exit 0; 25/25 passed.
+
+### Fix details
+
+- `fullyInsideViewport` now uses strict bounds only: `left >= 0`, `right <= innerWidth`, `top >= 0`, and `bottom <= innerHeight`.
+- The former `-2` / `+2` viewport allowance was removed from both the readiness logic and final assertion.
+- The existing `battleHudRasterTolerancePx = 1` remains exclusive to the old 12px HUD enemy-lane comparison.
+- Before final geometry measurement, the browser now runs a bounded `requestAnimationFrame` sampling loop with a 1000ms deadline.
+- Settlement requires 3 consecutive rectangle comparisons whose maximum top/right/bottom/left/width/height delta is at most 0.01 CSS px.
+- A missing notice or timeout fails explicitly. A defective final position can settle, but then fails the separate strict viewport assertion.
+- Each sidecar now records the settle result, elapsed time, observed sample count, stable consecutive count, last delta, and settled notice rectangle.
+
+### Regenerated browser evidence
+
+Command: `npm run smoke:browser`
+
+Result: exit 0.
+
+- `360x800 PASS - auto-fire 3 projectile(s)`
+- `390x844 PASS - two runs victory/victory`
+- `412x915 PASS - auto-fire 3 projectile(s)`
+- `430x932 PASS - auto-fire 3 projectile(s)`
+- `ordinary URL PASS - no E2E global`
+- `browser smoke ok`
+
+Final `git diff --check`: exit 0. It emitted only the repository's expected LF-to-CRLF working-copy warnings and no whitespace errors.
+
+Strict/stable sidecar verification after regeneration:
+
+| Viewport | Final rect (left, right, top, bottom) | Settle ms | Samples | Stable comparisons | Last delta | Strict fully inside |
+| --- | --- | ---: | ---: | ---: | ---: | --- |
+| 360×800 | 12, 248, 736, 782 | 200.90 | 20 | 3 | 0 | true |
+| 390×844 | 12, 248, 780, 826 | 20.60 | 4 | 3 | 0 | true |
+| 412×915 | 12, 248, 851, 897 | 201.20 | 34 | 3 | 0 | true |
+| 430×932 | 12, 248, 868, 914 | 200.10 | 34 | 3 | 0 | true |
+
+All four sidecars have every assertion set to `true`. In particular, the 412px evidence now settles at `left = 12` instead of the reviewed in-flight `left = 8.31`.
+
+### Review-fix visual inspection
+
+Reopened the regenerated `battle-radio-360x800.png` and `battle-radio-430x932.png` at original resolution with the image viewing tool.
+
+- PASS: both radio strips are fully inside the viewport at their settled 12px left position.
+- PASS: no horizontal clipping or in-flight transform state is visible.
+- PASS: CJK copy remains readable, target lanes remain visible, and all three skills remain unobstructed.
+- PASS: the radio remains visually separated from the production interaction-card region.
+
+### Review-fix concerns
+
+None blocking. The settle deadline is 1000ms, well below the production battle-notice lifetime, and the final strict geometry assertion remains independent of transition settling.

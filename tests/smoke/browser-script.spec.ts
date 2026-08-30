@@ -63,8 +63,19 @@ describe('browser smoke script', () => {
     expect(helperSource).toContain('interactionRect');
     expect(helperSource).toContain('assertions');
     expect(helperSource).toContain('fullyInsideViewport');
-    expect(helperSource).toContain('rect.left >= -2');
-    expect(helperSource).toContain('rect.right <= innerWidth + 2');
+    expect(helperSource).toContain('battleRadioSettleTimeoutMs = 1_000');
+    expect(helperSource).toContain('battleRadioStableSampleCount = 3');
+    expect(helperSource).toContain('settleDeadline');
+    expect(helperSource).toContain('stableConsecutiveRectangles');
+    expect(helperSource).toContain('requestAnimationFrame');
+    expect(helperSource).toContain('noticeRect.left >= 0');
+    expect(helperSource).toContain('noticeRect.right <= innerWidth');
+    expect(helperSource).toContain('noticeRect.top >= 0');
+    expect(helperSource).toContain('noticeRect.bottom <= innerHeight');
+    expect(helperSource).not.toContain('rect.left >= -2');
+    expect(helperSource).not.toContain('rect.right <= innerWidth + 2');
+    expect(helperSource).not.toContain('noticeRect.left >= -2');
+    expect(helperSource).not.toContain('noticeRect.right <= innerWidth + 2');
     expect(source).toContain('battleHudRasterTolerancePx = 1');
     expect(source).toContain(
       'geometry.enemyLaneTop - geometry.hudBottom + battleHudRasterTolerancePx >= 12',
