@@ -661,10 +661,13 @@ describe('BattleHUD', () => {
     expect(speed.parentElement).toBe(tideLog);
     expect(pause.parentElement).toBe(tideLog);
     expect(extremeTide.dataset.rank).toBe('5');
+    expect(extremeTide.querySelector('[data-skill-rank]')?.textContent)
+      .toBe('潮阶 5');
     expect(extremeTide.querySelectorAll(
       '[data-skill-variant]:not([hidden])',
     )).toHaveLength(2);
-    expect(extremeTide.getAttribute('aria-label')).toMatch(/\S/);
+    expect(extremeTide.getAttribute('aria-label')).toContain('潮阶 5');
+    expect(extremeTide.getAttribute('aria-label')).not.toContain('Rank');
     expect(speed.textContent).toBe('1.5×');
     expect(speed.disabled).toBe(false);
 

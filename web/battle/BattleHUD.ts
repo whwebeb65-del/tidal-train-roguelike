@@ -409,7 +409,7 @@ export class BattleHUD {
       const button = nodes.skillButtons.get(skill.id);
       if (!button) continue;
       button.dataset.rank = String(skill.rank);
-      setText(requireElement(button, '[data-skill-rank]'), `Rank ${skill.rank}`);
+      setText(requireElement(button, '[data-skill-rank]'), `潮阶 ${skill.rank}`);
       const icon = requireElement<HTMLImageElement>(button, '[data-skill-icon]');
       if (icon.src !== skill.iconUrl) icon.src = skill.iconUrl;
       const glyphs = [...button.querySelectorAll<HTMLImageElement>('[data-skill-variant]')];
@@ -438,7 +438,7 @@ export class BattleHUD {
       const variantStatus = skill.variantIds.length > 0
         ? `，变体 ${skill.variantIds.join('、')}`
         : '';
-      const status = `${skill.name}，Rank ${skill.rank}${variantStatus}，${skill.cooldownLabel}`;
+      const status = `${skill.name}，潮阶 ${skill.rank}${variantStatus}，${skill.cooldownLabel}`;
       setText(requireElement(button, '[data-skill-status]'), status);
       button.setAttribute('aria-label', status);
     }
@@ -632,13 +632,13 @@ function skillButton(
   shortcut: string,
   iconUrl: string,
 ): string {
-  return `<button class="battle-skill" type="button" data-battle-skill="${id}" data-rank="1" aria-label="${label}，Rank 1">
+  return `<button class="battle-skill" type="button" data-battle-skill="${id}" data-rank="1" aria-label="${label}，潮阶 1">
     <span class="battle-skill__key">${shortcut}</span>
     <span class="battle-skill__icon"><img data-skill-icon src="${iconUrl}" alt="" /></span>
-    <span class="battle-skill__rank" data-skill-rank>Rank 1</span>
+    <span class="battle-skill__rank" data-skill-rank>潮阶 1</span>
     <span class="battle-skill__variants" data-skill-variants aria-hidden="true"><img data-skill-variant hidden /><img data-skill-variant hidden /></span>
     <span class="battle-skill__copy"><b>${label}</b><small data-skill-cooldown>就绪</small></span>
-    <span class="sr-only" data-skill-status>${label}，Rank 1</span>
+    <span class="sr-only" data-skill-status>${label}，潮阶 1</span>
   </button>`;
 }
 
