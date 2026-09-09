@@ -111,6 +111,66 @@
 .dock-flag p { max-width: 650px; margin: 0; color: #b9d2c8; font-size: 12px; line-height: 1.55; }
 .dock-flag__signal { padding: 5px 8px; color: #4a2925; border: 2px solid #512f29; border-radius: 3px 6px 4px 5px; background: #e2b85d; box-shadow: 0 0 12px #f0c96488; font: 900 10px/1 monospace; }
 
+.dock-recruitment-scene {
+  position: relative;
+  min-height: 220px;
+  margin: -12px 13px -20px;
+  overflow: hidden;
+  color: #f1d477;
+  border: 4px solid #553d2f;
+  border-radius: 48% 48% 7px 6px / 24% 24% 7px 6px;
+  background:
+    radial-gradient(circle at 69% 24%, #f5d76b 0 3px, transparent 4px),
+    radial-gradient(circle at 77% 15%, #d4eee1 0 1px, transparent 2px),
+    linear-gradient(180deg, #1d5661 0 54%, #143941 55% 68%, #0c2b34 69%);
+  box-shadow: 7px 8px #0617208f, inset 0 0 0 2px #a3824d, inset 0 -35px #071d2888;
+  isolation: isolate;
+}
+
+.dock-recruitment-scene::before,
+.dock-recruitment-scene::after {
+  position: absolute;
+  z-index: 3;
+  bottom: 35px;
+  width: 90px;
+  height: 38px;
+  content: '';
+  border-top: 4px solid #846944;
+  background: repeating-linear-gradient(90deg, #79583a 0 9px, #3f342a 9px 14px);
+  opacity: .82;
+}
+
+.dock-recruitment-scene::before { left: -18px; transform: skewY(7deg); }
+.dock-recruitment-scene::after { right: -20px; transform: skewY(-7deg); }
+
+.dock-recruitment-scene__sky { position: absolute; inset: 0; overflow: hidden; }
+.beacon-glow { position: absolute; top: 45px; left: 77px; width: 34px; height: 34px; border-radius: 50%; background: #ffe990; box-shadow: 0 0 13px #ffe175, 0 0 32px #f5c85caa; }
+.beacon-beam { position: absolute; z-index: -1; top: 51px; left: 91px; width: 58%; height: 22px; transform-origin: 0 50%; clip-path: polygon(0 37%, 100% 0, 100% 100%, 0 63%); background: linear-gradient(90deg, #ffe582b8, #f7d66c12); filter: blur(.5px); animation: beacon-sweep 5.6s ease-in-out infinite alternate; }
+.beacon-beam--far { width: 45%; opacity: .44; transform: rotate(-16deg); animation-delay: -2.8s; animation-duration: 7.2s; }
+.beacon-birds { position: absolute; top: 30px; right: 19%; color: #bfe4d6; font: 900 24px/1 serif; letter-spacing: 12px; opacity: .72; transform: rotate(-7deg); }
+
+.beacon-tower { position: absolute; z-index: 2; bottom: 38px; left: 58px; width: 66px; height: 130px; clip-path: polygon(27% 0, 73% 0, 100% 100%, 0 100%); background: repeating-linear-gradient(180deg, #ead083 0 23px, #a9483c 23px 44px); filter: drop-shadow(7px 7px 0 #06192099); }
+.beacon-tower::before { position: absolute; top: 1px; left: 17px; width: 32px; height: 27px; content: ''; border: 4px solid #51372b; background: #f6d766; box-shadow: inset 0 0 9px #fff3a5; }
+.beacon-tower::after { position: absolute; top: 29px; left: 8px; width: 50px; height: 6px; content: ''; background: #4f392c; }
+.beacon-tower > i { position: absolute; top: 57px; left: 26px; width: 14px; height: 24px; border: 4px solid #4f392c; border-radius: 9px 9px 1px 1px; background: #183941; }
+.beacon-tower > b { position: absolute; top: 104px; left: 25px; width: 16px; height: 26px; border-radius: 9px 9px 0 0; background: #3f3229; }
+.beacon-tower > span { position: absolute; top: 0; left: 28px; width: 10px; height: 9px; background: #553a2d; box-shadow: 0 -9px #553a2d; }
+
+.crew-manifest { position: absolute; z-index: 5; top: 35px; right: clamp(20px, 5vw, 68px); width: min(48%, 320px); padding: 13px 15px 12px; color: #433229; border: 3px solid #5a4030; border-radius: 5px 8px 4px 7px; background: #e7d09a; box-shadow: 5px 6px #0617208f, inset 0 0 0 2px #fff0bd; transform: rotate(1.2deg); }
+.crew-manifest::before { position: absolute; top: 7px; bottom: 7px; left: -9px; width: 13px; content: ''; background: repeating-linear-gradient(#a94a3e 0 9px, #e1b75f 9px 18px); border: 2px solid #52392d; }
+.crew-manifest small { display: block; padding-bottom: 7px; color: #705442; font: 900 10px/1 monospace; letter-spacing: .08em; border-bottom: 2px dashed #9b7b55; }
+.crew-manifest__tickets { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; margin-top: 9px; }
+.crew-manifest__tickets span { display: grid; place-items: center; gap: 3px; padding: 7px 2px 5px; border: 2px solid #73523b; border-radius: 18px 18px 5px 5px; background: #f0db9f; box-shadow: inset 0 -4px #c8995f; }
+.crew-manifest__tickets span:nth-child(2) { transform: translateY(-3px) rotate(-2deg); }
+.crew-manifest__tickets b { display: grid; width: 26px; height: 26px; place-items: center; color: #f6e8b4; border-radius: 50%; background: #27535a; box-shadow: 0 0 0 2px #654838; }
+.crew-manifest__tickets em { color: #6b4b38; font: 900 9px/1.2 sans-serif; font-style: normal; }
+.crew-manifest p { margin: 9px 0 0; color: #735743; font-size: 10px; text-align: center; }
+
+.dock-tide { position: absolute; z-index: 4; right: 0; bottom: 4px; left: 0; display: flex; justify-content: space-around; opacity: .9; }
+.dock-tide i { display: block; width: 30%; height: 14px; border-top: 4px solid #83d3c3; border-radius: 50%; transform: rotate(-3deg); animation: dock-tide-rock 2.7s ease-in-out infinite alternate; }
+.dock-tide i:nth-child(2) { animation-delay: -.9s; }
+.dock-tide i:nth-child(3) { animation-delay: -1.8s; }
+
 .dock-gate,
 .expedition-chart,
 .beacon-line,
@@ -176,9 +236,36 @@
   .market-receipt { justify-self: stretch; max-width: none; transform: rotate(0); }
   .dock-gate { align-items: stretch; flex-direction: column; padding: 20px 18px 20px 61px; }
   .dock-gate::before { left: 16px; height: 100px; }
+  .dock-recruitment-scene { min-height: 188px; margin: -8px 2px -12px; }
+  .beacon-glow { top: 43px; left: 46px; }
+  .beacon-beam { top: 49px; left: 60px; width: 72%; }
+  .beacon-tower { bottom: 37px; left: 28px; width: 59px; height: 116px; }
+  .beacon-tower::before { left: 15px; width: 29px; }
+  .beacon-tower::after { left: 7px; width: 45px; }
+  .beacon-tower > i { left: 23px; }
+  .beacon-tower > b { top: 92px; left: 22px; }
+  .beacon-tower > span { left: 25px; }
+  .crew-manifest { top: 31px; right: 15px; width: 56%; padding: 11px 10px 10px; }
+  .crew-manifest__tickets { gap: 4px; }
+  .crew-manifest__tickets b { width: 23px; height: 23px; }
   .lighthouse-dock .support-platform:has(.primary) { display: block; margin: -33px 0 0; padding-left: 61px; }
   .lighthouse-dock .support-platform .primary { width: 100%; }
   .expedition-chart { padding-left: 47px; }
   .beacon-line::before { display: none; }
   .crew-line { align-items: stretch; flex-direction: column; gap: 6px; padding-inline: 0; }
+}
+
+@keyframes beacon-sweep {
+  from { transform: rotate(-12deg) scaleX(.92); opacity: .45; }
+  to { transform: rotate(10deg) scaleX(1.05); opacity: .86; }
+}
+
+@keyframes dock-tide-rock {
+  from { transform: translateY(0) rotate(-4deg); }
+  to { transform: translateY(-5px) rotate(3deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .beacon-beam,
+  .dock-tide i { animation: none; }
 }

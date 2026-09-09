@@ -27,8 +27,25 @@ export interface SocialHubViewModel {
 
 export function renderSocialHubView(model: SocialHubViewModel): string {
   if (!model.legionId) {
-    return `<section class="deferred-section living-zone lighthouse-dock">
+    return `<section class="deferred-section living-zone lighthouse-dock lighthouse-dock--recruiting">
       <div class="dock-flag"><span class="eyebrow">CO-OP / ${model.cycleId}</span><span class="dock-flag__signal">BEACON</span></div>
+      <div class="dock-recruitment-scene" role="group" aria-label="灯塔正在召集三种远征支援">
+        <div class="dock-recruitment-scene__sky" aria-hidden="true">
+          <i class="beacon-glow"></i><i class="beacon-beam beacon-beam--near"></i><i class="beacon-beam beacon-beam--far"></i>
+          <span class="beacon-birds">⌁</span>
+        </div>
+        <div class="beacon-tower" aria-hidden="true"><i></i><b></b><span></span></div>
+        <div class="crew-manifest">
+          <small>本周候车席位</small>
+          <div class="crew-manifest__tickets">
+            <span><b>航</b><em>领航</em></span>
+            <span><b>炮</b><em>火力</em></span>
+            <span><b>修</b><em>维修</em></span>
+          </div>
+          <p>加入后任选 2 名支援上车</p>
+        </div>
+        <div class="dock-tide" aria-hidden="true"><i></i><i></i><i></i></div>
+      </div>
       <div class="dock-gate is-locked">
         <div><h2>潮汐灯塔团</h2><p>加入异步军团，选择两名队友支援单局，并用每次结算推进共同远征。</p></div>
         <span class="dock-gate__seal">尚未加入</span>

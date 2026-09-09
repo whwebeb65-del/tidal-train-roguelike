@@ -13,7 +13,10 @@ describe('SocialHubView', () => {
     });
 
     expect(html).toContain('living-zone lighthouse-dock');
+    expect(html).toContain('lighthouse-dock--recruiting');
     expect(html).toContain('dock-gate is-locked');
+    expect(html).toContain('dock-recruitment-scene');
+    expect(html).toContain('crew-manifest__tickets');
     expect(html).toContain('support-platform');
     expect(html).not.toContain('system-card--social');
 
