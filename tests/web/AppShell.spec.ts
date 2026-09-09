@@ -12,6 +12,10 @@ const responsiveCss = readFileSync(
   resolve(process.cwd(), 'web/styles/responsive.css'),
   'utf8',
 );
+const battleCanvasCss = readFileSync(
+  resolve(process.cwd(), 'web/styles/battle-canvas.css'),
+  'utf8',
+);
 
 afterEach(() => {
   vi.useRealTimers();
@@ -129,6 +133,21 @@ describe('AppShell', () => {
     );
   });
 
+  it('fills narrow phone viewports without leaving station chrome gutters', () => {
+    expect(appShellCss).toMatch(
+      /\.app-shell--v2\.app-shell--battle\s*\{[^}]*min-height:\s*100dvh;[^}]*padding-bottom:\s*0;[^}]*overflow:\s*hidden;/s,
+    );
+    expect(appShellCss).toMatch(
+      /\.app-shell--battle \.scene-host\s*\{[^}]*height:\s*100dvh;[^}]*min-height:\s*100dvh;/s,
+    );
+    expect(battleCanvasCss).toMatch(
+      /@media \(max-width: 430px\)[\s\S]*?\.game-scene--battle\s*\{[^}]*width:\s*100%;[^}]*height:\s*100dvh;/s,
+    );
+    expect(battleCanvasCss).not.toMatch(
+      /height:\s*calc\(100dvh\s*-\s*(?:68|64|72)px\)/,
+    );
+  });
+
   it('keeps topbar actions at least 44px on both axes in mobile overrides', () => {
     const css = [
       readFileSync(resolve(process.cwd(), 'web/styles/responsive.css'), 'utf8'),
@@ -197,6 +216,9 @@ describe('AppShell', () => {
     );
     expect(appShellCss).toMatch(
       /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.app-shell--battle \.app-notice\.station-announcement,[\s\S]*?\.app-shell--battle \.app-notice\.station-announcement\.is-visible\s*\{[^}]*transition:\s*none;[^}]*transform:\s*none;/,
+    );
+    expect(appShellCss).toMatch(
+      /@media \(max-width: 430px\)[\s\S]*?\.app-shell--battle \.app-notice\.station-announcement\s*\{[^}]*bottom:\s*calc\(160px \+ env\(safe-area-inset-bottom\)\);/s,
     );
   });
 

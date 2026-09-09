@@ -12,6 +12,12 @@
   display: none;
 }
 
+.app-shell--v2.app-shell--battle {
+  min-height: 100dvh;
+  padding-bottom: 0;
+  overflow: hidden;
+}
+
 /* Battle overlays own the viewport; station wayfinding must not cover HUD actions. */
 .app-shell--battle .app-hub-nav {
   display: none;
@@ -31,6 +37,7 @@
 }
 
 .app-shell--battle .scene-host {
+  height: 100dvh;
   min-height: 100dvh;
 }
 
@@ -388,6 +395,12 @@
 
   .app-account-ticket {
     flex-basis: 100%;
+  }
+}
+
+@media (max-width: 430px) {
+  .app-shell--battle .app-notice.station-announcement {
+    bottom: calc(160px + env(safe-area-inset-bottom));
   }
 }
 
