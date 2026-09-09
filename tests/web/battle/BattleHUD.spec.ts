@@ -75,6 +75,24 @@ describe('BattleHUD', () => {
     expect(html).not.toContain('data-boss-label');
   });
 
+  it('keeps the captain instrument strip compact and avoids boxed vital cards', () => {
+    expect(battleHudCss).toMatch(
+      /\.battle-hud__tide-log\s*\{[^}]*height:\s*94px;[^}]*max-height:\s*94px;/s,
+    );
+    expect(battleHudCss).toMatch(
+      /\.battle-vital,\s*\.battle-hud__progress\s*\{[^}]*border:\s*0;[^}]*background:\s*rgb\(4 48 66 \/ 38%\);/s,
+    );
+    expect(battleHudCss).toMatch(
+      /@media \(max-width: 430px\)[\s\S]*?\.battle-hud__tide-log\s*\{[^}]*height:\s*78px;[^}]*max-height:\s*78px;/s,
+    );
+    expect(battleHudCss).toMatch(
+      /@media \(max-width: 370px\)[\s\S]*?\.battle-hud__run\s*\{[^}]*grid-template-columns:\s*1fr;/s,
+    );
+    expect(battleHudCss).toMatch(
+      /@media \(max-width: 370px\)[\s\S]*?\.battle-vital\s*>\s*span\s*\{[^}]*white-space:\s*nowrap;/s,
+    );
+  });
+
   it('labels rewarded battle actions as radio supplies with explicit ad disclosure', () => {
     const host = document.createElement('div');
     host.innerHTML = renderBattleHudShell();

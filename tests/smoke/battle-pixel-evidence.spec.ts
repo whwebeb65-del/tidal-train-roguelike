@@ -528,7 +528,7 @@ describe('battle pixel evidence helpers', () => {
     const css = await readFile(new URL('../../web/styles/battle-hud.css', import.meta.url), 'utf8');
 
     expect(css).toContain('.battle-hud__tide-log');
-    expect(css).toContain('max-height: 108px');
+    expect(css).toContain('max-height: 94px');
     expect(css).toContain('.battle-skill[data-rank="3"]');
     expect(css).toContain('.battle-skill[data-rank="5"]');
     expect(css).toContain('@media (prefers-reduced-motion: reduce)');
