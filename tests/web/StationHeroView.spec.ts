@@ -135,15 +135,20 @@ function moveWakeAndEngineOutsideVehicle(html: string): string {
 }
 
 describe('StationHeroView', () => {
-  it('keeps the station-level stamp separate from the account progression ticket', () => {
+  it('uses the departure ticket for run guidance instead of duplicating account stats', () => {
     const html = renderProgressionHero();
 
     expect(html).toContain('STATION 3');
-    expect(html).toContain('账号 Lv.12');
-    expect(html).toContain('340 / 500 XP');
-    expect(html).toContain('体力 25 / 30');
-    expect(html).toContain('下一倍速：Lv.20 · 2×');
-    expect(html).toContain('aria-label="账号 Lv.12，340 / 500 XP，体力 25 / 30，下一倍速：Lv.20 · 2×"');
+    expect(html).toContain('普通航线');
+    expect(html).toContain('10 分钟终点');
+    expect(html).toContain('20 次潮汐强化');
+    expect(html).toContain('点按战场任意位置，主炮即刻转向');
+    expect(html).not.toContain('账号 Lv.12');
+    expect(html).not.toContain('340 / 500 XP');
+    const runTicket = extractCssBlock(stationCss, '.station-run-ticket {');
+    expect(runTicket).toContain('border-top:');
+    expect(runTicket).toContain('border-bottom:');
+    expect(runTicket).not.toMatch(/\bborder:/);
   });
   it('renders four ordered station layers, purposeful actors and ticket UI', () => {
     const html = renderHero();
