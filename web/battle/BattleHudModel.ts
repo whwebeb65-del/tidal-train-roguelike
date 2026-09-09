@@ -13,9 +13,13 @@ import {
 } from './BattleInteractionSchedule';
 import { getBattleUpgradeDefinition } from './BattleUpgradeCatalog';
 import { getBattleUpgradeCopy } from './BattleUpgradeCopy';
-import { BATTLE_ART_URLS } from '../assets/BattleArtCatalog';
+import {
+  BATTLE_ART_URLS,
+  BATTLE_VARIANT_GLYPH_URLS,
+} from '../assets/BattleArtCatalog';
 import type {
   BattleFrameView,
+  BattleGeneralUpgradeId,
   BattleSkillId,
   BattleUpgradeId,
   SkillVariantId,
@@ -31,6 +35,12 @@ export interface BattleUpgradeCardModel {
   readonly effect: string;
   readonly synergy: string;
   readonly isEvolution: boolean;
+  readonly kind: 'general' | 'skill-rank' | 'skill-variant';
+  readonly kindLabel: string;
+  readonly levelLabel: string;
+  readonly skillId: BattleSkillId | null;
+  readonly iconUrl: string | null;
+  readonly sigil: string;
 }
 
 export interface BattleSkillModel {
@@ -112,6 +122,20 @@ const SKILL_COPY: Readonly<Record<BattleSkillId, {
   'extreme-tide': { name: '极潮爆发', shortcut: '3' },
 };
 
+const GENERAL_UPGRADE_SIGILS: Readonly<
+  Record<BattleGeneralUpgradeId, string>
+> = {
+  'multi-barrel': '管',
+  'rapid-reload': '速',
+  'coral-warhead': '珊',
+  'echo-chain': '声',
+  'precision-lens': '镜',
+  'bubble-capacitor': '泡',
+  'tidal-resonance': '潮',
+  'magnetic-salvage': '磁',
+  'overload-core': '核',
+};
+
 export function createBattleHudModel(
   frame: BattleFrameView,
   options: BattleHudModelOptions,
@@ -121,17 +145,43 @@ export function createBattleHudModel(
     const copy = getBattleUpgradeCopy(id);
     const definition = getBattleUpgradeDefinition(id);
     const currentLevel = frame.upgradeLevels[id] ?? 0;
+    const nextLevel = Math.min(
+      definition.maxLevel,
+      currentLevel + 1,
+    );
+    const kindLabel = definition.kind === 'general'
+      ? '战术零件'
+      : definition.kind === 'skill-rank'
+        ? '技能升阶'
+        : '技能进化';
+    const levelLabel = definition.kind === 'general'
+      ? `零件 Lv.${currentLevel} → Lv.${nextLevel}`
+      : definition.kind === 'skill-rank'
+        ? `技能潮阶 ${currentLevel + 1} → ${nextLevel + 1}`
+        : '新机制 · 一次解锁';
+    const iconUrl = definition.kind === 'skill-variant'
+      ? BATTLE_VARIANT_GLYPH_URLS[id as SkillVariantId]
+      : definition.kind === 'skill-rank' && definition.skillId
+        ? skillIconUrl(definition.skillId)
+        : null;
     return {
       id,
       name: copy.name,
       currentLevel,
-      nextLevel: Math.min(
-        definition.maxLevel,
-        currentLevel + 1,
-      ),
+      nextLevel,
       effect: copy.effect,
       synergy: copy.synergy,
       isEvolution: definition.kind === 'skill-variant',
+      kind: definition.kind,
+      kindLabel,
+      levelLabel,
+      skillId: definition.skillId ?? null,
+      iconUrl,
+      sigil: definition.kind === 'general'
+        ? GENERAL_UPGRADE_SIGILS[id as BattleGeneralUpgradeId]
+        : definition.kind === 'skill-rank'
+          ? '阶'
+          : '变',
     };
   });
   const interaction = getAvailableBattleInteractions(

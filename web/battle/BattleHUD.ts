@@ -168,7 +168,7 @@ export function renderBattleHudShell(): string {
       <div class="battle-dialog battle-dialog--upgrade cargo-unloading__manifest">
         <span class="battle-dialog__eyebrow">CARGO UNLOADING / ROGUELITE UPGRADE</span>
         <h2>打开一只潮汐奖励箱</h2>
-        <p>三选一立即装车，最高可叠加至 3 级。</p>
+        <p>每次只选一件，技能可升至潮阶 5。</p>
         ${tutorialTicket('upgrade')}
         <span class="battle-evolution-ribbon" data-evolution-ribbon hidden>技能进化 · 改变战斗方式</span>
         <div class="evolution-crest" data-evolution-crest hidden aria-hidden="true"><i></i><i></i><i></i><b>EVOLVE</b></div>
@@ -466,17 +466,45 @@ export class BattleHUD {
       button.hidden = !card;
       if (!card) {
         delete button.dataset.upgradeId;
+        delete button.dataset.upgradeKind;
+        delete button.dataset.upgradeSkill;
         button.classList.remove('is-evolution');
         return;
       }
       button.dataset.upgradeId = card.id;
+      button.dataset.upgradeKind = card.kind;
+      if (card.skillId) {
+        button.dataset.upgradeSkill = card.skillId;
+      } else {
+        delete button.dataset.upgradeSkill;
+      }
       button.disabled = model.pendingActions.has('upgrade-choice');
       button.classList.toggle('is-evolution', card.isEvolution);
+      setText(
+        requireElement(button, '[data-upgrade-kind]'),
+        card.kindLabel,
+      );
       setText(requireElement(button, '[data-upgrade-name]'), card.name);
       setText(
         requireElement(button, '[data-upgrade-level]'),
-        `Lv.${card.currentLevel} → Lv.${card.nextLevel}`,
+        card.levelLabel,
       );
+      const icon = requireElement<HTMLImageElement>(
+        button,
+        '[data-upgrade-icon]',
+      );
+      const sigil = requireElement<HTMLElement>(
+        button,
+        '[data-upgrade-sigil]',
+      );
+      icon.hidden = card.iconUrl === null;
+      sigil.hidden = card.iconUrl !== null;
+      if (card.iconUrl) {
+        icon.src = card.iconUrl;
+      } else {
+        icon.removeAttribute('src');
+      }
+      setText(sigil, card.sigil);
       setText(requireElement(button, '[data-upgrade-effect]'), card.effect);
       setText(
         requireElement(button, '[data-upgrade-synergy]'),
@@ -653,6 +681,8 @@ function tutorialTicket(placement: 'battle' | 'upgrade'): string {
 
 function upgradeSlot(index: number): string {
   return `<button class="battle-upgrade-card reward-crate" type="button" data-upgrade-slot="${index}" hidden>
+    <span class="battle-upgrade-card__mark" aria-hidden="true"><img data-upgrade-icon alt="" hidden /><i data-upgrade-sigil></i></span>
+    <span class="battle-upgrade-card__kind" data-upgrade-kind></span>
     <span data-upgrade-level></span>
     <b data-upgrade-name></b>
     <p data-upgrade-effect></p>

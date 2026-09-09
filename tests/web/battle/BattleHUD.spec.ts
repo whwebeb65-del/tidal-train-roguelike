@@ -757,6 +757,12 @@ describe('BattleHUD', () => {
 
     expect(model.upgradeCards.map((card) => card.isEvolution))
       .toEqual([true, false, false]);
+    expect(model.upgradeCards[0]).toMatchObject({
+      kind: 'skill-variant',
+      kindLabel: '技能进化',
+      levelLabel: '新机制 · 一次解锁',
+      iconUrl: expect.stringContaining('split-tide-arrow-glyph'),
+    });
   });
 
   it('turns a visible evolution offer into a staged ritual without changing card actions', () => {
@@ -782,6 +788,11 @@ describe('BattleHUD', () => {
     expect(cards.map((card) => card.style.getPropertyValue('--reward-index')))
       .toEqual(['0', '1', '2']);
     expect(cards[0]?.dataset.upgradeId).toBe('split-tide-arrow');
+    expect(cards[0]?.dataset.upgradeKind).toBe('skill-variant');
+    expect(cards[0]?.querySelector('[data-upgrade-kind]')?.textContent)
+      .toBe('技能进化');
+    expect(cards[0]?.querySelector<HTMLImageElement>('[data-upgrade-icon]')?.src)
+      .toContain('split-tide-arrow-glyph');
 
     hud.dispose();
     host.remove();
@@ -805,6 +816,10 @@ describe('BattleHUD', () => {
       id: 'rank-tidal-volley',
       currentLevel: 3,
       nextLevel: 4,
+      kind: 'skill-rank',
+      kindLabel: '技能升阶',
+      levelLabel: '技能潮阶 4 → 5',
+      iconUrl: expect.stringContaining('tidal-volley-badge'),
     });
   });
 
