@@ -58,6 +58,38 @@ describe('AppShell', () => {
     expect(html).toContain('340 / 500 XP');
     expect(html).toContain('体力 25 / 30');
     expect(html).toContain('下一倍速：Lv.20 · 2×');
+    expect(html).toContain('data-compact-xp="XP 68%"');
+    expect(html).not.toContain('data-compact-xp="Lv.12');
+  });
+
+  it('keeps compact xp focused on progress after the account ticket updates', () => {
+    const root = document.createElement('div');
+    const shell = mountAppShell(root, {
+      gears: 0,
+      routeMarks: 0,
+      starTickets: 0,
+      account: {
+        level: 1,
+        xp: 0,
+        nextLevelXp: 80,
+        stamina: 30,
+        maxStamina: 30,
+        nextSpeedUnlock: { level: 10, speed: 1.5 },
+      },
+    });
+
+    shell.setAccountTicket({
+      level: 2,
+      xp: 20,
+      nextLevelXp: 90,
+      stamina: 20,
+      maxStamina: 30,
+      nextSpeedUnlock: { level: 10, speed: 1.5 },
+    });
+
+    const xp = root.querySelector<HTMLElement>('[data-account-xp]');
+    expect(xp?.dataset.compactXp).toBe('XP 22%');
+    expect(xp?.dataset.compactXp).not.toContain('Lv.');
   });
 
   it('uses text-only resource labels instead of Unicode placeholder icons', () => {

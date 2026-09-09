@@ -46,7 +46,7 @@ function accountTicket(snapshot: AccountTicketSnapshot): string {
   const label = `账号 Lv.${snapshot.level}，${snapshot.xp} / ${snapshot.nextLevelXp} XP，体力 ${snapshot.stamina} / ${snapshot.maxStamina}，${nextSpeed}`;
   return `<div class="app-account-ticket" data-account-ticket aria-label="${label}">
     <span data-account-level>账号 Lv.${snapshot.level}</span>
-    <span class="app-account-ticket__xp" data-account-xp data-compact-xp="Lv.${snapshot.level} · ${Math.floor(snapshot.xp / snapshot.nextLevelXp * 100)}%">${snapshot.xp} / ${snapshot.nextLevelXp} XP</span>
+    <span class="app-account-ticket__xp" data-account-xp data-compact-xp="XP ${Math.floor(snapshot.xp / snapshot.nextLevelXp * 100)}%">${snapshot.xp} / ${snapshot.nextLevelXp} XP</span>
     <span data-account-stamina>体力 ${snapshot.stamina} / ${snapshot.maxStamina}</span>
     <span data-account-speed>${nextSpeed}</span>
   </div>`;
@@ -144,7 +144,7 @@ export function mountAppShell(
       requireElement<HTMLElement>(ticket, '[data-account-level]').textContent = `账号 Lv.${next.level}`;
       const xp = requireElement<HTMLElement>(ticket, '[data-account-xp]');
       xp.textContent = `${next.xp} / ${next.nextLevelXp} XP`;
-      xp.dataset.compactXp = `Lv.${next.level} · ${Math.floor(next.xp / next.nextLevelXp * 100)}%`;
+      xp.dataset.compactXp = `XP ${Math.floor(next.xp / next.nextLevelXp * 100)}%`;
       requireElement<HTMLElement>(ticket, '[data-account-stamina]').textContent = `体力 ${next.stamina} / ${next.maxStamina}`;
       requireElement<HTMLElement>(ticket, '[data-account-speed]').textContent = nextSpeed;
     },
