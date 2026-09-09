@@ -7,6 +7,7 @@ export interface SceneRouterOptions {
   readonly transitionMs: number;
   readonly reducedMotion: boolean;
   readonly onSceneChanged?: (sceneId: SceneId) => void;
+  readonly scrollToTop?: () => void;
 }
 
 export class SceneRouter {
@@ -46,6 +47,7 @@ export class SceneRouter {
     this.host.classList.add('scene-host--entering');
     await next.mount(this.host);
     if (token !== this.transitionToken) return;
+    this.options.scrollToTop?.();
     this.options.onSceneChanged?.(sceneId);
 
     if (!this.reducedMotion && this.options.transitionMs > 0) {

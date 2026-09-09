@@ -306,6 +306,7 @@ export interface LegacyRuntimeDependencies {
   ) => void;
   readonly onBattleEngineCreated?: (engine: BattleEngine) => void;
   readonly onTelemetryEvent?: (event: PrototypeEvent) => void;
+  readonly scrollToTop?: () => void;
 }
 
 export interface RuntimeE2EConfig {
@@ -582,6 +583,11 @@ function createBattleScene(
 const router = new SceneRouter(shell.sceneHost, sceneFactory, {
   transitionMs: 220,
   reducedMotion: effectiveReducedMotion,
+  scrollToTop: dependencies.scrollToTop ?? (() => {
+    const scrollingElement = document.scrollingElement
+      ?? document.documentElement;
+    scrollingElement.scrollTop = 0;
+  }),
   onSceneChanged: (sceneId) => {
     audio.playSound('scene-open');
     if (sceneId === 'battle') {

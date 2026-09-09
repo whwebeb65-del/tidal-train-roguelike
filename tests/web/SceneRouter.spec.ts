@@ -117,6 +117,25 @@ describe('SceneRouter', () => {
     expect(changes).toEqual(['station']);
   });
 
+  it('resets document scroll for completed scene changes but not refreshes', async () => {
+    const resets: string[] = [];
+    const router = new SceneRouter(createHost(), (id) => ({
+      id,
+      mount() {},
+      unmount() {},
+    }), {
+      transitionMs: 0,
+      reducedMotion: true,
+      scrollToTop: () => resets.push('top'),
+    });
+
+    await router.go('station', 'replace');
+    await router.refresh();
+    await router.go('captain', 'forward');
+
+    expect(resets).toEqual(['top', 'top']);
+  });
+
   it('applies reduced-motion changes to later transitions', async () => {
     const router = new SceneRouter(createHost(), (id) => ({
       id,
