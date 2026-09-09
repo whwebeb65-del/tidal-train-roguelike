@@ -195,7 +195,15 @@ export function renderBattleHudShell(): string {
 
     <section class="battle-overlay battle-overlay--settlement living-zone" data-settlement-overlay hidden>
       <div class="battle-dialog battle-dialog--settlement">
-        <div class="settlement-symbol" aria-hidden="true">潮</div>
+        <div class="settlement-welcome" aria-hidden="true">
+          <div class="settlement-symbol">潮</div>
+          <div class="settlement-porter" data-settlement-porter>
+            <span class="settlement-porter__message settlement-porter__message--victory">货箱点清啦！</span>
+            <span class="settlement-porter__message settlement-porter__message--trial">成绩盖章啦！</span>
+            <span class="settlement-porter__message settlement-porter__message--returned">先回站维修吧！</span>
+            <img src="${BATTLE_ART_URLS.otter}" alt="" />
+          </div>
+        </div>
         <span class="battle-dialog__eyebrow">RUN SETTLED</span>
         <h2 data-settlement-title></h2>
         <p data-settlement-description></p>

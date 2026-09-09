@@ -187,6 +187,79 @@
   content: '';
 }
 
+.settlement-welcome {
+  position: relative;
+  display: flex;
+  width: min(320px, 100%);
+  min-height: 108px;
+  align-items: end;
+  justify-content: space-between;
+  margin: 0 auto 5px;
+}
+
+.settlement-porter {
+  position: relative;
+  width: 118px;
+  height: 105px;
+  flex: 0 0 118px;
+}
+
+.settlement-porter img {
+  position: absolute;
+  right: -2px;
+  bottom: -6px;
+  width: 94px;
+  height: 94px;
+  object-fit: contain;
+  filter: drop-shadow(5px 7px 0 rgb(3 23 29 / 52%));
+  transform-origin: 52% 88%;
+  animation: settlement-porter-bob 3.2s ease-in-out infinite;
+}
+
+.settlement-porter__message {
+  position: absolute;
+  z-index: 1;
+  top: 2px;
+  right: 54px;
+  width: max-content;
+  max-width: 118px;
+  padding: 6px 9px;
+  border: 2px solid #295158;
+  border-radius: 13px 10px 14px 8px;
+  color: #8d4438;
+  font-size: 9px;
+  font-weight: 900;
+  white-space: nowrap;
+  background: #fff0b9;
+  box-shadow: 3px 4px #06171d8c;
+  transform: rotate(2deg);
+}
+
+.settlement-porter__message::after {
+  position: absolute;
+  right: 9px;
+  bottom: -8px;
+  width: 9px;
+  height: 9px;
+  border-right: 2px solid #295158;
+  border-bottom: 2px solid #295158;
+  background: #fff0b9;
+  content: '';
+  transform: rotate(42deg);
+}
+
+.settlement-porter__message--trial,
+.settlement-porter__message--returned { display: none; }
+.trial-record-board .settlement-porter__message--victory,
+.is-returned .settlement-porter__message--victory { display: none; }
+.trial-record-board .settlement-porter__message--trial,
+.is-returned .settlement-porter__message--returned { display: block; }
+
+@keyframes settlement-porter-bob {
+  0%, 100% { transform: translateY(1px) rotate(-1deg); }
+  50% { transform: translateY(-4px) rotate(1.25deg); }
+}
+
 .arrival-platform .eyebrow,
 .trial-record-board .eyebrow { color: #f9dfa0; text-shadow: 1px 2px #07171c; }
 .arrival-platform h1,
@@ -529,6 +602,17 @@
   .reward-luggage .currency { padding: 12px 4px; font-size: 10px; }
   .trial-record-board::before { top: 13px; right: 3%; left: 3%; height: 146px; }
   .score-stamp { min-width: 0; width: min(320px, 100%); }
+}
+
+@media (max-width: 370px) {
+  .settlement-welcome { min-height: 94px; }
+  .settlement-porter { width: 103px; height: 92px; flex-basis: 103px; }
+  .settlement-porter img { width: 82px; height: 82px; }
+  .settlement-porter__message { right: 45px; padding: 5px 7px; font-size: 8px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .settlement-porter img { animation: none; }
 }
 
 @media (max-width: 760px) {

@@ -96,16 +96,28 @@ describe('BattleHUD', () => {
   it('presents settlement rewards as tagged luggage on a themed action dock', () => {
     const host = document.createElement('div');
     host.innerHTML = renderBattleHudShell();
+    const porter = host.querySelector<HTMLElement>('[data-settlement-porter]');
     const sigils = [...host.querySelectorAll(
       '.reward-luggage .currency > i',
     )].map((node) => node.textContent);
 
+    expect(porter?.querySelector('img')?.getAttribute('src')).toContain(
+      'otter-mechanic',
+    );
+    expect(porter?.textContent).toContain('货箱点清啦');
+    expect(porter?.textContent).toContain('先回站维修吧');
     expect(sigils).toEqual(['齿', '徽', '星']);
     expect(livingStationFlowCss).toMatch(
       /\.reward-luggage \.currency i\s*\{[^}]*position:\s*absolute;[^}]*border-radius:\s*50%;/s,
     );
     expect(livingStationFlowCss).toMatch(
       /\.arrival-platform \.battle-dialog__actions,[\s\S]*?background:\s*linear-gradient\(180deg,\s*transparent,\s*rgb\(6 32 39 \/ 94%\)/s,
+    );
+    expect(livingStationFlowCss).toMatch(
+      /\.settlement-porter img\s*\{[^}]*animation:\s*settlement-porter-bob/s,
+    );
+    expect(livingStationFlowCss).toMatch(
+      /@media \(prefers-reduced-motion:\s*reduce\)[\s\S]*?\.settlement-porter img\s*\{[^}]*animation:\s*none;/s,
     );
   });
 
