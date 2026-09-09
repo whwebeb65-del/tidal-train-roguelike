@@ -1980,4 +1980,46 @@ describe('BattleRenderer', () => {
     expect(commands.some((item) => item.kind.startsWith('captain-broadcast-'))).toBe(false);
     expect(commands.some((item) => item.kind === 'boss-intro-title')).toBe(true);
   });
+
+  it('reveals the approaching boss inside the intro tide eye', () => {
+    const commands = renderCommands({
+      frame: {
+        status: 'boss-intro',
+        phaseElapsedMs: 3000,
+        enemies: [],
+        projectiles: [],
+        loot: [],
+      },
+    });
+    const silhouette = findCommand<ImageDrawCommand>(
+      commands,
+      (item) => item.kind === 'boss-intro-silhouette',
+    );
+
+    expect(silhouette).toMatchObject({
+      x: 195,
+      anchorX: 0.5,
+      anchorY: 0.5,
+      fallbackColor: '#304f9a',
+    });
+    expect(silhouette.y).toBeGreaterThanOrEqual(272);
+    expect(silhouette.y).toBeLessThanOrEqual(300);
+    expect(silhouette.alpha).toBeGreaterThan(0.15);
+    expect(silhouette.alpha).toBeLessThan(0.4);
+  });
+
+  it('keeps a painted boss omen when the intro asset is unavailable', () => {
+    const commands = renderCommands({
+      failedArtIds: ['deepEchoBoss'],
+      frame: {
+        status: 'boss-intro',
+        phaseElapsedMs: 3000,
+        enemies: [],
+        projectiles: [],
+        loot: [],
+      },
+    });
+
+    expect(commands.some((item) => item.kind === 'boss-intro-fallback')).toBe(true);
+  });
 });

@@ -1725,6 +1725,48 @@ export class BattleRenderer {
         alpha: darken,
       });
     }
+    if (input.frame.status === 'boss-intro') {
+      const reveal = Math.min(1, Math.max(0, bossProgress));
+      const drift = input.reducedMotion
+        ? 0
+        : Math.sin(input.timeMs / 420) * (1 + reveal * 2.4);
+      const width = 186 + reveal * 34;
+      const height = width * ENEMY_GEOMETRY['deep-echo-boss'].height
+        / ENEMY_GEOMETRY['deep-echo-boss'].width;
+      const y = 290 + (1 - reveal) * 12 + drift;
+      const source = input.assets.get('deepEchoBoss');
+      if (source) {
+        this.painter.image({
+          kind: 'boss-intro-silhouette',
+          layer: 'cinematic-overlay',
+          source,
+          enemyKind: 'deep-echo-boss',
+          x: 195,
+          y,
+          width,
+          height,
+          anchorX: 0.5,
+          anchorY: 0.5,
+          fallbackColor: ENEMY_GEOMETRY['deep-echo-boss'].fallback,
+          alpha: 0.09 + reveal * 0.44,
+          smooth: true,
+        });
+      } else {
+        this.painter.ellipse({
+          kind: 'boss-intro-fallback',
+          layer: 'cinematic-overlay',
+          enemyKind: 'deep-echo-boss',
+          x: 195,
+          y,
+          radiusX: width * 0.42,
+          radiusY: height * 0.36,
+          fill: ENEMY_GEOMETRY['deep-echo-boss'].fallback,
+          stroke: '#78cfff',
+          lineWidth: 3,
+          alpha: 0.12 + reveal * 0.38,
+        });
+      }
+    }
     const title = input.effects.cinematic.title
       ?? (
         input.frame.status === 'boss-intro'
