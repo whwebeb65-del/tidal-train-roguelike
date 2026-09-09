@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import {
   createDailyTrialState,
   getDailyTrialDefinition,
@@ -12,6 +14,10 @@ import {
 
 const definition = getDailyTrialDefinition('2026-07-16');
 const state = createDailyTrialState(definition.dayId);
+const livingStationHomeCss = readFileSync(
+  resolve(process.cwd(), 'web/styles/living-station-home.css'),
+  'utf8',
+);
 
 describe('DailyTrialView', () => {
   it('shows a level-two gate while preserving the daily preview', () => {
@@ -42,6 +48,21 @@ describe('DailyTrialView', () => {
     expect(html).toContain('trial-score-tags');
     expect(html).not.toContain('system-card system-card--trial');
     expect(html).toContain('data-action="start-daily-trial"');
+  });
+
+  it('keeps the two trial counters compact on phone screens', () => {
+    expect(livingStationHomeCss).toMatch(
+      /\.trial-score-tags\s*>\s*span\s*\{[^}]*border:\s*0;[^}]*clip-path:/s,
+    );
+    expect(livingStationHomeCss).toMatch(
+      /\.trial-score-tags\s*>\s*span::before\s*\{[^}]*border-radius:\s*50%;/s,
+    );
+    expect(livingStationHomeCss).toMatch(
+      /@media \(max-width:\s*760px\)[\s\S]*?\.trial-score-tags\s*\{[^}]*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\);/s,
+    );
+    expect(livingStationHomeCss).toMatch(
+      /@media \(max-width:\s*760px\)[\s\S]*?\.signal-post\s*\{[^}]*min-height:\s*88px;/s,
+    );
   });
 
   it.each([
