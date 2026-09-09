@@ -231,15 +231,15 @@ function buildBossEvidenceRegions(
   });
   const calloutRegions = [
     pairedRegion(
-      'callout-cyan-stroke', '#78e8ff',
-      { x: 74, y: 132, width: 242, height: 17 },
-      { x: 74, y: 110, width: 242, height: 17 },
+      'callout-cyan-stitch', '#78e8ff',
+      { x: 43, y: 86, width: 301, height: 13 },
+      { x: 43, y: 68, width: 301, height: 13 },
       { minTarget: 18, minDelta: 12, minRatio: 1.5 },
     ),
     pairedRegion(
-      'callout-coral-knot', '#ff8d73',
-      { x: 52, y: 150, width: 20, height: 20 },
-      { x: 28, y: 150, width: 20, height: 20 },
+      'callout-gold-seal', '#ffc870',
+      { x: 34, y: 92, width: 38, height: 38 },
+      { x: 7, y: 92, width: 24, height: 38 },
       { minTarget: 8, minDelta: 6, minRatio: 1.5 },
     ),
   ];

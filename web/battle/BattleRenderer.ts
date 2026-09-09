@@ -1730,36 +1730,67 @@ export class BattleRenderer {
         input.frame.status === 'boss-intro'
           ? '深海回响正在靠近'
           : null
-      );
+    );
     if (title) {
       if (title.startsWith('船长：')) {
-        this.painter.line({
-          kind: 'boss-callout-stroke', layer: 'cinematic-overlay',
-          points: [{ x: 76, y: 145 }, { x: 148, y: 139 }, { x: 236, y: 142 }, { x: 314, y: 135 }],
-          stroke: '#78e8ff', lineWidth: 4, curve: true, alpha: 0.72,
-        });
-        this.painter.line({
-          kind: 'boss-callout-stroke', layer: 'cinematic-overlay',
-          points: [{ x: 90, y: 177 }, { x: 162, y: 182 }, { x: 238, y: 178 }, { x: 300, y: 184 }],
-          stroke: '#fff2a2', lineWidth: 3, curve: true, alpha: 0.64,
+        this.painter.ellipse({
+          kind: 'captain-broadcast-wash', layer: 'cinematic-overlay',
+          x: 195, y: 109, radiusX: 169, radiusY: 28,
+          fill: 'rgba(87, 236, 226, 0.14)', alpha: 0.7,
+          blendMode: 'screen',
         });
         this.painter.ellipse({
-          kind: 'boss-callout-knot', layer: 'cinematic-overlay',
-          x: 62, y: 160, radiusX: 7, radiusY: 7,
-          stroke: '#ff8d73', lineWidth: 3, alpha: 0.9,
+          kind: 'captain-broadcast-shell', layer: 'cinematic-overlay',
+          x: 195, y: 111, radiusX: 164, radiusY: 25,
+          fill: 'rgba(5, 27, 43, 0.91)',
+          stroke: 'rgba(113, 225, 221, 0.84)', lineWidth: 1.5,
+        });
+        this.painter.line({
+          kind: 'captain-broadcast-stitch', layer: 'cinematic-overlay',
+          points: [{ x: 43, y: 94 }, { x: 118, y: 88 }, { x: 226, y: 92 }, { x: 344, y: 87 }],
+          stroke: '#78e8ff', lineWidth: 2, curve: true, alpha: 0.72,
+        });
+        this.painter.line({
+          kind: 'captain-broadcast-stitch', layer: 'cinematic-overlay',
+          points: [{ x: 47, y: 129 }, { x: 130, y: 134 }, { x: 246, y: 130 }, { x: 337, y: 135 }],
+          stroke: '#fff2a2', lineWidth: 1.5, curve: true, alpha: 0.58,
+        });
+        this.painter.ellipse({
+          kind: 'captain-broadcast-seal', layer: 'cinematic-overlay',
+          x: 53, y: 111, radiusX: 18, radiusY: 18,
+          fill: '#123c4a', stroke: '#ffc870', lineWidth: 2, alpha: 0.96,
+        });
+        this.painter.ellipse({
+          kind: 'captain-broadcast-seal-core', layer: 'cinematic-overlay',
+          x: 53, y: 111, radiusX: 13, radiusY: 13,
+          stroke: 'rgba(121, 245, 226, 0.72)', lineWidth: 1, alpha: 0.92,
+        });
+        this.painter.text({
+          kind: 'captain-broadcast-label', layer: 'cinematic-overlay',
+          text: '列车长', x: 53, y: 111,
+          fill: '#fff0ac', font: '800 9px system-ui, sans-serif',
+          align: 'center', baseline: 'middle',
+        });
+        this.painter.text({
+          kind: 'captain-broadcast-message', layer: 'cinematic-overlay',
+          text: title.slice('船长：'.length), x: 79, y: 112,
+          fill: '#efffff', font: '700 14px system-ui, sans-serif',
+          align: 'left', baseline: 'middle',
+          stroke: 'rgba(7, 31, 48, 0.88)', lineWidth: 2,
+        });
+      } else {
+        this.painter.text({
+          kind: 'boss-intro-title',
+          layer: 'cinematic-overlay',
+          text: title,
+          x: 195,
+          y: 158,
+          fill: '#efffff',
+          stroke: 'rgba(25, 64, 101, 0.8)',
+          lineWidth: 4,
+          font: '700 24px system-ui, sans-serif',
         });
       }
-      this.painter.text({
-        kind: 'boss-intro-title',
-        layer: 'cinematic-overlay',
-        text: title,
-        x: 195,
-        y: 158,
-        fill: '#efffff',
-        stroke: 'rgba(25, 64, 101, 0.8)',
-        lineWidth: 4,
-        font: '700 24px system-ui, sans-serif',
-      });
     }
     if (input.effects.cinematic.slowMotion > 0) {
       this.painter.ellipse({

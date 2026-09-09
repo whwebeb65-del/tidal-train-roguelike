@@ -13,6 +13,7 @@ import type {
   EllipseDrawCommand,
   ImageDrawCommand,
   LineDrawCommand,
+  TextDrawCommand,
 } from '../../../web/battle/BattleDrawTypes';
 import {
   byBattleLayer,
@@ -59,7 +60,10 @@ const BOSS_TELEGRAPH_KINDS = new Set([
   'boss-safe-lane', 'boss-danger-lane', 'boss-current-chevron',
   'boss-tide-countdown', 'boss-enraged-aura', 'boss-weakpoint',
   'boss-weakpoint-petal', 'boss-weakpoint-countdown',
-  'boss-callout-stroke', 'boss-callout-knot',
+  'captain-broadcast-shell', 'captain-broadcast-wash',
+  'captain-broadcast-stitch', 'captain-broadcast-seal',
+  'captain-broadcast-seal-core', 'captain-broadcast-label',
+  'captain-broadcast-message',
 ]);
 
 function renderBossPhase(
@@ -439,10 +443,13 @@ describe('BattleRenderer', () => {
         }).filter(isBossTelegraphCommand);
         expect(bossCommands.length).toBeGreaterThan(0);
         expect(bossCommands.filter((command) => (
-          command.kind === 'boss-callout-stroke'
+          command.kind === 'captain-broadcast-stitch'
         ))).toHaveLength(2);
         expect(bossCommands.filter((command) => (
-          command.kind === 'boss-callout-knot'
+          command.kind === 'captain-broadcast-shell'
+        ))).toHaveLength(1);
+        expect(bossCommands.filter((command) => (
+          command.kind === 'captain-broadcast-seal'
         ))).toHaveLength(1);
         expect(bossCommands.length).toBeLessThanOrEqual(limit);
       }
@@ -1929,7 +1936,7 @@ describe('BattleRenderer', () => {
     },
   );
 
-  it('frames captain titles with two hand-drawn strokes and a knot', () => {
+  it('sets captain titles in a compact hand-drawn broadcast above the boss', () => {
     const commands = renderCommands({
       effects: {
         particles: [], damageNumbers: [], rings: [],
@@ -1943,11 +1950,25 @@ describe('BattleRenderer', () => {
       },
     });
 
-    expect(commands.filter((item) => item.kind === 'boss-callout-stroke')).toHaveLength(2);
-    expect(commands.filter((item) => item.kind === 'boss-callout-knot')).toHaveLength(1);
+    expect(findCommand<EllipseDrawCommand>(
+      commands,
+      (item) => item.kind === 'captain-broadcast-shell',
+    )).toMatchObject({ x: 195, y: 111, radiusX: 164, radiusY: 25 });
+    expect(commands.filter((item) => item.kind === 'captain-broadcast-stitch')).toHaveLength(2);
+    expect(findCommand<TextDrawCommand>(
+      commands,
+      (item) => item.kind === 'captain-broadcast-label',
+    )).toMatchObject({ text: '列车长', x: 53, y: 111 });
+    expect(findCommand<TextDrawCommand>(
+      commands,
+      (item) => item.kind === 'captain-broadcast-message',
+    )).toMatchObject({ text: '断潮来袭 · 顺流换道', x: 79, y: 112 });
+    expect(commands.some((item) => (
+      item.kind === 'boss-intro-title' && 'text' in item && item.text.startsWith('船长：')
+    ))).toBe(false);
   });
 
-  it('does not frame unrelated cinematic titles as captain callouts', () => {
+  it('does not wrap unrelated cinematic titles in the captain broadcast', () => {
     const commands = renderCommands({
       effects: {
         particles: [], damageNumbers: [], rings: [],
@@ -1956,8 +1977,7 @@ describe('BattleRenderer', () => {
       },
     });
 
-    expect(commands.some((item) => (
-      item.kind === 'boss-callout-stroke' || item.kind === 'boss-callout-knot'
-    ))).toBe(false);
+    expect(commands.some((item) => item.kind.startsWith('captain-broadcast-'))).toBe(false);
+    expect(commands.some((item) => item.kind === 'boss-intro-title')).toBe(true);
   });
 });

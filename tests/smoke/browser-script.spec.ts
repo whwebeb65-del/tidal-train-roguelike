@@ -346,6 +346,8 @@ describe('browser smoke script', () => {
     expect(source).toContain('getImageData');
     expect(source).toContain('bossTideWarningActive');
     expect(source).toContain('bossPixelCounts');
+    expect(source).toContain('callout-cyan-stitch');
+    expect(source).toContain('callout-gold-seal');
     expect(source).toContain('targetPixelCounts');
     expect(source).toContain('controlPixelCounts');
     expect(source).toContain('pixelDelta');
