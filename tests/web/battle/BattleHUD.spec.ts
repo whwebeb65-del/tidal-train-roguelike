@@ -93,6 +93,22 @@ describe('BattleHUD', () => {
     );
   });
 
+  it('presents settlement rewards as tagged luggage on a themed action dock', () => {
+    const host = document.createElement('div');
+    host.innerHTML = renderBattleHudShell();
+    const sigils = [...host.querySelectorAll(
+      '.reward-luggage .currency > i',
+    )].map((node) => node.textContent);
+
+    expect(sigils).toEqual(['齿', '徽', '星']);
+    expect(livingStationFlowCss).toMatch(
+      /\.reward-luggage \.currency i\s*\{[^}]*position:\s*absolute;[^}]*border-radius:\s*50%;/s,
+    );
+    expect(livingStationFlowCss).toMatch(
+      /\.arrival-platform \.battle-dialog__actions,[\s\S]*?background:\s*linear-gradient\(180deg,\s*transparent,\s*rgb\(6 32 39 \/ 94%\)/s,
+    );
+  });
+
   it('labels rewarded battle actions as radio supplies with explicit ad disclosure', () => {
     const host = document.createElement('div');
     host.innerHTML = renderBattleHudShell();

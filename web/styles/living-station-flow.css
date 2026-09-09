@@ -288,6 +288,7 @@
 
 .reward-luggage .currency {
   position: relative;
+  padding: 19px 5px 10px;
   min-width: 0;
   border: 3px solid #966038;
   border-radius: 7px;
@@ -299,7 +300,37 @@
 }
 
 .reward-luggage .currency:nth-child(even) { transform: rotate(1.5deg) translateY(-7px); }
+.reward-luggage .currency i {
+  position: absolute;
+  top: -16px;
+  left: 50%;
+  display: grid;
+  width: 31px;
+  height: 31px;
+  place-items: center;
+  border: 2px solid #234d51;
+  border-radius: 50%;
+  color: #214a50;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 950;
+  background: #ffd879;
+  box-shadow: 2px 3px #5b3420, inset 0 0 0 2px #fff0b2;
+  text-shadow: none;
+  transform: translateX(-50%) rotate(-7deg);
+}
+.reward-luggage .currency:nth-child(2) i { background: #91e0c6; transform: translateX(-50%) rotate(5deg); }
+.reward-luggage .currency:nth-child(3) i { color: #5e3768; background: #ffc08d; transform: translateX(-50%) rotate(-3deg); }
 .reward-luggage .currency b { color: #fff5cc; font-size: clamp(21px, 4vw, 30px); }
+.reward-luggage .currency small { color: #ffe0a4; font-size: 8px; letter-spacing: .08em; }
+.arrival-platform .battle-dialog__actions,
+.trial-record-board .battle-dialog__actions {
+  padding: 17px 7px 8px;
+  border-top: 2px solid rgb(218 178 103 / 48%);
+  border-radius: 16px 10px 0 0;
+  background: linear-gradient(180deg, transparent, rgb(6 32 39 / 94%) 28%);
+  box-shadow: 0 -8px 18px rgb(4 20 27 / 18%);
+}
 .arrival-platform.is-repeat-clear .settlement-symbol { filter: saturate(.58) brightness(.82); }
 .arrival-platform.is-repeat-clear .reward-luggage { opacity: .9; }
 

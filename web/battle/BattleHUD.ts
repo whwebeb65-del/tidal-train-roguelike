@@ -203,9 +203,9 @@ export function renderBattleHudShell(): string {
         <div class="arrival-ticket arrival-ticket--repeat-clear" data-arrival-ticket="repeat" aria-label="重复通关到站票" hidden><span>ARRIVAL PASS</span><b>REPEAT RUN</b></div>
         <div class="daily-score score-stamp" data-trial-score-stamp data-settlement-daily-score hidden></div>
         <div class="battle-settlement-rewards reward-luggage">
-          <span class="currency"><i>齿轮</i><b data-settlement-gears>0</b><small>齿轮</small></span>
-          <span class="currency"><i>徽记</i><b data-settlement-route-marks>0</b><small>航线徽记</small></span>
-          <span class="currency"><i>星票</i><b data-settlement-star-tickets>0</b><small>星票</small></span>
+          <span class="currency"><i aria-hidden="true">齿</i><b data-settlement-gears>0</b><small>齿轮</small></span>
+          <span class="currency"><i aria-hidden="true">徽</i><b data-settlement-route-marks>0</b><small>航线徽记</small></span>
+          <span class="currency"><i aria-hidden="true">星</i><b data-settlement-star-tickets>0</b><small>星票</small></span>
         </div>
         <div class="battle-settlement-progression">
           <p data-settlement-account hidden></p>
