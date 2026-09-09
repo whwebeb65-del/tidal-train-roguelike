@@ -37,6 +37,8 @@ describe('AppShell', () => {
     expect(html).toContain('data-action="open-settings"');
     expect(html).toContain('id="settings-host"');
     expect(html).not.toContain('open-hub-anchor');
+    expect(html.match(/data-nav-glyph=/g)).toHaveLength(5);
+    expect(html).not.toMatch(/[⌂♙✦⚑▣]/u);
   });
 
   it('renders an account ticket with current xp, stamina, and the next speed gate', () => {
@@ -122,6 +124,9 @@ describe('AppShell', () => {
     expect(css).toContain('.app-hub-nav::before');
     expect(css).toContain('.hub-nav__item[aria-current="page"]');
     expect(css).toContain('min-height: 44px');
+    expect(css).toMatch(
+      /\.hub-nav__icon svg\s*\{[^}]*width:\s*16px;[^}]*height:\s*16px;/s,
+    );
   });
 
   it('keeps topbar actions at least 44px on both axes in mobile overrides', () => {

@@ -320,6 +320,19 @@
   line-height: 1;
 }
 
+.hub-nav__icon svg {
+  width: 16px;
+  height: 16px;
+  overflow: visible;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 1px 0 rgb(4 22 29 / 45%));
+  transition: transform 180ms ease;
+}
+
 .hub-nav__item[aria-current="page"],
 .hub-nav__item.is-active {
   transform: translateY(-7px);
@@ -332,6 +345,9 @@
   background: #ffe7a2;
   box-shadow: 0 0 9px rgb(255 226 141 / 80%);
 }
+
+.hub-nav__item[aria-current="page"] .hub-nav__icon svg,
+.hub-nav__item.is-active .hub-nav__icon svg { transform: rotate(-3deg) scale(1.08); }
 
 .hub-nav__item:focus-visible {
   outline-color: #fff0ad;
@@ -392,6 +408,8 @@
   .hub-nav__item.is-active {
     transform: none;
   }
+
+  .hub-nav__icon svg { transition: none; }
 }
 
 @media (max-width: 360px) {

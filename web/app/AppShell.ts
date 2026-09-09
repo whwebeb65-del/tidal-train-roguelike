@@ -64,13 +64,23 @@ function currency(
 
 function navigationItem(
   sceneId: Exclude<SceneId, 'battle'>,
-  icon: string,
   label: string,
 ): string {
   return `<button class="hub-nav__item" type="button" data-nav-scene="${sceneId}">
-    <span class="hub-nav__icon" aria-hidden="true">${icon}</span>
+    <span class="hub-nav__icon" aria-hidden="true">${navigationIcon(sceneId)}</span>
     <span>${label}</span>
   </button>`;
+}
+
+function navigationIcon(sceneId: Exclude<SceneId, 'battle'>): string {
+  const drawings: Readonly<Record<Exclude<SceneId, 'battle'>, string>> = {
+    station: '<path d="M3 26h26M6 23V12l10-7 10 7v11M11 23v-7h10v7M12 11h8"/>',
+    captain: '<path d="M7 14c1-6 4-9 9-9s8 3 9 9M5 15c6 4 16 4 22 0M9 20c3 5 11 5 14 0M16 8v6"/>',
+    equipment: '<path d="M6 25 23 8M20 5l7 7M5 20l7 7M7 7l5 5M5 5l4-1 3 3-1 4"/>',
+    legion: '<path d="M11 27h10M13 23l2-14h2l2 14M12 23h8M10 9h12M7 7 3 5M25 7l4-2M16 4V1"/>',
+    store: '<path d="M5 10h22v16H5zM11 10V6h10v4M5 16h22M13 16v3h6v-3"/>',
+  };
+  return `<svg data-nav-glyph="${sceneId}" viewBox="0 0 32 32" focusable="false"><g>${drawings[sceneId]}</g></svg>`;
 }
 
 export function renderAppShell(snapshot: CurrencySnapshot): string {
@@ -98,11 +108,11 @@ export function renderAppShell(snapshot: CurrencySnapshot): string {
       <div id="app-notice" class="notice app-notice station-announcement" role="status" aria-atomic="true"><span data-notice-copy></span></div>
     </main>
     <nav class="hub-nav app-hub-nav" aria-label="主要功能">
-      ${navigationItem('station', '⌂', '车站')}
-      ${navigationItem('captain', '♙', '角色')}
-      ${navigationItem('equipment', '✦', '装备')}
-      ${navigationItem('legion', '⚑', '军团')}
-      ${navigationItem('store', '▣', '商店')}
+      ${navigationItem('station', '车站')}
+      ${navigationItem('captain', '角色')}
+      ${navigationItem('equipment', '装备')}
+      ${navigationItem('legion', '军团')}
+      ${navigationItem('store', '商店')}
     </nav>
     <div id="settings-host" hidden></div>
   </div>`;
