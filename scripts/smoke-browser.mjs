@@ -1994,6 +1994,48 @@ async function assertBattleHudGeometry(client, label) {
   );
   assert.equal(geometry.refresh.overlapsSkill, false, `${label} refresh ticket overlaps a skill target`);
   assert.ok(geometry.scrollWidth <= geometry.innerWidth + 1, `${label} battle overflows horizontally`);
+  await assertSkillRecharge(client, label);
+}
+
+async function assertSkillRecharge(client, label) {
+  const skills = await evaluate(client, `(() => {
+    const frame = window.__TIDAL_TRAIN_E2E__.snapshot().battle;
+    if (!frame) throw new Error('Recharge check requires a battle');
+    return [...document.querySelectorAll('[data-battle-skill]')].map((button) => {
+      const id = button.dataset.battleSkill;
+      const remaining = frame.cooldowns[id];
+      const duration = frame.cooldownDurations[id];
+      const energySkill = id === 'extreme-tide';
+      const ready = energySkill ? frame.energy >= 100 : remaining <= 0;
+      const charge = button.querySelector('[data-skill-charge]');
+      const rect = button.getBoundingClientRect();
+      const chargeRect = charge.getBoundingClientRect();
+      return {
+        id, ready, disabled: button.disabled, status: frame.status,
+        expectedRemaining: energySkill ? 100 - Math.min(100, Math.max(0, frame.energy))
+          : ready ? 0 : duration > 0 ? Math.min(100, remaining / duration * 100) : 100,
+        actualRemaining: Number.parseFloat(button.style.getPropertyValue('--cooldown')),
+        readyClass: button.classList.contains('is-ready'),
+        expectedLabel: ready ? '就绪' : energySkill ? Math.floor(frame.energy) + '%'
+          : (remaining / 1000).toFixed(1) + 's',
+        actualLabel: charge.textContent,
+        chargeInside: chargeRect.left >= rect.left && chargeRect.right <= rect.right
+          && chargeRect.top >= rect.top && chargeRect.bottom <= rect.bottom,
+        ringMask: getComputedStyle(button, '::after').maskComposite,
+      };
+    });
+  })()`);
+  assert.equal(skills.length, 3, `${label} must retain three skill dials`);
+  for (const skill of skills) {
+    assert.ok(Math.abs(skill.actualRemaining - skill.expectedRemaining) < 0.001,
+      `${label} recharge must match the cast-time duration: ${JSON.stringify(skill)}`);
+    assert.equal(skill.actualLabel, skill.expectedLabel, `${label} recharge label ${skill.id}`);
+    assert.equal(skill.readyClass, skill.ready, `${label} readiness ${skill.id}`);
+    if (!skill.ready) assert.equal(skill.disabled, true, `${label} charging skill must not fire`);
+    assert.equal(skill.chargeInside, true, `${label} charge text must fit inside the badge`);
+    assert.ok(skill.ringMask.split(',').every((layer) => layer.trim() === 'exclude'),
+      `${label} progress ring must not cover the illustration: ${skill.ringMask}`);
+  }
 }
 
 async function assertBossTelegraphPresentation(client, label) {
@@ -2020,8 +2062,8 @@ async function assertBossTelegraphPresentation(client, label) {
       );
       return topmost !== null && node.contains(topmost);
     };
-    const enabledSkills = [
-      ...document.querySelectorAll('[data-battle-skill]:not([disabled])'),
+    const skills = [
+      ...document.querySelectorAll('[data-battle-skill]'),
     ];
     const visibleInteractions = [
       ...document.querySelectorAll(
@@ -2031,8 +2073,8 @@ async function assertBossTelegraphPresentation(client, label) {
     return {
       canvasVisible: canvas instanceof HTMLCanvasElement && isVisible(canvas),
       hudVisible: isVisible(hud),
-      skillCount: enabledSkills.length,
-      skillsTopmost: enabledSkills.every((button) => {
+      skillCount: skills.length,
+      skillsTopmost: skills.every((button) => {
         const rect = button.getBoundingClientRect();
         return isVisible(button)
           && rect.width >= 44
@@ -2056,7 +2098,7 @@ async function assertBossTelegraphPresentation(client, label) {
   assert.equal(
     presentation.skillCount,
     3,
-    `${label} must retain all three enabled skill controls`,
+    `${label} must retain all three visible skill controls, including charging skills`,
   );
   assert.equal(
     presentation.skillsTopmost,
@@ -3737,6 +3779,9 @@ async function exercisePauseAndSkills(client) {
     `return hook.useSkill('bubble-barrier');`,
   );
   assert.ok(tidalUsed || barrierUsed, 'at least one active skill should work');
+  await assertSkillRecharge(client, 'after active skill casts');
+  await advanceBattle(client, 500);
+  await assertSkillRecharge(client, 'during active skill recharge');
   return { tidalUsed, barrierUsed };
 }
 
@@ -4179,7 +4224,7 @@ async function chooseEvolutionThroughRealProgression(client, signature, label) {
             '[data-battle-skill=${JSON.stringify(signature.skillId)}]'
           );
           const image = button?.querySelector(
-            '[data-skill-variant][alt=${JSON.stringify(signature.variantId)}]'
+            '[data-skill-variant-id=${JSON.stringify(signature.variantId)}]'
           );
           return image instanceof HTMLImageElement
             && !image.hidden
@@ -4190,7 +4235,7 @@ async function chooseEvolutionThroughRealProgression(client, signature, label) {
         const glyph = await evaluate(client, `(() => {
           const image = document.querySelector(
             '[data-battle-skill=${JSON.stringify(signature.skillId)}] '
-              + '[data-skill-variant][alt=${JSON.stringify(signature.variantId)}]'
+              + '[data-skill-variant-id=${JSON.stringify(signature.variantId)}]'
           );
           return image instanceof HTMLImageElement ? {
             visible: !image.hidden,
@@ -4851,8 +4896,7 @@ async function finishFullBattle(
           aliveBoss.behaviour.weakPointOpen ? 0 : 1
         ];
         const closedTransient = weakPointState === 'closed' && (
-          state.verification.cinematicTitle === '精准破潮'
-          || state.verification.effectKinds.includes('weakpoint-burst')
+          state.verification.effectKinds.includes('weakpoint-burst')
           || state.verification.effectKinds.includes('weakpoint-flare')
         );
         holdingBossDamageForClosedEvidence = weakPointState === 'closed'

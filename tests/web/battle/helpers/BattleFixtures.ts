@@ -83,6 +83,11 @@ export function createFrameFixture(
       'bubble-barrier': 0,
       'extreme-tide': 0,
     },
+    cooldownDurations: {
+      'tidal-volley': 12_000,
+      'bubble-barrier': 18_000,
+      'extreme-tide': 0,
+    },
     adReviveUsed: false,
     skillRefreshUsed: false,
     upgradeRerollUsed: false,

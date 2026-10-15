@@ -1691,10 +1691,12 @@ export class BattleRenderer {
       this.painter.text({
         kind: 'damage-number',
         layer: 'damage-numbers',
-        text: number.critical ? `暴击 ${number.value}` : `${number.value}`,
+        text: number.weakPointBonus
+          ? `弱点 +${number.value}`
+          : number.critical ? `暴击 ${number.value}` : `${number.value}`,
         x: number.x,
         y: number.y,
-        fill: number.critical ? '#fff0a6' : '#efffff',
+        fill: number.weakPointBonus ? '#ffe28c' : number.critical ? '#fff0a6' : '#efffff',
         stroke: 'rgba(22, 65, 94, 0.78)',
         lineWidth: number.critical ? 4 : 3,
         font: number.critical

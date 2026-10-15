@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { FIXED_STEP_MS } from '../../../web/battle/BattleConfig';
 import { BattleEngine } from '../../../web/battle/BattleEngine';
+import { createBattleHudModel } from '../../../web/battle/BattleHudModel';
+import type { BattleUpgradeId } from '../../../web/battle/BattleTypes';
 
 const input = {
   battleId: 'skills',
@@ -176,6 +178,7 @@ describe('BattleEngine skills', () => {
 
     expect(engine.useSkill('tidal-volley')).toBe(true);
     expect(engine.frame.cooldowns['tidal-volley']).toBe(13_824);
+    expect(engine.frame.cooldownDurations['tidal-volley']).toBe(13_824);
     const volleyProjectiles = engine.frame.projectiles.filter((projectile) => projectile.source === 'volley');
     expect(volleyProjectiles).toHaveLength(16);
     expect(volleyProjectiles.every((projectile) => (
@@ -252,12 +255,39 @@ describe('BattleEngine skills', () => {
     expect(engine.refreshActiveSkillCooldowns()).toBe(true);
     expect(engine.frame.cooldowns['tidal-volley']).toBe(0);
     expect(engine.frame.cooldowns['bubble-barrier']).toBe(0);
+    expect(engine.frame.cooldownDurations['bubble-barrier']).toBe(18_000);
     expect(engine.frame.skillRefreshUsed).toBe(true);
     expect(engine.refreshActiveSkillCooldowns()).toBe(false);
 
     expect(engine.useSkill('extreme-tide')).toBe(true);
     expect(engine.frame.energy).toBe(0);
     expect(engine.useSkill('extreme-tide')).toBe(false);
+  });
+
+  it('preserves an in-flight recharge across upgrades and records new totals on the next cast', () => {
+    const engine = new BattleEngine(input);
+    const internals = engine as unknown as {
+      status: string;
+      offeredUpgradeIds: BattleUpgradeId[];
+    };
+    expect(engine.useSkill('bubble-barrier')).toBe(true);
+    runFor(engine, 1_000);
+    const remaining = engine.frame.cooldowns['bubble-barrier'];
+    for (const id of ['rank-bubble-barrier', 'tidal-resonance'] as const) {
+      internals.status = 'upgrade';
+      internals.offeredUpgradeIds = [id];
+      expect(engine.chooseUpgrade(id, 'manual')).toBe(true);
+    }
+    expect(engine.frame.cooldowns['bubble-barrier']).toBe(remaining);
+    expect(engine.frame.cooldownDurations['bubble-barrier']).toBe(18_000);
+    const barrier = createBattleHudModel(engine.frame, {
+      mode: 'normal', upgradeRerollAvailable: false, skillRefreshAvailable: false,
+    }).skills[1]!;
+    expect(barrier.rechargePercent).toBeCloseTo((1 - remaining / 18_000) * 100);
+    expect(engine.refreshActiveSkillCooldowns()).toBe(true);
+    expect(engine.useSkill('bubble-barrier')).toBe(true);
+    expect(engine.frame.cooldowns['bubble-barrier']).toBe(14_688);
+    expect(engine.frame.cooldownDurations['bubble-barrier']).toBe(14_688);
   });
 
   it('revives only from defeat and grants temporary protection', () => {

@@ -321,7 +321,8 @@ export class BattleHUD {
     const skillIndex = ['1', '2', '3'].indexOf(event.key);
     if (skillIndex >= 0 && this.model.status === 'running') {
       const skillId = SKILL_IDS[skillIndex];
-      if (skillId) {
+      const button = skillId && this.nodes?.skillButtons.get(skillId);
+      if (skillId && button && !button.disabled) {
         event.preventDefault();
         this.callbacks.onSkill(skillId);
       }
@@ -423,6 +424,7 @@ export class BattleHUD {
       const button = nodes.skillButtons.get(skill.id);
       if (!button) continue;
       button.dataset.rank = String(skill.rank);
+      button.style.setProperty('--cooldown', `${100 - skill.rechargePercent}%`);
       setText(requireElement(button, '[data-skill-rank]'), `潮阶 ${skill.rank}`);
       const icon = requireElement<HTMLImageElement>(button, '[data-skill-icon]');
       if (icon.src !== skill.iconUrl) icon.src = skill.iconUrl;
@@ -431,26 +433,30 @@ export class BattleHUD {
         const variantId = skill.variantIds[index];
         glyph.hidden = !variantId;
         if (!variantId) {
+          delete glyph.dataset.skillVariantId;
           glyph.removeAttribute('src');
           glyph.removeAttribute('alt');
           return;
         }
         const glyphUrl = BATTLE_VARIANT_GLYPH_URLS[variantId];
+        glyph.dataset.skillVariantId = variantId;
         if (glyph.src !== glyphUrl) glyph.src = glyphUrl;
-        glyph.alt = variantId;
+        glyph.alt = getBattleUpgradeCopy(variantId).name;
       });
       setText(
         requireElement(button, '[data-skill-cooldown]'),
-        skill.cooldownLabel,
+        skill.ready ? '点击释放' : skill.energyRequired ? '命中蓄能' : '冷却回复',
       );
+      setText(requireElement(button, '[data-skill-charge]'), skill.cooldownLabel);
       button.classList.toggle('is-ready', skill.ready);
       button.classList.toggle('is-charging', !skill.ready);
       button.disabled = (
         model.status !== 'running'
+        || !skill.ready
         || model.pendingActions.has(`skill:${skill.id}`)
       );
       const variantStatus = skill.variantIds.length > 0
-        ? `，变体 ${skill.variantIds.join('、')}`
+        ? `，进化 ${skill.variantIds.map((id) => getBattleUpgradeCopy(id).name).join('、')}`
         : '';
       const status = `${skill.name}，潮阶 ${skill.rank}${variantStatus}，${skill.cooldownLabel}`;
       setText(requireElement(button, '[data-skill-status]'), status);
@@ -699,6 +705,7 @@ function skillButton(
   return `<button class="battle-skill" type="button" data-battle-skill="${id}" data-rank="1" aria-label="${label}，潮阶 1">
     <span class="battle-skill__key">${shortcut}</span>
     <span class="battle-skill__icon"><img data-skill-icon src="${iconUrl}" alt="" /></span>
+    <span class="battle-skill__charge" data-skill-charge aria-hidden="true">就绪</span>
     <span class="battle-skill__rank" data-skill-rank>潮阶 1</span>
     <span class="battle-skill__variants" data-skill-variants aria-hidden="true"><img data-skill-variant hidden /><img data-skill-variant hidden /></span>
     <span class="battle-skill__copy"><b>${label}</b><small data-skill-cooldown>就绪</small></span>

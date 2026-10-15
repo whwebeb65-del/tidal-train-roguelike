@@ -29,6 +29,36 @@ const SETTLEMENT: BattleSettlementPresentation = Object.freeze({
   doubled: false,
 });
 
+describe('createBattleHudModel skill recharge', () => {
+  it('uses the original cast duration even after the current build changes', () => {
+    const frame = createFrameFixture({
+      cooldowns: { 'tidal-volley': 6_912, 'bubble-barrier': 9_000, 'extreme-tide': 0 },
+      cooldownDurations: { 'tidal-volley': 13_824, 'bubble-barrier': 18_000, 'extreme-tide': 0 },
+      skillRanks: { 'tidal-volley': 5, 'bubble-barrier': 3, 'extreme-tide': 1 },
+    });
+    const model = createBattleHudModel(frame, createHudModelOptionsFixture());
+    expect(model.skills[0]).toMatchObject({ rechargePercent: 50, cooldownLabel: '6.9s', ready: false });
+    expect(model.skills[1]).toMatchObject({ rechargePercent: 50, cooldownLabel: '9.0s', ready: false });
+  });
+
+  it.each([0, 43, 99, 100])('uses energy rather than zero cooldown for extreme tide at %s energy', (energy) => {
+    const model = createBattleHudModel(createFrameFixture({ energy }), createHudModelOptionsFixture());
+    expect(model.skills[2]).toMatchObject({
+      rechargePercent: energy,
+      cooldownLabel: energy === 100 ? '就绪' : `${energy}%`,
+      ready: energy === 100,
+    });
+  });
+
+  it('shows ready skills as full and never divides by a zero cast duration', () => {
+    const model = createBattleHudModel(createFrameFixture({
+      cooldownDurations: { 'tidal-volley': 0, 'bubble-barrier': 0, 'extreme-tide': 0 },
+    }), createHudModelOptionsFixture());
+    expect(model.skills[0]).toMatchObject({ rechargePercent: 0, ready: false });
+    expect(model.skills[1]).toMatchObject({ rechargePercent: 100, ready: true });
+  });
+});
+
 describe('createBattleHudModel archive discovery', () => {
   it('only reports build connections to upgrades actually acquired in this run', () => {
     const frame = createFrameFixture({ offeredUpgradeIds: ['coral-warhead', 'multi-barrel', 'undertow-eye'] });

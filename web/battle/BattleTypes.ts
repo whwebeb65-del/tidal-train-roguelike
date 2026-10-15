@@ -196,6 +196,8 @@ export interface BattleFrameView {
   readonly offeredUpgradeIds: readonly BattleUpgradeId[];
   readonly upgradeLevels: Readonly<Record<BattleUpgradeId, number>>;
   readonly cooldowns: Readonly<Record<BattleSkillId, number>>;
+  /** Cast-time totals: changing the build must not move an active recharge dial. */
+  readonly cooldownDurations: Readonly<Record<BattleSkillId, number>>;
   readonly adReviveUsed: boolean;
   readonly skillRefreshUsed: boolean;
   readonly upgradeRerollUsed: boolean;

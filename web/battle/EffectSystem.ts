@@ -66,6 +66,7 @@ export interface DamageNumberView {
   readonly y: number;
   readonly value: number;
   readonly critical: boolean;
+  readonly weakPointBonus?: boolean;
   readonly alpha: number;
 }
 
@@ -156,6 +157,7 @@ interface MutableDamageNumber {
   id: number;
   value: number;
   critical: boolean;
+  weakPointEnemyId: number | null;
   lifetimeMs: number;
   x: number;
   y: number;
@@ -331,6 +333,7 @@ export class EffectSystem {
         y: number.y,
         value: number.value,
         critical: number.critical,
+        ...(number.weakPointEnemyId === null ? {} : { weakPointBonus: true }),
         alpha: fade(number.ageMs, number.lifetimeMs),
       })),
       rings: this.rings.map((ring) => {
@@ -569,13 +572,12 @@ export class EffectSystem {
         const enemy = findEnemy(frame, event.enemyId);
         const x = enemy?.x ?? this.lastEventX;
         const y = enemy?.y ?? this.lastEventY;
-        this.spawnBurst(x, y, this.majorCount(10), '#fff09a', 'weakpoint-burst', 620, 10, 'front-effects');
-        this.spawnBurst(x, y, this.majorCount(4), '#fff4a8', 'weakpoint-flare', 480, 10, 'front-effects');
-        this.addRing(x, y, 8, 62, '#fff4a8', 10, '#ff765e');
-        this.addDamageNumber(x, y, event.bonusDamage, true);
-        this.title = '精准破潮';
-        this.titleRemainingMs = 720;
-        this.shake(3.5, 120);
+        if (!this.reducedMotion) {
+          this.spawnBurst(x, y, this.majorCount(4), '#fff09a', 'weakpoint-burst', 380, 10, 'front-effects');
+          this.spawnBurst(x, y, this.majorCount(2), '#fff4a8', 'weakpoint-flare', 300, 10, 'front-effects');
+        }
+        this.addRing(x, y, this.reducedMotion ? 18 : 6, 18, '#fff4a8', 10, '#b87939', 'impact-ring', null, 300);
+        this.addDamageNumber(x, y, event.bonusDamage, false, event.enemyId);
       }
       if (event.type === 'enemy-killed') {
         this.remember(event.x, event.y);
@@ -753,7 +755,9 @@ export class EffectSystem {
     }
     for (const number of this.damageNumbers) {
       number.ageMs += deltaMs;
-      number.y -= 32 * deltaSeconds;
+      if (!this.reducedMotion || number.weakPointEnemyId === null) {
+        number.y -= 32 * deltaSeconds;
+      }
     }
     for (const ring of this.rings) ring.ageMs += deltaMs;
     this.releaseExpiredEffects();
@@ -1107,15 +1111,26 @@ export class EffectSystem {
     y: number,
     value: number,
     critical: boolean,
+    weakPointEnemyId: number | null = null,
   ): void {
     if (this.damageNumberLimit <= 0) return;
+    if (weakPointEnemyId !== null) {
+      const recent = this.damageNumbers.find((number) => (
+        number.weakPointEnemyId === weakPointEnemyId && number.ageMs < 140
+      ));
+      if (recent) {
+        recent.value += Math.max(0, Math.floor(value));
+        return;
+      }
+    }
     const number = this.damageNumberPool.acquire();
     number.id = this.nextId++;
     number.x = x;
-    number.y = y - 18;
+    number.y = y - (weakPointEnemyId === null ? 18 : 38);
     number.value = Math.max(0, Math.floor(value));
     number.critical = critical;
-    number.lifetimeMs = critical ? 900 : 720;
+    number.weakPointEnemyId = weakPointEnemyId;
+    number.lifetimeMs = weakPointEnemyId !== null ? 620 : critical ? 900 : 720;
     number.ageMs = 0;
     this.damageNumbers.push(number);
   }
@@ -1343,6 +1358,7 @@ function createDamageNumber(): MutableDamageNumber {
     id: 0,
     value: 0,
     critical: false,
+    weakPointEnemyId: null,
     lifetimeMs: 0,
     x: 0,
     y: 0,
@@ -1354,6 +1370,7 @@ function resetDamageNumber(number: MutableDamageNumber): void {
   number.id = 0;
   number.value = 0;
   number.critical = false;
+  number.weakPointEnemyId = null;
   number.lifetimeMs = 0;
   number.x = 0;
   number.y = 0;

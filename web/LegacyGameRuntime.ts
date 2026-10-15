@@ -2863,6 +2863,7 @@ function cloneBattleFrame(frame: BattleFrameView): BattleFrameView {
       ),
     ) as unknown as BattleFrameView['skillVariants'],
     cooldowns: { ...frame.cooldowns },
+    cooldownDurations: { ...frame.cooldownDurations },
     enemies: frame.enemies.map((enemy) => ({ ...enemy })),
     projectiles: frame.projectiles.map((projectile) => ({ ...projectile })),
     loot: frame.loot.map((loot) => ({ ...loot })),

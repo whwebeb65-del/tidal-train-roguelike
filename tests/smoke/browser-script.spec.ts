@@ -335,7 +335,7 @@ describe('browser smoke script', () => {
     expect(source).toContain('settledCamera');
     expect(source).toContain('weakpoint-burst');
     expect(source).toContain('weakpoint-flare');
-    expect(source).toContain('精准破潮');
+    expect(source).not.toContain('精准破潮');
     expect(source).toContain('negativeGateResults');
     expect(source).toContain('warningCountdown');
     expect(source).toContain('openPalette');
@@ -474,21 +474,28 @@ describe('browser smoke script', () => {
     async () => {
       expect(previewLifecycle.waitForOwnedPreview).toBeTypeOf('function');
       let staleResponseSent = false;
+      const lifecycle: string[] = [];
+      let child: ReturnType<typeof spawn> | undefined;
       const staleServer = createServer((_request, response) => {
-        setTimeout(() => {
+        lifecycle.push('request-started');
+        // Gate the stale 200 on actual exit, not timers in two competing processes.
+        child?.once('exit', () => {
+          lifecycle.push('owned-exited');
           staleResponseSent = true;
+          lifecycle.push('stale-response-sent');
           response.end('stale');
-        }, 300);
+        });
+        child?.stdin?.write('exit\n');
       });
       const port = await listen(staleServer);
       const output: string[] = [];
-      const child = spawn(
+      child = spawn(
         process.execPath,
         ['-e', [
+          "process.stdin.once('data', () => process.exit(0));",
           `console.log('Local: http://127.0.0.1:${port}/');`,
-          'setTimeout(() => process.exit(0), 30);',
         ].join('')],
-        { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true },
+        { stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true },
       );
       child.stdout?.on('data', (chunk) => output.push(String(chunk)));
 
@@ -501,7 +508,10 @@ describe('browser smoke script', () => {
             timeoutMs: 2_000,
           },
         )).rejects.toThrow('Owned preview exited before readiness');
-        expect(staleResponseSent).toBe(false);
+        expect(lifecycle).toEqual([
+          'request-started', 'owned-exited', 'stale-response-sent',
+        ]);
+        expect(staleResponseSent).toBe(true);
       } finally {
         if (child.exitCode === null) child.kill('SIGKILL');
         await close(staleServer);

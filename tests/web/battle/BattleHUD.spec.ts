@@ -739,12 +739,19 @@ describe('BattleHUD', () => {
       '[data-skill-variant]:not([hidden])',
     )).toHaveLength(2);
     expect(extremeTide.getAttribute('aria-label')).toContain('潮阶 5');
+    expect(extremeTide.getAttribute('aria-label')).toContain('引潮眼');
+    expect(extremeTide.getAttribute('aria-label')).not.toContain('undertow-eye');
+    const eyeGlyph = extremeTide.querySelector<HTMLImageElement>('[data-skill-variant-id="undertow-eye"]');
+    expect(eyeGlyph?.alt).toBe('引潮眼');
     expect(extremeTide.getAttribute('aria-label')).not.toContain('Rank');
     expect(speed.textContent).toBe('1.5×');
     expect(speed.disabled).toBe(false);
 
     speed.click();
     expect(onBattleSpeed).toHaveBeenCalledWith(1);
+
+    hud.update(createBattleHudModel(createFrameFixture(), createHudModelOptionsFixture()));
+    expect(extremeTide.querySelector('[data-skill-variant-id]')).toBeNull();
 
     hud.dispose();
     host.remove();
@@ -793,6 +800,59 @@ describe('BattleHUD', () => {
     expect(model.shieldLabel).toContain('3.5');
     expect(model.upgradeCards).toHaveLength(3);
     expect(model.upgradeRerollVisible).toBe(true);
+  });
+
+  it('renders live recharge dials and blocks charging or pending skills for touch and keyboard alike', () => {
+    const onSkill = vi.fn();
+    const hud = new BattleHUD(createCallbacks({ onSkill }), window);
+    const host = document.createElement('div');
+    document.body.append(host);
+    hud.mount(host);
+    const frame = createFrameFixture({
+      cooldowns: { 'tidal-volley': 6_000, 'bubble-barrier': 0, 'extreme-tide': 0 },
+      energy: 72,
+    });
+    const options = createHudModelOptionsFixture();
+    hud.update(createBattleHudModel(frame, options));
+    const volley = host.querySelector<HTMLButtonElement>('[data-battle-skill="tidal-volley"]')!;
+    const barrier = host.querySelector<HTMLButtonElement>('[data-battle-skill="bubble-barrier"]')!;
+    const tide = host.querySelector<HTMLButtonElement>('[data-battle-skill="extreme-tide"]')!;
+    expect(volley.style.getPropertyValue('--cooldown')).toBe('50%');
+    expect(tide.style.getPropertyValue('--cooldown')).toBe('28%');
+    expect(volley.querySelector('[data-skill-charge]')?.textContent).toBe('6.0s');
+    expect(tide.querySelector('[data-skill-charge]')?.textContent).toBe('72%');
+    expect(barrier.querySelector('[data-skill-charge]')?.textContent).toBe('就绪');
+    expect(barrier.querySelector('[data-skill-cooldown]')?.textContent).toBe('点击释放');
+    expect(volley.disabled).toBe(true);
+    expect(tide.disabled).toBe(true);
+    volley.click();
+    tide.click();
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: '1' }));
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: '3' }));
+    expect(onSkill).not.toHaveBeenCalled();
+    barrier.click();
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: '2' }));
+    expect(onSkill.mock.calls).toEqual([['bubble-barrier'], ['bubble-barrier']]);
+
+    hud.update(createBattleHudModel({ ...frame, energy: 100 }, options));
+    expect(tide.style.getPropertyValue('--cooldown')).toBe('0%');
+    expect(tide.classList.contains('is-ready')).toBe(true);
+    expect(tide.disabled).toBe(false);
+    tide.click();
+    expect(onSkill).toHaveBeenLastCalledWith('extreme-tide');
+    onSkill.mockClear();
+    hud.update(createBattleHudModel({ ...frame, energy: 100 }, {
+      ...options, pendingActions: new Set(['skill:extreme-tide']),
+    }));
+    tide.click();
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: '3' }));
+    expect(onSkill).not.toHaveBeenCalled();
+    hud.update(createBattleHudModel({ ...frame, status: 'paused' }, options));
+    barrier.click();
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: '2' }));
+    expect(onSkill).not.toHaveBeenCalled();
+    hud.dispose();
+    host.remove();
   });
 
   it('marks skill variants as evolution cards for the upgrade ribbon', () => {

@@ -53,6 +53,7 @@ export interface BattleSkillModel {
   readonly shortcut: string;
   readonly cooldownMs: number;
   readonly cooldownLabel: string;
+  readonly rechargePercent: number;
   readonly ready: boolean;
   readonly energyRequired: boolean;
   readonly rank: number;
@@ -314,6 +315,10 @@ function createSkillModels(
       cooldownLabel: energyRequired
         ? ready ? '就绪' : `${Math.floor(frame.energy)}%`
         : cooldownMs <= 0 ? '就绪' : `${(cooldownMs / 1000).toFixed(1)}s`,
+      rechargePercent: energyRequired
+        ? percent(frame.energy, 100)
+        : ready ? 100 : frame.cooldownDurations[id] > 0
+          ? 100 - percent(cooldownMs, frame.cooldownDurations[id]) : 0,
       ready,
       energyRequired,
       rank: frame.skillRanks[id],

@@ -206,6 +206,11 @@ export class BattleEngine {
     'bubble-barrier': 0,
     'extreme-tide': 0,
   };
+  private readonly cooldownDurations: Record<BattleSkillId, number> = {
+    'tidal-volley': 0,
+    'bubble-barrier': 0,
+    'extreme-tide': 0,
+  };
 
   public constructor(private readonly input: BattleRunInput) {
     if (input.battleId.trim().length === 0) {
@@ -257,6 +262,7 @@ export class BattleEngine {
       offeredUpgradeIds: this.offeredUpgradeIds,
       upgradeLevels: this.upgradeLevels,
       cooldowns: this.cooldowns,
+      cooldownDurations: this.cooldownDurations,
       adReviveUsed: this.adReviveUsed,
       skillRefreshUsed: this.skillRefreshUsed,
       upgradeRerollUsed: this.upgradeRerollUsed,
@@ -363,6 +369,7 @@ export class BattleEngine {
             ? volleyProfile(this.battleBuild.skillVariants['tidal-volley']).cooldownMultiplier
             : 1),
       );
+      this.cooldownDurations[skillId] = this.cooldowns[skillId];
       if (skillId === 'tidal-volley') this.fireVolley();
       if (skillId === 'bubble-barrier') this.applyBarrier();
     }

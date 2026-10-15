@@ -135,9 +135,99 @@ describe('EffectSystem', () => {
       'weakpoint-burst',
     ]));
     expect(effects.view.damageNumbers).toEqual(expect.arrayContaining([
-      expect.objectContaining({ value: 40, critical: true }),
+      expect.objectContaining({ value: 40, critical: false, weakPointBonus: true }),
     ]));
     expect(effects.view.camera.amplitude).toBeLessThanOrEqual(6);
+  });
+
+  it('labels clustered weak-point bonuses separately from a simultaneous critical hit', () => {
+    const effects = createEffectsForQuality('high');
+    effects.consume([
+      { type: 'boss-weakpoint-hit', enemyId: 5, bonusDamage: 40 },
+      { type: 'boss-weakpoint-hit', enemyId: 5, bonusDamage: 25 },
+      { type: 'projectile-hit', enemyId: 5, damage: 90, critical: true, source: 'main' },
+    ], createFrameFixture());
+
+    expect(effects.view.damageNumbers).toHaveLength(2);
+    expect(effects.view.damageNumbers).toEqual(expect.arrayContaining([
+      expect.objectContaining({ value: 65, critical: false, weakPointBonus: true }),
+      expect.objectContaining({ value: 90, critical: true }),
+    ]));
+    const painter = createRecordingPainter();
+    new BattleRenderer(painter).render(createPresentationFixture({ effects: effects.view }));
+    const numbers = painter.commands.filter((command) => command.kind === 'damage-number');
+    expect(numbers).toEqual(expect.arrayContaining([
+      expect.objectContaining({ text: '弱点 +65', fill: '#ffe28c' }),
+      expect.objectContaining({ text: '暴击 90' }),
+    ]));
+    expect(effects.view.cinematic.title).toBeNull();
+    expect(effects.view.camera.amplitude).toBe(0);
+  });
+
+  it('clears weak-point labels when an expired number is reused for a critical hit', () => {
+    const effects = createEffectsForQuality('high');
+    effects.consume([
+      { type: 'boss-weakpoint-hit', enemyId: 5, bonusDamage: 40 },
+    ], createFrameFixture());
+    effects.update(650);
+    expect(effects.view.damageNumbers).toHaveLength(0);
+
+    effects.consume([
+      { type: 'projectile-hit', enemyId: 5, damage: 90, critical: true, source: 'main' },
+    ], createFrameFixture());
+
+    expect(effects.poolStats.damageNumbers.reused).toBe(1);
+    expect(effects.view.damageNumbers).toHaveLength(1);
+    expect(effects.view.damageNumbers[0]).toMatchObject({ value: 90, critical: true });
+    expect(effects.view.damageNumbers[0]).not.toHaveProperty('weakPointBonus');
+    const painter = createRecordingPainter();
+    new BattleRenderer(painter).render(createPresentationFixture({ effects: effects.view }));
+    expect(painter.commands.filter((command) => command.kind === 'damage-number')).toEqual([
+      expect.objectContaining({ text: '暴击 90' }),
+    ]);
+  });
+
+  it('keeps simultaneous weak-point bonuses on different enemies separate', () => {
+    const effects = createEffectsForQuality('high');
+    effects.consume([
+      { type: 'boss-weakpoint-hit', enemyId: 5, bonusDamage: 40 },
+      { type: 'boss-weakpoint-hit', enemyId: 6, bonusDamage: 25 },
+      { type: 'boss-weakpoint-hit', enemyId: 5, bonusDamage: 10 },
+    ], createFrameFixture());
+
+    expect(effects.view.damageNumbers).toHaveLength(2);
+    expect(effects.view.damageNumbers).toEqual([
+      expect.objectContaining({ value: 50, weakPointBonus: true }),
+      expect.objectContaining({ value: 25, weakPointBonus: true }),
+    ]);
+  });
+
+  it.each([
+    ['high', false], ['low', false], ['high', true], ['low', true],
+  ] as const)('keeps weak-point feedback local at %s quality with reduced motion %s', (quality, reducedMotion) => {
+    const effects = createEffectsForQuality(quality, reducedMotion);
+    effects.consume([
+      { type: 'boss-tide-warning', safeLane: 1, durationMs: 1200 },
+      { type: 'boss-weakpoint-hit', enemyId: 5, bonusDamage: 40 },
+    ], createFrameFixture());
+
+    const before = effects.view;
+    expect(before.cinematic.title).toBe('船长：绿色潮线是安全航道');
+    expect(before.camera.amplitude).toBe(0);
+    expect(before.damageNumbers).toHaveLength(1);
+    expect(before.damageNumbers[0]).toMatchObject({ value: 40, weakPointBonus: true, critical: false });
+    expect(before.particles.filter((particle) => (
+      particle.kind === 'weakpoint-burst' || particle.kind === 'weakpoint-flare'
+    )).length).toBeLessThanOrEqual(reducedMotion ? 0 : 6);
+
+    effects.update(150);
+    if (reducedMotion) {
+      expect(effects.view.damageNumbers[0]?.y).toBe(before.damageNumbers[0]?.y);
+      expect(effects.view.rings.at(-1)?.radius).toBe(before.rings.at(-1)?.radius);
+    }
+    effects.update(500);
+    expect(effects.view.damageNumbers).toHaveLength(0);
+    expect(effects.view.cinematic.title).toBe('船长：绿色潮线是安全航道');
   });
 
   it('retains static danger feedback with reduced motion', () => {
