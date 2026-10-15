@@ -50,6 +50,17 @@ const AFFIX_LABELS: Readonly<Record<EquipmentAffixId, string>> = {
   'repair-flat': '维修',
 };
 
+const SLOT_GLYPHS: Readonly<Record<EquipmentSlot, string>> = {
+  cannon: '<path d="M5 17h14l7-5v8l-7-3"/><path d="M8 17v5h8v-5"/><circle cx="20" cy="14" r="2"/>',
+  carriage: '<path d="M6 9h20v13H6z"/><path d="M10 9V6h12v3M10 14h4m4 0h4"/><circle cx="11" cy="24" r="2"/><circle cx="21" cy="24" r="2"/>',
+  core: '<circle cx="16" cy="16" r="10"/><circle cx="16" cy="16" r="5"/><path d="m17 7-5 9h5l-2 9 6-11h-5z"/>',
+  instrument: '<circle cx="16" cy="16" r="11"/><path d="M16 3v4m0 18v4M3 16h4m18 0h4"/><path d="m19 11-2 7-6 3 3-7z"/>',
+};
+
+function renderEquipmentGlyph(slot: EquipmentSlot): string {
+  return `<span class="equipment-glyph equipment-glyph--${slot}" aria-hidden="true"><svg viewBox="0 0 32 32">${SLOT_GLYPHS[slot]}</svg></span>`;
+}
+
 function affixLabel(affix: EquipmentAffix): string {
   const percentage = affix.id.endsWith('percent');
   return `${AFFIX_LABELS[affix.id]} +${percentage ? `${affix.value * 100}%` : affix.value}`;
@@ -65,8 +76,7 @@ function renderEquipmentCard(instance: EquipmentInstance, state: EquipmentState)
 
   return `<article class="equipment-card workbench-item ${equipped ? 'is-equipped' : ''}">
     <div class="equipment-card__heading"><small>${SLOT_LABELS[definition.slot]} · ${SET_LABELS[definition.setId]}</small><span>${'★'.repeat(instance.stars)}${'☆'.repeat(5 - instance.stars)}</span></div>
-    <h3>${definition.name}</h3>
-    <p>Lv.${instance.level} · ${equipmentModifierSummary(definition.baseModifiers)}</p>
+    <div class="equipment-card__identity">${renderEquipmentGlyph(definition.slot)}<div><h3>${definition.name}</h3><p>Lv.${instance.level} · ${equipmentModifierSummary(definition.baseModifiers)}</p></div></div>
     <p>词条：${instance.affixes.length > 0 ? instance.affixes.map(affixLabel).join(' · ') : '暂无'}</p>
     <div class="equipment-actions">
       <button class="secondary" data-action="equip-equipment" data-instance-id="${instance.instanceId}" ${equipped ? 'disabled' : ''}>${equipped ? '已装备' : '装备'}</button>
@@ -98,7 +108,7 @@ export function renderEquipment(model: EquipmentViewModel): string {
     const instanceId = state.equippedEquipmentIds[slot];
     const instance = state.inventory.find((item) => item.instanceId === instanceId);
     const name = instance ? getEquipmentDefinition(instance.definitionId).name : '未装备';
-    return `<div class="equipment-slot maintenance-tag" data-slot="${slot}"><small>${SLOT_LABELS[slot]}</small><b>${name}</b></div>`;
+    return `<div class="equipment-slot maintenance-tag" data-slot="${slot}">${renderEquipmentGlyph(slot)}<span><small>${SLOT_LABELS[slot]}</small><b>${name}</b></span></div>`;
   }).join('');
 
   const groups = SLOTS.map((slot) => {

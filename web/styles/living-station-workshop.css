@@ -113,8 +113,12 @@
 
 .tool-wall .maintenance-tag {
   position: relative;
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr);
+  align-items: center;
+  gap: 9px;
   min-height: 69px;
-  padding: 11px 12px 10px 26px;
+  padding: 9px 12px 9px 10px;
   border: 3px solid #62442f;
   border-radius: 3px 7px 4px 5px;
   background: linear-gradient(100deg, #e2c683, #b99154 72%, #977143);
@@ -125,9 +129,28 @@
 }
 
 .tool-wall .maintenance-tag:nth-child(even) { transform: rotate(.8deg) translateX(5px); }
-.tool-wall .maintenance-tag::before { position: absolute; top: 50%; left: 8px; width: 9px; height: 9px; content: ''; border: 2px solid #4a3429; border-radius: 50%; background: #304d4d; transform: translateY(-50%); }
+.tool-wall .maintenance-tag::before { position: absolute; top: 7px; right: 7px; width: 7px; height: 7px; content: ''; border: 2px solid #4a3429; border-radius: 50%; background: #304d4d; }
 .tool-wall .maintenance-tag small { color: #625033; font-weight: 800; letter-spacing: .08em; }
 .tool-wall .maintenance-tag b { display: block; margin-top: 3px; color: #372923; font-size: 13px; }
+
+.equipment-glyph {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  color: #f5db8c;
+  border: 3px solid #50382b;
+  border-radius: 47% 53% 45% 55%;
+  background: #24545a;
+  box-shadow: 2px 3px #3b2a2280, inset 0 0 0 2px #79b9ac4d;
+  transform: rotate(-3deg);
+}
+
+.equipment-glyph svg { width: 27px; height: 27px; overflow: visible; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.equipment-glyph--carriage { color: #ffe0a0; background: #9f4f3e; transform: rotate(2deg); }
+.equipment-glyph--core { color: #fff0a5; background: #704d82; box-shadow: 0 0 11px #dfb9ff6b, 2px 3px #3b2a2280, inset 0 0 0 2px #f0d3944d; }
+.equipment-glyph--instrument { color: #e1f4cf; background: #31706b; transform: rotate(3deg); }
 
 .tool-wall .equipment-wallet {
   position: relative;
@@ -196,6 +219,11 @@
 .workbench-item.is-equipped { border-color: #f0d276; box-shadow: 0 0 16px #ecce7375, 6px 8px #16101291, inset 0 0 0 2px #fff0aa; }
 .workbench-item .equipment-card__heading { padding-right: 42px; color: #5a3b28; }
 .workbench-item .equipment-card__heading span { color: #724329; font-size: 15px; letter-spacing: .05em; }
+.workbench-item .equipment-card__identity { display: grid; grid-template-columns: 54px minmax(0, 1fr); align-items: center; gap: 10px; margin: 10px 0 6px; }
+.workbench-item .equipment-card__identity .equipment-glyph { width: 48px; height: 48px; color: #fff0ae; box-shadow: 3px 4px #3b2a2280, inset 0 0 0 2px #a7d9c451; }
+.workbench-item .equipment-card__identity .equipment-glyph svg { width: 33px; height: 33px; }
+.workbench-item .equipment-card__identity h3 { margin: 0 0 4px; }
+.workbench-item .equipment-card__identity p { margin: 0; }
 .workbench-item h3 { color: #38271f; }
 .workbench-item p { color: #533c2c; }
 .workbench-item .equipment-actions { margin-top: 12px; }
@@ -234,5 +262,5 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .workshop-sign, .tool-wall, .parts-bin, .tool-wall .maintenance-tag, .workbench-item, .workbench-item:nth-child(even), .workshop-blueprint { transform: none; }
+  .workshop-sign, .tool-wall, .parts-bin, .tool-wall .maintenance-tag, .workbench-item, .workbench-item:nth-child(even), .workshop-blueprint, .equipment-glyph { transform: none; }
 }

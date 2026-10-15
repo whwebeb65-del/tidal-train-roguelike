@@ -29,6 +29,9 @@ describe('EquipmentView', () => {
     expect(html).toContain('workbench-item');
     expect(html).toContain('parts-bin');
     expect(html).toContain('maintenance-tag');
+    expect(html.match(/class="equipment-glyph equipment-glyph--/g)).toHaveLength(8);
+    expect(html).toContain('equipment-card__identity');
+    expect(html).toContain('<svg viewBox="0 0 32 32">');
     expect(html).toContain('data-action="show-equipment-workshop" aria-pressed="true"');
     expect(html).toContain('data-action="show-tidal-archive" aria-pressed="false"');
     expect(html).not.toContain('archive-unread-seal');
