@@ -146,6 +146,15 @@ describe('AppShell', () => {
     expect(battleCanvasCss).not.toMatch(
       /height:\s*calc\(100dvh\s*-\s*(?:68|64|72)px\)/,
     );
+    expect(appShellCss).toMatch(
+      /\.app-shell--v2:has\(\.game-scene--battle\)\s*\{[^}]*min-height:\s*100dvh;[^}]*padding-bottom:\s*0;[^}]*overflow:\s*hidden;/s,
+    );
+    expect(appShellCss).toMatch(
+      /\.app-shell--v2:has\(\.game-scene--battle\) \.app-topbar,\s*\.app-shell--v2:has\(\.game-scene--battle\) \.app-hub-nav\s*\{[^}]*display:\s*none;/s,
+    );
+    expect(appShellCss).toMatch(
+      /\.app-shell--v2:has\(\.game-scene--battle\) \.scene-viewport\s*\{[^}]*width:\s*100%;[^}]*padding:\s*0;/s,
+    );
   });
 
   it('keeps topbar actions at least 44px on both axes in mobile overrides', () => {

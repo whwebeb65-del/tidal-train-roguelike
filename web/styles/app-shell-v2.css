@@ -41,6 +41,28 @@
   min-height: 100dvh;
 }
 
+/* Keep the battle full-screen even while runtime chrome state catches up after a repeat run. */
+.app-shell--v2:has(.game-scene--battle) {
+  min-height: 100dvh;
+  padding-bottom: 0;
+  overflow: hidden;
+}
+
+.app-shell--v2:has(.game-scene--battle) .app-topbar,
+.app-shell--v2:has(.game-scene--battle) .app-hub-nav {
+  display: none;
+}
+
+.app-shell--v2:has(.game-scene--battle) .scene-viewport {
+  width: 100%;
+  padding: 0;
+}
+
+.app-shell--v2:has(.game-scene--battle) .scene-host {
+  height: 100dvh;
+  min-height: 100dvh;
+}
+
 .brand__copy {
   min-width: 0;
 }
