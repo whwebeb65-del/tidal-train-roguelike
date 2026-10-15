@@ -1,0 +1,65 @@
+.battle-build {
+  margin: 10px 0 18px;
+  padding: 8px 9px 9px;
+  border-block: 2px solid #9c7744;
+  color: #324e4c;
+  background: #fff1c17d;
+  text-align: left;
+}
+
+.battle-build__heading { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 7px; }
+.battle-build__heading > b { color: #73502e; font-size: 10px; letter-spacing: .1em; }
+.battle-build__heading > span { font-size: 9px; }
+.battle-build__tracks { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.battle-build__track { min-width: 0; display: grid; grid-template-columns: 27px 1fr; gap: 3px 5px; align-items: center; }
+.battle-build__track img { width: 27px; height: 27px; border: 1px solid #42756b; border-radius: 50%; background: #fff6d1; }
+.battle-build__track > span { color: #19686a; font-size: 10px; font-weight: 800; }
+.battle-build__track > span b { display: block; color: #77522c; font-size: 8px; font-weight: 700; }
+.battle-build__pips { grid-column: 1 / -1; display: flex; gap: 3px; height: 5px; margin-top: 3px; }
+.battle-build__pips i { flex: 1; border-radius: 1px; background: #77644a33; }
+.battle-build__pips .is-filled { background: #168e8b; box-shadow: 0 0 3px #158e8b55; }
+.battle-build__track:nth-child(2) .is-filled { background: #3f9b6e; }
+.battle-build__track:nth-child(3) .is-filled { background: #c45f47; }
+.battle-build__track > small { grid-column: 1 / -1; min-height: 12px; color: #665638; font-size: 8px; line-height: 1.4; overflow-wrap: anywhere; }
+.battle-build-inventory { padding: 8px 0; border-bottom: 1px dashed #9c7744; font-size: 10px; line-height: 1.8; text-align: left; overflow-wrap: anywhere; }
+
+.cargo-unloading .reward-crate { --build-ink: #1c6e78; padding-bottom: 29px; }
+.cargo-unloading .reward-crate[data-build-family="barrier"] { --build-ink: #286f4e; }
+.cargo-unloading .reward-crate[data-build-family="tide"] { --build-ink: #a1463e; }
+.cargo-unloading .reward-crate[data-build-family="growth"] { --build-ink: #704c8a; }
+.cargo-unloading .reward-crate[data-build-family="cannon"] { --build-ink: #845323; }
+.cargo-unloading .reward-crate .upgrade-family-seal {
+  position: absolute;
+  right: 8px;
+  bottom: 7px;
+  padding: 3px 8px 3px 15px;
+  border: 1px solid #fff1bb8c;
+  border-radius: 3px 7px 2px 5px;
+  color: #fff8d5;
+  background: var(--build-ink);
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: .06em;
+  box-shadow: 2px 2px #2c271e66;
+  transform: rotate(-1deg);
+}
+.upgrade-family-seal::before { position: absolute; left: 5px; top: 6px; width: 4px; height: 4px; border-radius: 50%; background: #ffe297; content: ''; }
+.cargo-unloading .reward-crate.has-build-connection { border-color: #f5d572; box-shadow: inset 0 0 0 2px #fff1aa70, 5px 7px #10272b99; }
+.cargo-unloading .reward-crate.has-build-connection [data-upgrade-synergy] { color: #fff5c0; font-weight: 900; }
+.battle-overlay--pause .battle-dialog { max-height: calc(100dvh - 36px); overflow-y: auto; }
+.battle-dialog--evolution .battle-evolution-ribbon { display: inline-block; max-width: calc(100% - 68px); margin: 2px 10px 8px 0; vertical-align: middle; }
+.battle-dialog--evolution .evolution-crest { display: inline-grid; width: 44px; height: 44px; margin: 2px 0 8px; vertical-align: middle; }
+.battle-dialog--evolution .evolution-crest b { padding: 4px 5px; font-size: 7px; }
+
+@media (max-width: 430px) {
+  .battle-build { margin-bottom: 13px; padding: 7px; }
+  .battle-build__tracks { gap: 5px; }
+  .battle-build__track { grid-template-columns: 23px minmax(0, 1fr); gap: 3px; }
+  .battle-build__track img { width: 23px; height: 23px; }
+  .cargo-unloading__manifest > h2 { font-size: 25px; }
+  .cargo-unloading__manifest > p { margin-bottom: 8px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cargo-unloading .reward-crate .upgrade-family-seal { transform: none; }
+}

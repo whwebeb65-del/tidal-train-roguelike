@@ -13,6 +13,7 @@ import {
 } from './BattleInteractionSchedule';
 import { getBattleUpgradeDefinition } from './BattleUpgradeCatalog';
 import { getBattleUpgradeCopy } from './BattleUpgradeCopy';
+import { getUpgradeBuildGuide, type BuildFamily } from './BattleBuildGuide';
 import {
   BATTLE_ART_URLS,
   BATTLE_VARIANT_GLYPH_URLS,
@@ -41,6 +42,9 @@ export interface BattleUpgradeCardModel {
   readonly skillId: BattleSkillId | null;
   readonly iconUrl: string | null;
   readonly sigil: string;
+  readonly family: BuildFamily;
+  readonly familyLabel: string;
+  readonly connection: string | null;
 }
 
 export interface BattleSkillModel {
@@ -76,6 +80,8 @@ export interface BattleHudModel {
   readonly experienceLabel: string;
   readonly experiencePercent: number;
   readonly upgradeIcons: readonly string[];
+  readonly buildSummary: string;
+  readonly acquiredUpgrades: readonly string[];
   readonly skills: readonly BattleSkillModel[];
   readonly speed: BattleSpeedModel;
   readonly upgradeVisible: boolean;
@@ -165,6 +171,7 @@ export function createBattleHudModel(
         ? skillIconUrl(definition.skillId)
         : null;
     return {
+      ...getUpgradeBuildGuide(id, frame),
       id,
       name: copy.name,
       currentLevel,
@@ -224,6 +231,15 @@ export function createBattleHudModel(
     experiencePercent: nextThreshold === null
       ? 100
       : percent(frame.experience, nextThreshold),
+    buildSummary: `已装 ${Object.values(frame.upgradeLevels).reduce((sum, level) => sum + level, 0)} 项强化`,
+    acquiredUpgrades: Object.entries(frame.upgradeLevels)
+      .filter(([, level]) => level > 0)
+      .map(([id, level]) => {
+        const definition = getBattleUpgradeDefinition(id as BattleUpgradeId);
+        const label = definition.kind === 'skill-variant' ? '进化'
+          : definition.kind === 'skill-rank' ? `潮阶 ${level + 1}` : `Lv.${level}`;
+        return `${getBattleUpgradeCopy(id as BattleUpgradeId).name} · ${label}`;
+      }),
     upgradeIcons: Object.entries(frame.upgradeLevels)
       .filter(([, level]) => level > 0)
       .slice(0, 6)

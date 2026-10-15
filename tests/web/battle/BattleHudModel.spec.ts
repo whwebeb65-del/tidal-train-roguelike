@@ -30,6 +30,36 @@ const SETTLEMENT: BattleSettlementPresentation = Object.freeze({
 });
 
 describe('createBattleHudModel archive discovery', () => {
+  it('only reports build connections to upgrades actually acquired in this run', () => {
+    const frame = createFrameFixture({ offeredUpgradeIds: ['coral-warhead', 'multi-barrel', 'undertow-eye'] });
+    const before = createBattleHudModel(frame, createHudModelOptionsFixture());
+    expect(before.upgradeCards.every((card) => card.connection === null)).toBe(true);
+
+    const after = createBattleHudModel({
+      ...frame,
+      upgradeLevels: { ...frame.upgradeLevels, 'multi-barrel': 1 },
+    }, createHudModelOptionsFixture());
+    expect(after.upgradeCards[0]?.connection).toContain('多管潮炮');
+    expect(after.upgradeCards[2]?.connection).toBeNull();
+  });
+
+  it('keeps all acquired upgrades in the pause review and distinguishes evolution from ranks', () => {
+    const frame = createFrameFixture();
+    const model = createBattleHudModel({
+      ...frame,
+      upgradeLevels: {
+        ...frame.upgradeLevels,
+        'multi-barrel': 2, 'coral-warhead': 1, 'echo-chain': 1,
+        'precision-lens': 1, 'bubble-capacitor': 1, 'overload-core': 1,
+        'rank-tidal-volley': 2, 'split-tide-arrow': 1,
+      },
+    }, createHudModelOptionsFixture());
+    expect(model.acquiredUpgrades).toHaveLength(9);
+    expect(model.acquiredUpgrades).toContain('浪箭鱼群 · 潮阶 3');
+    expect(model.acquiredUpgrades).toContain('分汐浪箭 · 进化');
+    expect(model.buildSummary).toBe('已装 11 项强化');
+  });
+
   it('exposes a discovery while the battle is eligible', () => {
     const model = createBattleHudModel(
       createFrameFixture({ status: 'running', elapsedMs: 0 }),

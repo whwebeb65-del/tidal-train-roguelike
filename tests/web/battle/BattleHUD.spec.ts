@@ -75,6 +75,32 @@ describe('BattleHUD', () => {
     expect(html).not.toContain('data-boss-label');
   });
 
+  it('shows the live build during choices and forwards linked upgrades without auto-selecting', () => {
+    const onChooseUpgrade = vi.fn();
+    const hud = new BattleHUD(createCallbacks({ onChooseUpgrade }), window);
+    const host = document.createElement('div');
+    hud.mount(host);
+    const frame = createFrameFixture({
+      status: 'upgrade', offeredUpgradeIds: ['coral-warhead'],
+      skillRanks: { 'tidal-volley': 3, 'bubble-barrier': 1, 'extreme-tide': 1 },
+      skillVariants: { 'tidal-volley': ['split-tide-arrow'], 'bubble-barrier': [], 'extreme-tide': [] },
+    });
+    hud.update(createBattleHudModel({
+      ...frame, upgradeLevels: { ...frame.upgradeLevels, 'multi-barrel': 1 },
+    }, createHudModelOptionsFixture()));
+
+    const overview = host.querySelector('[data-build-overview="upgrade"]');
+    expect(overview?.textContent).toContain('潮阶 3');
+    expect(overview?.textContent).toContain('分汐浪箭');
+    expect(overview?.querySelectorAll('[data-build-skill="tidal-volley"] .is-filled')).toHaveLength(3);
+    const button = host.querySelector<HTMLButtonElement>('[data-upgrade-id="coral-warhead"]');
+    expect(button?.textContent).toContain('搭配已装的「多管潮炮」');
+    expect(onChooseUpgrade).not.toHaveBeenCalled();
+    button?.click();
+    expect(onChooseUpgrade).toHaveBeenCalledWith('coral-warhead');
+    hud.dispose();
+  });
+
   it('keeps the captain instrument strip compact and avoids boxed vital cards', () => {
     expect(battleHudCss).toMatch(
       /\.battle-hud__tide-log\s*\{[^}]*height:\s*94px;[^}]*max-height:\s*94px;/s,

@@ -1,4 +1,5 @@
 import { requireElement } from '../app/dom';
+import { getBattleUpgradeCopy } from './BattleUpgradeCopy';
 import {
   createBattleHudModel,
   type BattleHudModel,
@@ -67,6 +68,8 @@ interface HudNodes {
   readonly evolutionCrest: HTMLElement;
   readonly upgradeButtons: readonly HTMLButtonElement[];
   readonly upgradeCountdown: HTMLElement;
+  readonly buildOverviews: readonly HTMLElement[];
+  readonly acquiredBuild: HTMLElement;
   readonly rerollButton: HTMLButtonElement;
   readonly skillRefreshButton: HTMLButtonElement;
   readonly interactionCard: HTMLButtonElement;
@@ -160,15 +163,18 @@ export function renderBattleHudShell(): string {
         <span class="battle-dialog__eyebrow">PAUSED</span>
         <h2>列车暂时减速</h2>
         <p>战斗时钟和怪潮已经暂停。</p>
+        ${buildOverview('pause')}
+        <p class="battle-build-inventory" data-acquired-build></p>
         <button type="button" class="battle-button battle-button--primary" data-battle-action="resume">继续战斗</button>
       </div>
     </section>
 
     <section class="battle-overlay battle-overlay--upgrade living-zone cargo-unloading" data-upgrade-overlay hidden>
       <div class="battle-dialog battle-dialog--upgrade cargo-unloading__manifest">
-        <span class="battle-dialog__eyebrow">CARGO UNLOADING / ROGUELITE UPGRADE</span>
-        <h2>打开一只潮汐奖励箱</h2>
-        <p>每次只选一件，技能可升至潮阶 5。</p>
+        <span class="battle-dialog__eyebrow">潮汐货运 · 本局强化</span>
+        <h2>这一程，往哪边变强？</h2>
+        <p>三选一 · 选后继续航行</p>
+        ${buildOverview('upgrade')}
         ${tutorialTicket('upgrade')}
         <span class="battle-evolution-ribbon" data-evolution-ribbon hidden>技能进化 · 改变战斗方式</span>
         <div class="evolution-crest" data-evolution-crest hidden aria-hidden="true"><i></i><i></i><i></i><b>EVOLVE</b></div>
@@ -468,6 +474,25 @@ export class BattleHUD {
       (card) => card.isEvolution,
     ) || model.upgradeCountdownVisible;
     nodes.upgradeCountdown.hidden = !model.upgradeCountdownVisible;
+    for (const overview of nodes.buildOverviews) {
+      if (overview.dataset.buildOverview === 'pause' && !model.pauseOverlayVisible) continue;
+      if (overview.dataset.buildOverview === 'upgrade' && !model.upgradeVisible) continue;
+      setText(requireElement(overview, '[data-build-summary]'), `${model.runLevelLabel} · ${model.buildSummary}`);
+      for (const skill of model.skills) {
+        const track = requireElement(overview, `[data-build-skill="${skill.id}"]`);
+        setText(requireElement(track, '[data-build-rank]'), `潮阶 ${skill.rank}`);
+        const variants = skill.variantIds.map((id) => getBattleUpgradeCopy(id).name);
+        setText(requireElement(track, '[data-build-variants]'), variants.length ? variants.join(' / ') : '尚未进化');
+        track.setAttribute('aria-label', `${skill.name}，潮阶 ${skill.rank}，${variants.length ? variants.join('、') : '尚未进化'}`);
+        track.querySelectorAll<HTMLElement>('[data-build-pip]').forEach((pip, index) => {
+          pip.classList.toggle('is-filled', index < skill.rank);
+        });
+      }
+    }
+    if (model.pauseOverlayVisible) {
+      setText(nodes.acquiredBuild, model.acquiredUpgrades.length
+        ? model.acquiredUpgrades.join(' / ') : '还没装上强化，下一次升级就能选择。');
+    }
     nodes.upgradeButtons.forEach((button, index) => {
       button.style.setProperty('--reward-index', String(index));
       const card = model.upgradeCards[index];
@@ -481,6 +506,9 @@ export class BattleHUD {
       }
       button.dataset.upgradeId = card.id;
       button.dataset.upgradeKind = card.kind;
+      button.dataset.buildFamily = card.family;
+      button.classList.toggle('has-build-connection', card.connection !== null);
+      setText(requireElement(button, '[data-upgrade-family]'), `${card.familyLabel}${card.connection ? ' · 连携' : ''}`);
       if (card.skillId) {
         button.dataset.upgradeSkill = card.skillId;
       } else {
@@ -516,7 +544,7 @@ export class BattleHUD {
       setText(requireElement(button, '[data-upgrade-effect]'), card.effect);
       setText(
         requireElement(button, '[data-upgrade-synergy]'),
-        card.synergy,
+        card.connection ?? card.synergy,
       );
     });
     nodes.rerollButton.hidden = !model.upgradeRerollVisible;
@@ -695,7 +723,24 @@ function upgradeSlot(index: number): string {
     <b data-upgrade-name></b>
     <p data-upgrade-effect></p>
     <small data-upgrade-synergy></small>
+    <span class="upgrade-family-seal" data-upgrade-family></span>
   </button>`;
+}
+
+function buildOverview(placement: 'pause' | 'upgrade'): string {
+  const skills = [
+    ['tidal-volley', '齐射', BATTLE_ART_URLS.skillTidalVolley],
+    ['bubble-barrier', '屏障', BATTLE_ART_URLS.skillBubbleBarrier],
+    ['extreme-tide', '极潮', BATTLE_ART_URLS.skillExtremeTide],
+  ] as const;
+  return `<aside class="battle-build" data-build-overview="${placement}" aria-label="本局构筑">
+    <div class="battle-build__heading"><b>本局配装</b><span data-build-summary></span></div>
+    <div class="battle-build__tracks">${skills.map(([id, name, icon]) => `<div class="battle-build__track" data-build-skill="${id}">
+      <img src="${icon}" alt="" /><span>${name}<b data-build-rank>潮阶 1</b></span>
+      <div class="battle-build__pips" aria-hidden="true">${Array.from({length: 5}, () => '<i data-build-pip></i>').join('')}</div>
+      <small data-build-variants>尚未进化</small>
+    </div>`).join('')}</div>
+  </aside>`;
 }
 
 function collectNodes(host: HTMLElement): HudNodes {
@@ -751,6 +796,8 @@ function collectNodes(host: HTMLElement): HudNodes {
       '[data-upgrade-slot]',
     )],
     upgradeCountdown: requireElement(host, '[data-upgrade-countdown]'),
+    buildOverviews: [...host.querySelectorAll<HTMLElement>('[data-build-overview]')],
+    acquiredBuild: requireElement(host, '[data-acquired-build]'),
     rerollButton: requireElement(host, '[data-battle-action="upgrade-reroll"]'),
     skillRefreshButton: requireElement(
       host,

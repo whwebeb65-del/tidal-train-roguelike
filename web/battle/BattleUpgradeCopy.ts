@@ -37,7 +37,7 @@ export const BATTLE_UPGRADE_COPY: Readonly<
   'bubble-capacitor': {
     name: '泡泡电容',
     effect: '屏障量 +25%，修复比例 +4%',
-    synergy: '强化付费装备与生存构筑',
+    synergy: '搭配屏障治疗与护盾反击',
   },
   'tidal-resonance': {
     name: '潮汐共振',
@@ -54,9 +54,9 @@ export const BATTLE_UPGRADE_COPY: Readonly<
     effect: '能量获取 +25%，极潮伤害 +20%',
     synergy: '加速大招循环并提高爆发',
   },
-  'rank-tidal-volley': { name: '浪箭鱼群', effect: '潮汐齐射 潮阶 +1', synergy: '提高总伤害、缩短冷却并强化徽章' },
-  'rank-bubble-barrier': { name: '珊甲泡膜', effect: '泡泡屏障 潮阶 +1', synergy: '提高治疗与护盾并强化徽章' },
-  'rank-extreme-tide': { name: '涡星潮眼', effect: '极潮爆发 潮阶 +1', synergy: '提高爆发伤害并强化徽章' },
+  'rank-tidal-volley': { name: '浪箭鱼群', effect: '潮汐齐射 潮阶 +1', synergy: '浪箭更强，齐射恢复更快' },
+  'rank-bubble-barrier': { name: '珊甲泡膜', effect: '泡泡屏障 潮阶 +1', synergy: '修复更多耐久，展开更厚护盾' },
+  'rank-extreme-tide': { name: '涡星潮眼', effect: '极潮爆发 潮阶 +1', synergy: '提高全场潮击的爆发伤害' },
   'split-tide-arrow': { name: '分汐浪箭', effect: '命中后分裂至第二目标，造成 35% 伤害', synergy: '强化多目标清场' },
   'reef-piercer': { name: '贯礁箭鳍', effect: '额外穿透一个目标，保留 60% 伤害', synergy: '对密集直线怪潮有效' },
   'returning-volley': { name: '回潮齐射', effect: '首轮后追加 4 枚 45% 伤害回旋浪箭', synergy: '补充二次打击' },

@@ -1914,6 +1914,9 @@ async function assertBattleHudGeometry(client, label) {
     const logicalScale = window.visualViewport?.scale ?? 1;
     return {
       hudBottom: Number.parseFloat(getComputedStyle(hud).height),
+      canvasTop: canvasRect.top,
+      canvasBottom: canvasRect.bottom,
+      viewportHeight: innerHeight,
       logicalScale,
       enemyLaneTop: (canvasRect.top + canvasRect.height * 120 / 844) / logicalScale,
       skillMin: Math.min(...skills.map((skill) => skill.getBoundingClientRect().height)) / logicalScale,
@@ -1928,6 +1931,16 @@ async function assertBattleHudGeometry(client, label) {
           ? getComputedStyle(a11yStatus)
           : null;
         return {
+          nameMetrics: name instanceof HTMLElement && nameRect !== undefined ? {
+            text: name.textContent,
+            top: nameRect.top,
+            right: nameRect.right,
+            bottom: nameRect.bottom,
+            left: nameRect.left,
+            width: nameRect.width,
+            clientWidth: name.clientWidth,
+            scrollWidth: name.scrollWidth,
+          } : null,
           nameVisible: name instanceof HTMLElement && nameRect !== undefined
             && nameRect.top >= 0 && nameRect.bottom <= innerHeight
             && nameRect.left >= 0 && nameRect.right <= innerWidth
@@ -1965,7 +1978,11 @@ async function assertBattleHudGeometry(client, label) {
     `${label} enemy lane gap is below 12px: ${JSON.stringify(geometry)}`,
   );
   assert.ok(geometry.skillMin >= 56, `${label} skill target is below 56px`);
-  assert.ok(geometry.skillCopy.every((copy) => copy.nameVisible), `${label} skill names are clipped or ellipsized`);
+  assert.ok(geometry.canvasTop >= -1 && geometry.canvasTop <= 1,
+    `${label} battle canvas must start at the viewport top: ${JSON.stringify(geometry)}`);
+  assert.ok(geometry.canvasBottom <= geometry.viewportHeight + 1,
+    `${label} battle canvas must fit the viewport: ${JSON.stringify(geometry)}`);
+  assert.ok(geometry.skillCopy.every((copy) => copy.nameVisible), `${label} skill names are clipped or ellipsized: ${JSON.stringify(geometry.skillCopy)}`);
   assert.ok(geometry.skillCopy.every((copy) => copy.statusVisible), `${label} skill cooldown copy is clipped or ellipsized`);
   assert.ok(geometry.skillCopy.every((copy) => copy.a11yStatus.text.length > 0), `${label} skill status has no accessible name`);
   assert.ok(geometry.skillCopy.every((copy) => copy.a11yStatus.ariaHidden === null), `${label} skill status must remain available to assistive technology`);
@@ -5136,6 +5153,24 @@ async function finishFullBattle(
       break;
     }
     if (battle.status === 'upgrade') {
+      const build = await evaluate(client, `(() => {
+        const root = document.querySelector('[data-build-overview="upgrade"]');
+        return root ? {
+          summary: root.querySelector('[data-build-summary]')?.textContent,
+          ranks: [...root.querySelectorAll('[data-build-skill]')].map((track) => ({
+            id: track.dataset.buildSkill,
+            rank: track.querySelectorAll('.is-filled').length,
+          })),
+          families: [...document.querySelectorAll('[data-upgrade-slot]:not([hidden]) [data-upgrade-family]')].map((node) => node.textContent),
+        } : null;
+      })()`);
+      assert.ok(build, 'upgrade must show the current run build');
+      assert.ok(build.summary.includes(`Lv.${battle.runLevel}`));
+      for (const track of build.ranks) {
+        assert.equal(track.rank, battle.skillRanks[track.id], 'build pips must match real skill ranks');
+      }
+      assert.equal(build.families.length, battle.offeredUpgradeIds.length);
+      assert.ok(build.families.every(Boolean), 'each choice must expose its build family');
       if (battle.offeredUpgradeIds.some((id) => evolutionIds.has(id))) {
         await assertEvolutionRitual(client, '390x844');
         await delay(650);
