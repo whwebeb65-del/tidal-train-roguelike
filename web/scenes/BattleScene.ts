@@ -768,9 +768,13 @@ export class BattleScene implements GameScene {
     const viewport = this.viewport;
     if (!viewport) return;
     const bounds = canvasHost.getBoundingClientRect();
+    // Pointer events arrive in the currently painted space, which may still
+    // be scaled by the scene entrance; the viewport uses unscaled layout.
+    const screenWidth = bounds.width || viewport.cssWidth;
+    const screenHeight = bounds.height || viewport.cssHeight;
     const aim = viewport.toLogical(
-      event.clientX - bounds.left,
-      event.clientY - bounds.top,
+      (event.clientX - bounds.left) * viewport.cssWidth / screenWidth,
+      (event.clientY - bounds.top) * viewport.cssHeight / screenHeight,
     );
     if (!this.dependencies.engine.setMainCannonAim(aim)) return;
     if (reportTutorialStep) {
@@ -930,9 +934,14 @@ export class BattleScene implements GameScene {
 
   private refreshViewport(): void {
     if (this.viewport || !this.canvas || !this.canvasHost) return;
-    const rect = this.canvasHost.getBoundingClientRect();
-    const cssWidth = Math.max(1, rect.width || 390);
-    const cssHeight = Math.max(1, rect.height || 844);
+    const layoutWidth = this.canvasHost.clientWidth;
+    const layoutHeight = this.canvasHost.clientHeight;
+    // getBoundingClientRect includes entrance transforms. Caching that value
+    // would leave the inline canvas too small until the next window resize.
+    const fallback = layoutWidth > 0 && layoutHeight > 0
+      ? null : this.canvasHost.getBoundingClientRect();
+    const cssWidth = Math.max(1, layoutWidth || fallback?.width || 390);
+    const cssHeight = Math.max(1, layoutHeight || fallback?.height || 844);
     this.viewport = computeCanvasViewport({
       cssWidth,
       cssHeight,

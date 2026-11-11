@@ -6185,6 +6185,79 @@ async function runViewport(client, viewport, smokeId, browserErrors) {
   }
 }
 
+async function assertShortBattleControls(client) {
+  const resize = (width, height, mobile, deviceScaleFactor = 2) => client.send(
+    'Emulation.setDeviceMetricsOverride',
+    { width, height, mobile, deviceScaleFactor, screenWidth: width, screenHeight: height },
+  );
+  await ensureCaptainSelected(client);
+  const baseline = await snapshot(client);
+  await resize(640, 360, true);
+  try {
+    await startNormalBattle(client);
+    await waitForEvaluation(client, `(() => {
+      const scene = document.querySelector('.game-scene--battle');
+      return scene && !document.querySelector('.scene-host--entering')
+        && !scene.getAnimations().some((animation) => animation.pending || animation.playState === 'running');
+    })()`, { label: 'settled landscape battle entrance' });
+    for (const [width, height, mobile] of [[640, 360, true], [1280, 420, false], [1440, 900, false]]) {
+      const label = `${width}x${height}`;
+      await resize(width, height, mobile);
+      await waitForEvaluation(client, `(() => {
+        if (innerWidth !== ${width} || innerHeight !== ${height}) return false;
+        const canvas = document.querySelector('[data-battle-canvas]').getBoundingClientRect();
+        const host = document.querySelector('.battle-canvas-host').getBoundingClientRect();
+        return Math.abs(canvas.width - host.width) < 1 && Math.abs(canvas.height - host.height) < 1;
+      })()`, { label: `${label} resized battle canvas` });
+      const metrics = await evaluate(client, `(() => {
+        const bounds = (node) => {
+          const rect = node.getBoundingClientRect();
+          const x = rect.left + rect.width / 2;
+          const y = rect.top + rect.height / 2;
+          return {
+            point: { x, y }, width: rect.width, height: rect.height, bottom: rect.bottom,
+            visible: rect.left >= -1 && rect.right <= innerWidth + 1
+              && rect.top >= -1 && rect.bottom <= innerHeight + 1,
+            hit: node.contains(document.elementFromPoint(x, y)),
+          };
+        };
+        return {
+          canvas: bounds(document.querySelector('[data-battle-canvas]')),
+          skills: [...document.querySelectorAll('[data-battle-skill]')].map(bounds),
+          pause: bounds(document.querySelector('[data-battle-action="pause"]')),
+        };
+      })()`);
+      assert.equal(metrics.canvas.visible, true, `${label} viewport must contain the entire battle canvas`);
+      if (height <= 500) {
+        assert.ok(Math.abs(metrics.canvas.bottom - height) <= 2, `${label} canvas should use the actual screen height`);
+        assert.equal(new Set(metrics.skills.map(({ point }) => Math.round(point.x))).size, 1,
+          `${label} the skill rail must stay out of the central playfield`);
+      }
+      assert.equal(metrics.skills.length, 3);
+      assert.ok([...metrics.skills, metrics.pause].every(({ width, height, visible, hit }) =>
+        width >= 44 && height >= 44 && visible && hit),
+      `${label} every skill and pause must fit and receive clicks: ${JSON.stringify(metrics)}`);
+      if (width === 640) {
+        await tapAt(client, metrics.skills[1].point);
+        await waitForEvaluation(client, `!document.querySelector('[data-battle-skill="bubble-barrier"]').classList.contains('is-ready')
+          && !document.querySelector('[data-hud-shield]').textContent.includes('未展开')`,
+        { label: 'landscape skill rail releases the bubble barrier' });
+      }
+      await tapAt(client, metrics.pause.point);
+      await waitForEvaluation(client, `!document.querySelector('[data-pause-overlay]').hidden`,
+        { label: `${label} pause opened from a real click` });
+      assert.equal(await clickBattleButton(client, '[data-pause-overlay] [data-battle-action="resume"]'), true);
+      await waitForEvaluation(client, `document.querySelector('[data-pause-overlay]').hidden`,
+        { label: `${label} pause closed` });
+      console.log(`[smoke] ${label} short/desktop battle controls PASS`);
+    }
+    await returnToStation(client, baseline.diagnostics.activeListeners);
+  } finally {
+    const last = viewports.at(-1);
+    await resize(last.width, last.height, true, 3);
+  }
+}
+
 async function assertOrdinaryUrlHasNoHook(client, smokeId) {
   const url = `${previewOrigin}/?release=${encodeURIComponent(smokeId)}`;
   await client.send('Page.navigate', { url });
@@ -6312,6 +6385,7 @@ async function main() {
         await runViewport(client, viewport, smokeId, browserErrors),
       );
     }
+    await assertShortBattleControls(client);
     assertPreviewAlive(preview, 'ordinary-URL isolation check');
     await assertOrdinaryUrlHasNoHook(client, smokeId);
     assert.deepEqual(browserErrors, [], browserErrors.join('\n'));

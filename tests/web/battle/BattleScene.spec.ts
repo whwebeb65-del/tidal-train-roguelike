@@ -264,7 +264,10 @@ function createCallbacks(): BattleSceneCallbacks {
   };
 }
 
-function createHost(bounds: Partial<DOMRect> = {}): {
+function createHost(
+  bounds: Partial<DOMRect> = {},
+  layout: { readonly width: number; readonly height: number } | null = null,
+): {
   readonly host: HTMLElement;
   readonly canvas: HTMLCanvasElement;
   readonly hudHost: HTMLElement;
@@ -285,6 +288,8 @@ function createHost(bounds: Partial<DOMRect> = {}): {
     hasPointerCapture: vi.fn(() => true),
   }) as unknown as HTMLCanvasElement;
   const canvasHost = {
+    clientWidth: layout?.width ?? 0,
+    clientHeight: layout?.height ?? 0,
     getBoundingClientRect: () => ({
       width: 390,
       height: 844,
@@ -356,6 +361,21 @@ function createPointerScene(
 }
 
 describe('BattleScene', () => {
+  it('keeps canvas size at layout dimensions and aims correctly through an entrance scale', () => {
+    const engine = createEngine();
+    engine.setMainCannonAim = vi.fn(() => true);
+    const { host, canvas, dispatchCanvasPointer } = createHost(
+      { width: 195, height: 422, left: 50, top: 10 },
+      { width: 390, height: 844 },
+    );
+    const scene = createPointerScene(host, engine);
+    expect(canvas.style.width).toBe('390px');
+    expect(canvas.style.height).toBe('844px');
+    dispatchCanvasPointer('pointerdown', { pointerId: 7, clientX: 147.5, clientY: 221 });
+    expect(engine.setMainCannonAim).toHaveBeenCalledWith({ x: 195, y: 422 });
+    scene.unmount();
+  });
+
   it('applies every drag target immediately without drawing more than the next animation frame', () => {
     const engine = createEngine();
     const setAim = vi.fn<BattleEnginePort['setMainCannonAim']>((aim) => {
