@@ -1,5 +1,6 @@
 import type { SceneId } from './AppTypes';
 import { requireElement } from './dom';
+import { renderResetSaveDialog } from '../views/ResetSaveDialogView';
 import {
   renderSettingsPanel,
   type SettingsPanelModel,
@@ -34,6 +35,9 @@ export interface AppShellHandles {
   setNotice(message: string): void;
   setNavigationHidden(hidden: boolean): void;
   setBattleChrome(active: boolean): void;
+  openResetSaveDialog(): boolean;
+  closeResetSaveDialog(): void;
+  isResetSaveDialogOpen(): boolean;
   openSettings(model: SettingsPanelModel): void;
   closeSettings(): void;
   isSettingsOpen(): boolean;
@@ -98,7 +102,8 @@ export function renderAppShell(snapshot: CurrencySnapshot): string {
         ${currency('gears', '齿轮', snapshot.gears)}
         ${currency('routeMarks', '航线徽记', snapshot.routeMarks)}
         ${currency('starTickets', '星票', snapshot.starTickets)}
-        <button class="app-shell__reset" type="button" data-action="reset-save" aria-label="清空本地存档">重置</button>
+        <button class="app-shell__reset" type="button" data-action="reset-save" aria-label="清空本地存档"
+          aria-haspopup="dialog" aria-controls="reset-save-dialog">重置</button>
         <button class="app-shell__settings" type="button"
           data-action="open-settings" aria-label="打开游戏设置">设置</button>
       </div>
@@ -115,6 +120,7 @@ export function renderAppShell(snapshot: CurrencySnapshot): string {
       ${navigationItem('store', '商店')}
     </nav>
     <div id="settings-host" hidden></div>
+    ${renderResetSaveDialog()}
   </div>`;
 }
 
@@ -128,7 +134,16 @@ export function mountAppShell(
   const noticeCopy = requireElement<HTMLElement>(noticeHost, '[data-notice-copy]');
   const navigation = requireElement<HTMLElement>(root, '.hub-nav');
   const settingsHost = requireElement<HTMLElement>(root, '#settings-host');
+  const resetDialog = requireElement<HTMLDialogElement>(root, '#reset-save-dialog');
+  const resetTrigger = requireElement<HTMLButtonElement>(root, '[data-action="reset-save"]');
   let noticeTimer: ReturnType<typeof globalThis.setTimeout> | null = null;
+
+  resetDialog.addEventListener('close', () => {
+    if (!resetDialog.open && settingsHost.hidden
+      && !root.firstElementChild?.classList.contains('app-shell--battle')) {
+      resetTrigger.focus({ preventScroll: true });
+    }
+  });
 
   return {
     sceneHost,
@@ -196,12 +211,34 @@ export function mountAppShell(
 
     setBattleChrome(active): void {
       root.firstElementChild?.classList.toggle('app-shell--battle', active);
+      if (active && resetDialog.open) resetDialog.close();
       // The HUD updates continuously. Announce its own live notices, not the
       // timer, meters, and combat state of the whole scene.
       if (active) sceneHost.removeAttribute('aria-live');
       else if (sceneHost.getAttribute('aria-live') !== 'polite') {
         sceneHost.setAttribute('aria-live', 'polite');
       }
+    },
+
+    openResetSaveDialog(): boolean {
+      if (resetDialog.open) return true;
+      if (!settingsHost.hidden || typeof resetDialog.showModal !== 'function'
+        || typeof resetDialog.close !== 'function') return false;
+      try {
+        resetDialog.showModal();
+        return resetDialog.open;
+      } catch {
+        // Never fall back to a non-modal or automatic reset.
+        return false;
+      }
+    },
+
+    closeResetSaveDialog(): void {
+      if (resetDialog.open) resetDialog.close();
+    },
+
+    isResetSaveDialogOpen(): boolean {
+      return resetDialog.open;
     },
 
     openSettings(model): void {

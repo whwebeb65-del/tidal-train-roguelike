@@ -309,6 +309,7 @@ export interface LegacyRuntimeDependencies {
   readonly onBattleEngineCreated?: (engine: BattleEngine) => void;
   readonly onTelemetryEvent?: (event: PrototypeEvent) => void;
   readonly scrollToTop?: () => void;
+  readonly reloadAfterSaveReset?: () => void;
 }
 
 export interface RuntimeE2EConfig {
@@ -1406,7 +1407,7 @@ function render(): void {
     .catch((error: unknown) => {
       console.error(error);
       diagnostics.captureUncaughtError(error);
-      shell.setNotice('界面刷新失败，请重试或清空本地存档。');
+      shell.setNotice('界面刷新失败，请刷新页面重试。');
     });
 }
 
@@ -2485,6 +2486,26 @@ const onClick = async (event: Event): Promise<void> => {
     shell.closeSettings();
     return;
   }
+  if (action === 'reset-save') {
+    if (phase === 'station' && !shell.openResetSaveDialog()) {
+      notice = '暂时无法打开重置确认框，存档没有改动。';
+      render();
+    }
+    return;
+  }
+  if (action === 'cancel-reset-save') {
+    shell.closeResetSaveDialog();
+    return;
+  }
+  if (action === 'confirm-reset-save') {
+    if (phase !== 'station' || !shell.isResetSaveDialogOpen()
+      || button.disabled || !button.closest('dialog#reset-save-dialog[open]')) return;
+    button.disabled = true;
+    appStateRepository.clear();
+    if (dependencies.reloadAfterSaveReset) dependencies.reloadAfterSaveReset();
+    else window.location.reload();
+    return;
+  }
   if (action === 'captain-greeting') {
     activeStationScene?.requestCaptainGreeting();
     return;
@@ -2603,7 +2624,6 @@ const onClick = async (event: Event): Promise<void> => {
       });
     }
   }
-  if (action === 'reset-save') { appStateRepository.clear(); window.location.reload(); }
 };
 
 const onSubmit = (event: Event): void => {

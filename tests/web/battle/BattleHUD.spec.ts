@@ -835,7 +835,7 @@ describe('BattleHUD', () => {
     host.remove();
   });
 
-  it('holds focus without actionable controls during the upgrade countdown and ignores battle shortcuts', () => {
+  it('recovers focus from a disappearing upgrade card during the countdown and ignores battle shortcuts', () => {
     const onSkill = vi.fn();
     const onResume = vi.fn();
     const onResetAim = vi.fn();
@@ -843,9 +843,17 @@ describe('BattleHUD', () => {
     const host = document.createElement('div');
     document.body.append(host);
     hud.mount(host);
-    hud.update(createBattleHudModel(createFrameFixture({
-      status: 'paused', mainCannonAim: { x: 100, y: 300 },
-    }), { ...createHudModelOptionsFixture(), pendingActions: new Set(['upgrade-resume']) }));
+    const frame = createFrameFixture({
+      status: 'upgrade', offeredUpgradeIds: ['multi-barrel'], mainCannonAim: { x: 100, y: 300 },
+    });
+    const options = createHudModelOptionsFixture();
+    hud.update(createBattleHudModel(frame, options));
+    const choice = host.querySelector<HTMLButtonElement>('[data-upgrade-id="multi-barrel"]')!;
+    choice.focus();
+    expect(document.activeElement).toBe(choice);
+    hud.update(createBattleHudModel({
+      ...frame, status: 'paused', offeredUpgradeIds: [],
+    }, { ...options, pendingActions: new Set(['upgrade-resume']) }));
     const overlay = host.querySelector<HTMLElement>('[data-upgrade-overlay]')!;
     expect(document.activeElement).toBe(overlay);
     const tab = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true });

@@ -319,3 +319,70 @@
     transition: none;
   }
 }
+
+/* Separate confirmation for destructive local-save actions. */
+.reset-save-dialog {
+  box-sizing: border-box;
+  width: min(420px, calc(100% - 28px));
+  max-width: none;
+  max-height: calc(100dvh - 28px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+  margin: auto;
+  padding: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border: 4px solid #694736;
+  border-radius: 9px 13px 8px 12px;
+  color: #3f3028;
+  background: #f1dfb0;
+  box-shadow: 6px 8px 0 #0a1821aa, inset 0 0 0 2px #fff0c7;
+}
+
+.reset-save-dialog::backdrop { background: rgb(9 22 31 / 74%); }
+
+.reset-save-dialog__paper {
+  min-width: 0;
+  padding: clamp(14px, 5vw, 24px);
+  overflow-wrap: anywhere;
+}
+
+.reset-save-dialog__seal {
+  display: inline-block;
+  padding: 2px 7px;
+  border: 2px solid currentColor;
+  border-radius: 3px 6px 4px 3px;
+  color: #8b3e32;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.reset-save-dialog h2 { margin: 10px 0 8px; color: #523126; font-size: clamp(20px, 6vw, 26px); }
+.reset-save-dialog p { margin: 0; color: #584638; font-size: 14px; line-height: 1.65; }
+
+.reset-save-dialog__actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px;
+  margin-top: 17px;
+}
+
+.reset-save-dialog__actions button {
+  min-width: 44px;
+  min-height: 44px;
+  padding: 7px 9px;
+  border: 2px solid #594737;
+  border-radius: 6px 9px 5px 7px;
+  color: #153d3c;
+  background: #d8e4bc;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.reset-save-dialog__actions button[data-action='confirm-reset-save'] {
+  color: #fff0d1;
+  background: #903e36;
+}
+
+.reset-save-dialog__actions button:focus-visible {
+  outline: 3px solid #1b626b;
+  outline-offset: 2px;
+}

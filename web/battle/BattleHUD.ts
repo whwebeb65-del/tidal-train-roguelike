@@ -431,7 +431,17 @@ export class BattleHUD {
     // Later overlays also paint on top if more than one state is visible.
     const next = [nodes.settlementOverlay, nodes.failureOverlay, nodes.upgradeOverlay, nodes.pauseOverlay]
       .find((overlay) => !overlay.hidden) ?? null;
-    if (next === this.activeOverlay) return;
+    if (next === this.activeOverlay) {
+      if (next) {
+        const focused = next.ownerDocument.activeElement;
+        if (focused !== next && (!focused || !next.contains(focused)
+          || focused.closest('[hidden], [inert]') || focused.matches(':disabled'))) {
+          // Choices disappear during the countdown; don't leave focus on the page behind it.
+          next.focus({ preventScroll: true });
+        }
+      }
+      return;
+    }
     if (next && !this.activeOverlay) {
       const focused = nodes.root.ownerDocument.activeElement;
       this.focusBeforeOverlay = focused instanceof HTMLElement && nodes.root.contains(focused)

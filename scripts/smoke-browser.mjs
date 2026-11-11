@@ -5874,21 +5874,58 @@ async function loadViewport(client, viewport, smokeId) {
 }
 
 async function resetSaveBetweenViewports(client) {
-  const reset = await evaluate(
-    client,
-    `(() => {
-      const button = document.querySelector('[data-action="reset-save"]');
-      if (!(button instanceof HTMLButtonElement)) return false;
-      button.click();
-      return true;
-    })()`,
-  );
-  assert.equal(reset, true, 'reset control must be available between isolated viewports');
+  const settingsKey = 'tidal-train-settings-v2';
+  const savedSettings = await evaluate(client, `localStorage.getItem('${settingsKey}')`);
+  await openResetSaveDialog(client);
+  assert.equal(await clickBattleButton(client, '#reset-save-dialog[open] [data-action="confirm-reset-save"]'),
+    true, 'isolated viewport must explicitly confirm its reset');
   await waitForEvaluation(
     client,
-    `Boolean(${hookExpression}) && ${hookExpression}.snapshot().progression.stamina === 30`,
+    `Boolean(${hookExpression})
+      && ${hookExpression}.snapshot().progression.stamina === 30
+      && Boolean(document.querySelector('[data-action="select-captain"]'))
+      && !document.querySelector('#reset-save-dialog[open]')`,
     { label: 'isolated viewport reset' },
   );
+  if (savedSettings !== null) {
+    assert.equal(await evaluate(client, `localStorage.getItem('${settingsKey}')`), savedSettings,
+      'resetting game progress must preserve display and sound settings');
+  }
+}
+
+async function openResetSaveDialog(client) {
+  assert.equal(await evaluate(client, `new URLSearchParams(location.search).get('e2e') === '1'
+    && Boolean(${hookExpression})`), true, 'reset smoke must run only in its isolated E2E page');
+  assert.equal(await clickBattleButton(client, '[data-action="reset-save"]'), true);
+  await waitForEvaluation(client, `document.querySelector('#reset-save-dialog[open]') instanceof HTMLDialogElement`,
+    { label: 'native reset confirmation' });
+  const contained = await evaluate(client, `(() => {
+    const dialog = document.querySelector('#reset-save-dialog[open]');
+    const rect = dialog.getBoundingClientRect();
+    return rect.left >= 0 && rect.right <= innerWidth && rect.top >= 0 && rect.bottom <= innerHeight
+      && [...dialog.querySelectorAll('button')].every((button) => {
+        const target = button.getBoundingClientRect();
+        return target.width >= 44 && target.height >= 44;
+      });
+  })()`);
+  assert.equal(contained, true, 'reset confirmation must fit the mobile viewport with large targets');
+}
+
+async function assertResetCancelKeepsProgress(client, label) {
+  const savedPlayer = () => evaluate(client, `localStorage.getItem(${JSON.stringify(playerSaveStorageKey)})`);
+  const before = await savedPlayer();
+  assert.ok(before, `${label} cancellation test requires real saved progress`);
+  await openResetSaveDialog(client);
+  assert.equal(await evaluate(client, `document.activeElement.dataset.action`), 'cancel-reset-save',
+    `${label} safe action must receive initial focus`);
+  assert.equal(await savedPlayer(), before, `${label} opening reset must not delete progress`);
+  await captureQaScreenshot(client, `save-reset-confirm-${label}`);
+  await pressBattleKey(client, 'Escape', 27);
+  await waitForEvaluation(client, `!document.querySelector('#reset-save-dialog[open]')
+    && document.activeElement.dataset.action === 'reset-save'`, { label: 'cancel reset and restore focus' });
+  assert.equal(await savedPlayer(), before, `${label} cancel must leave progress unchanged`);
+  await evaluate(client, `document.querySelector('#reset-save-dialog [data-action="confirm-reset-save"]').click()`);
+  assert.equal(await savedPlayer(), before, `${label} a closed dialog cannot authorize reset`);
 }
 
 async function exerciseScenes(client, label) {
@@ -5948,6 +5985,7 @@ async function runViewport(client, viewport, smokeId, browserErrors) {
   await inspectHandDrawnStation(client, label);
   await captureQaScreenshot(client, `station-${label}`);
   if (viewport.full) {
+    await assertResetCancelKeepsProgress(client, label);
     await assertGuidebookMasteryDestination(client, label);
     await resetSaveBetweenViewports(client);
     await ensureCaptainSelected(client);
