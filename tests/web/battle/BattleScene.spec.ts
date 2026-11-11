@@ -1177,12 +1177,13 @@ describe('BattleScene', () => {
     vi.useFakeTimers();
     try {
       const engine = createEngine(createFrameFixture({ status: 'upgrade', offeredUpgradeIds: ['multi-barrel'] }));
+      const hudUpdate = vi.fn();
       const { host } = createHost();
       const scene = new BattleScene({
         ...TEST_BATTLE_SPEED_DEPENDENCIES, engine,
         effects: { view: EMPTY_EFFECT_FRAME_VIEW, consume: vi.fn(), update: vi.fn(), reset: vi.fn() },
         assets: { failedIds: [], get: () => null }, callbacks: createCallbacks(),
-        createRenderer: () => ({ render: vi.fn() }), createHud: () => ({ mount: vi.fn(), update: vi.fn(), dispose: vi.fn() }),
+        createRenderer: () => ({ render: vi.fn() }), createHud: () => ({ mount: vi.fn(), update: hudUpdate, dispose: vi.fn() }),
         captainArtId: 'captainFemaleBase', reducedMotion: false, manualStepMode: true,
         scheduler: new ManualFrameScheduler(), eventTarget: new EventTarget(), getDevicePixelRatio: () => 1,
       });
@@ -1199,6 +1200,9 @@ describe('BattleScene', () => {
       vi.advanceTimersByTime(1);
       await Promise.all([first, duplicate]);
       expect(engine.frame.status).toBe('running');
+      expect(hudUpdate).toHaveBeenLastCalledWith(expect.objectContaining({
+        status: 'running', upgradeVisible: false, upgradeCountdownVisible: false,
+      }));
       scene.unmount();
     } finally { vi.useRealTimers(); }
   });

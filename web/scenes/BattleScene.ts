@@ -1027,6 +1027,7 @@ export class BattleScene implements GameScene {
       }
       this.dependencies.engine.resume();
       void this.sound.resume();
+      this.renderBattle();
       this.completeUpgradeResume();
     }, 400);
     return true;

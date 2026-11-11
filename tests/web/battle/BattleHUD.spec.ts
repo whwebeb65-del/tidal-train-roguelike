@@ -789,6 +789,79 @@ describe('BattleHUD', () => {
     hud.dispose();
   });
 
+  it('keeps Tab in pause, resumes by Escape on the focused control, and restores prior focus', () => {
+    const onPause = vi.fn();
+    const onResume = vi.fn();
+    const hud = new BattleHUD(createCallbacks({ onPause, onResume }), window);
+    const host = document.createElement('div');
+    document.body.append(host);
+    hud.mount(host);
+    const options = createHudModelOptionsFixture();
+    const frame = createFrameFixture();
+    hud.update(createBattleHudModel(frame, options));
+    const pause = host.querySelector<HTMLButtonElement>('[data-battle-action="pause"]')!;
+    const resume = host.querySelector<HTMLButtonElement>('[data-battle-action="resume"]')!;
+    const overlay = host.querySelector<HTMLElement>('[data-pause-overlay]')!;
+    const key = (target: EventTarget, value: string, shiftKey = false) => {
+      const event = new KeyboardEvent('keydown', { key: value, bubbles: true, cancelable: true, shiftKey });
+      target.dispatchEvent(event);
+      return event.defaultPrevented;
+    };
+    pause.focus();
+    expect(key(pause, 'Escape')).toBe(true);
+    expect(onPause).toHaveBeenCalledTimes(1);
+    hud.update(createBattleHudModel({ ...frame, status: 'paused' }, options));
+    expect(document.activeElement).toBe(overlay);
+    expect(overlay.getAttribute('role')).toBe('dialog');
+    expect(overlay.getAttribute('aria-labelledby')).toBe('battle-pause-title');
+    expect(pause.closest('[inert]')).not.toBeNull();
+    pause.click();
+    expect(onPause).toHaveBeenCalledTimes(1);
+    expect(key(overlay, 'Tab')).toBe(true);
+    expect(document.activeElement).toBe(resume);
+    expect(key(resume, 'Tab', true)).toBe(true);
+    expect(document.activeElement).toBe(resume);
+    const browserTab = new KeyboardEvent('keydown', {
+      key: 'Tab', ctrlKey: true, bubbles: true, cancelable: true,
+    });
+    resume.dispatchEvent(browserTab);
+    expect(browserTab.defaultPrevented).toBe(false);
+    expect(key(resume, 'Escape')).toBe(true);
+    expect(onResume).toHaveBeenCalledTimes(1);
+    hud.update(createBattleHudModel(frame, options));
+    expect(document.activeElement).toBe(pause);
+    expect(host.querySelector('[inert]')).toBeNull();
+    hud.dispose();
+    host.remove();
+  });
+
+  it('holds focus without actionable controls during the upgrade countdown and ignores battle shortcuts', () => {
+    const onSkill = vi.fn();
+    const onResume = vi.fn();
+    const onResetAim = vi.fn();
+    const hud = new BattleHUD(createCallbacks({ onSkill, onResume, onResetAim }), window);
+    const host = document.createElement('div');
+    document.body.append(host);
+    hud.mount(host);
+    hud.update(createBattleHudModel(createFrameFixture({
+      status: 'paused', mainCannonAim: { x: 100, y: 300 },
+    }), { ...createHudModelOptionsFixture(), pendingActions: new Set(['upgrade-resume']) }));
+    const overlay = host.querySelector<HTMLElement>('[data-upgrade-overlay]')!;
+    expect(document.activeElement).toBe(overlay);
+    const tab = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true });
+    overlay.dispatchEvent(tab);
+    expect(tab.defaultPrevented).toBe(true);
+    expect(document.activeElement).toBe(overlay);
+    for (const key of ['Escape', '1', 'r']) {
+      overlay.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }));
+    }
+    expect(onSkill).not.toHaveBeenCalled();
+    expect(onResume).not.toHaveBeenCalled();
+    expect(onResetAim).not.toHaveBeenCalled();
+    hud.dispose();
+    host.remove();
+  });
+
   it('uses compact paper settlement progression rows that wrap safely at 360px', () => {
     expect(battleHudCss).toMatch(
       /\.battle-settlement-progression\s*\{[^}]*display:\s*grid;[^}]*gap:\s*4px;[^}]*margin-top:\s*8px;/s,

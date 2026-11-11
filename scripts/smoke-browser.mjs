@@ -3840,9 +3840,20 @@ async function probeAutomaticFire(client) {
 }
 
 async function exercisePauseAndSkills(client) {
-  await callHook(client, 'hook.requestPause(); return hook.snapshot();');
+  assert.equal(await evaluate(client, `document.querySelector('#scene-host').getAttribute('aria-live')`),
+    null, 'battle must not announce every HUD update');
+  await evaluate(client, `document.querySelector('[data-battle-action="pause"]').focus()`);
+  await pressBattleKey(client, 'Escape', 27);
   const pausedBefore = await snapshot(client);
   assert.equal(pausedBefore.battle?.status, 'paused');
+  assert.equal(await evaluate(client, `document.activeElement.matches('[data-pause-overlay][role="dialog"]')`),
+    true, 'pause should move focus to the active dialog');
+  assert.equal(await evaluate(client, `document.querySelector('.battle-hud__skills').inert`),
+    true, 'background skills must be inert while paused');
+  await pressBattleKey(client, 'Tab', 9);
+  await pressBattleKey(client, 'Tab', 9);
+  assert.equal(await evaluate(client, `document.activeElement.dataset.battleAction`),
+    'resume', 'Tab must wrap inside the pause dialog');
   const pausedPose = motionPose(pausedBefore.trainMotion);
   await advanceBattle(client, 500);
   const pausedAfter = await snapshot(client);
@@ -3852,8 +3863,11 @@ async function exercisePauseAndSkills(client) {
     pausedPose,
     'paused train motion must not advance or catch up',
   );
-  await callHook(client, 'await hook.requestResume(); return true;');
-  assert.equal((await snapshot(client)).battle?.status, 'running');
+  await pressBattleKey(client, 'Escape', 27);
+  await waitForEvaluation(client, `${hookExpression}?.snapshot().battle?.status === 'running'`,
+    { label: 'resume with Escape on the focused control' });
+  assert.equal(await evaluate(client, `document.activeElement.dataset.battleAction`),
+    'pause', 'closing pause should restore prior focus');
 
   let tidalUsed = await callHook(
     client,
@@ -3875,6 +3889,12 @@ async function exercisePauseAndSkills(client) {
   await advanceBattle(client, 500);
   await assertSkillRecharge(client, 'during active skill recharge');
   return { tidalUsed, barrierUsed };
+}
+
+async function pressBattleKey(client, key, windowsVirtualKeyCode) {
+  for (const type of ['keyDown', 'keyUp']) {
+    await client.send('Input.dispatchKeyEvent', { type, key, code: key, windowsVirtualKeyCode });
+  }
 }
 
 function assertDisposedBattle(state, listenerBaseline) {
@@ -3900,6 +3920,8 @@ async function returnToStation(client, listenerBaseline) {
   );
   const state = await snapshot(client);
   assertDisposedBattle(state, listenerBaseline);
+  assert.equal(await evaluate(client, `document.querySelector('#scene-host').getAttribute('aria-live')`),
+    'polite', 'station should restore its scene announcements');
   return state;
 }
 
@@ -3939,6 +3961,7 @@ async function clickBattleButton(client, selector) {
         !(button instanceof HTMLButtonElement)
         || button.hidden
         || button.disabled
+        || button.closest('[hidden], [inert]')
       ) return false;
       button.click();
       return true;
@@ -3995,6 +4018,7 @@ async function assertVoyageLog(client, battle) {
     const log = document.querySelector('[data-voyage-log]');
     if (!(log instanceof HTMLDetailsElement) || log.hidden) return null;
     const folded = !log.open;
+    const focused = document.activeElement.matches('[data-settlement-overlay][role="dialog"]');
     const summary = log.querySelector('summary');
     const size = summary.getBoundingClientRect();
     summary.click();
@@ -4005,7 +4029,7 @@ async function assertVoyageLog(client, battle) {
       (rect.left + rect.right) / 2, (rect.top + rect.bottom) / 2,
     ));
     return {
-      folded, opened: log.open, targetHeight: size.height, returnTopmost,
+      folded, focused, opened: log.open, targetHeight: size.height, returnTopmost,
       summary: log.querySelector('[data-voyage-summary]').textContent,
       wave: Number(log.querySelector('[data-voyage-wave]').textContent),
       hp: log.querySelector('[data-voyage-hp]').textContent,
@@ -4018,6 +4042,7 @@ async function assertVoyageLog(client, battle) {
   })()`);
   assert.ok(evidence, 'settlement must show its voyage log');
   assert.equal(evidence.folded, true, 'new voyage log must start folded');
+  assert.equal(evidence.focused, true, 'settlement must take focus before tabbing into the voyage log');
   assert.equal(evidence.opened, true, 'voyage log must open through its summary');
   assert.ok(evidence.targetHeight >= 44, 'voyage log touch target is too small');
   assert.equal(evidence.returnTopmost, true, 'return action must remain reachable with expanded log');

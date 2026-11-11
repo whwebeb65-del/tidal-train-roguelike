@@ -196,6 +196,12 @@ export function mountAppShell(
 
     setBattleChrome(active): void {
       root.firstElementChild?.classList.toggle('app-shell--battle', active);
+      // The HUD updates continuously. Announce its own live notices, not the
+      // timer, meters, and combat state of the whole scene.
+      if (active) sceneHost.removeAttribute('aria-live');
+      else if (sceneHost.getAttribute('aria-live') !== 'polite') {
+        sceneHost.setAttribute('aria-live', 'polite');
+      }
     },
 
     openSettings(model): void {

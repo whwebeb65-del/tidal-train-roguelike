@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { mountAppShell, renderAppShell } from '../../web/app/AppShell';
+import { renderBattleHudShell } from '../../web/battle/BattleHUD';
 
 const appShellCss = readFileSync(
   resolve(process.cwd(), 'web/styles/app-shell-v2.css'),
@@ -208,6 +209,29 @@ describe('AppShell', () => {
     expect(shell.noticeHost.getAttribute('role')).toBe('status');
     vi.advanceTimersByTime(1);
     expect(shell.noticeHost.classList.contains('is-visible')).toBe(false);
+  });
+
+  it('limits battle announcements to local live regions and restores station announcements on return', () => {
+    const root = document.createElement('div');
+    const shell = mountAppShell(root, { gears: 0, routeMarks: 0, starTickets: 0 });
+    expect(shell.sceneHost.getAttribute('aria-live')).toBe('polite');
+
+    shell.setBattleChrome(true);
+    shell.sceneHost.innerHTML = renderBattleHudShell();
+    expect(shell.sceneHost.hasAttribute('aria-live')).toBe(false);
+    expect(shell.sceneHost.querySelector('[data-hud-time]')?.closest('[aria-live]')).toBeNull();
+    expect(shell.sceneHost.querySelector('.battle-interaction')?.getAttribute('aria-live')).toBe('polite');
+    expect(shell.sceneHost.querySelector('[data-archive-discovery]')?.getAttribute('aria-live')).toBe('polite');
+    expect(shell.sceneHost.querySelector('[data-battle-tutorial]')?.getAttribute('aria-live')).toBe('polite');
+    expect(shell.noticeHost.getAttribute('role')).toBe('status');
+    expect(shell.noticeHost.getAttribute('aria-atomic')).toBe('true');
+
+    shell.setBattleChrome(false);
+    shell.sceneHost.innerHTML = '<h1>潮汐车站</h1>';
+    expect(shell.sceneHost.getAttribute('aria-live')).toBe('polite');
+    expect(shell.sceneHost.querySelector('h1')?.closest('[aria-live]')).toBe(shell.sceneHost);
+    shell.setBattleChrome(true);
+    expect(shell.sceneHost.hasAttribute('aria-live')).toBe(false);
   });
 
   it('styles battle notices as compact noninteractive radio strips', () => {

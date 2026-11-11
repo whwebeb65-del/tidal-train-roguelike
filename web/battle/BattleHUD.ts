@@ -79,6 +79,7 @@ interface BuildOverviewNodes {
 }
 
 interface HudNodes {
+  readonly root: HTMLElement;
   readonly wave: HTMLElement;
   readonly timer: HTMLElement;
   readonly runLevel: HTMLElement;
@@ -204,10 +205,10 @@ export function renderBattleHudShell(): string {
       <button class="battle-hud__refresh" type="button" data-battle-action="skill-refresh" aria-label="观看激励广告，重整技能冷却" hidden>补给短片 · 重整技能</button>
     </div>
 
-    <section class="battle-overlay battle-overlay--pause" data-pause-overlay hidden>
+    <section class="battle-overlay battle-overlay--pause" data-pause-overlay role="dialog" aria-modal="true" aria-labelledby="battle-pause-title" tabindex="-1" hidden>
       <div class="battle-dialog battle-dialog--compact">
         <span class="battle-dialog__eyebrow">PAUSED</span>
-        <h2>列车暂时减速</h2>
+        <h2 id="battle-pause-title">列车暂时减速</h2>
         <p>战斗时钟和怪潮已经暂停。</p>
         ${buildOverview('pause')}
         <p class="battle-build-inventory" data-acquired-build></p>
@@ -215,10 +216,10 @@ export function renderBattleHudShell(): string {
       </div>
     </section>
 
-    <section class="battle-overlay battle-overlay--upgrade living-zone cargo-unloading" data-upgrade-overlay hidden>
+    <section class="battle-overlay battle-overlay--upgrade living-zone cargo-unloading" data-upgrade-overlay role="dialog" aria-modal="true" aria-labelledby="battle-upgrade-title" tabindex="-1" hidden>
       <div class="battle-dialog battle-dialog--upgrade cargo-unloading__manifest">
         <span class="battle-dialog__eyebrow">潮汐货运 · 本局强化</span>
-        <h2>这一程，往哪边变强？</h2>
+        <h2 id="battle-upgrade-title">这一程，往哪边变强？</h2>
         <p>三选一 · 选后继续航行</p>
         ${buildOverview('upgrade')}
         ${tutorialTicket('upgrade')}
@@ -232,11 +233,11 @@ export function renderBattleHudShell(): string {
       </div>
     </section>
 
-    <section class="battle-overlay battle-overlay--failure failure-panel repair-bay" data-failure-overlay hidden>
+    <section class="battle-overlay battle-overlay--failure failure-panel repair-bay" data-failure-overlay role="dialog" aria-modal="true" aria-labelledby="battle-failure-title" tabindex="-1" hidden>
       <div class="battle-dialog repair-bay__sheet">
         <div class="repair-bay__train" aria-hidden="true"><i></i><i></i><i></i></div>
         <span class="battle-dialog__eyebrow">REPAIR BAY / DAMAGE REPORT</span>
-        <h2>列车进入维修库</h2>
+        <h2 id="battle-failure-title">列车进入维修库</h2>
         <div class="damage-report"><span>损伤报告</span><p data-failure-summary></p></div>
         <div class="battle-dialog__actions repair-actions">
           <button type="button" class="battle-button battle-button--primary" data-battle-action="revive" aria-label="观看激励广告，紧急修复并复活列车">救援短片 · 紧急修复</button>
@@ -245,7 +246,7 @@ export function renderBattleHudShell(): string {
       </div>
     </section>
 
-    <section class="battle-overlay battle-overlay--settlement living-zone" data-settlement-overlay hidden>
+    <section class="battle-overlay battle-overlay--settlement living-zone" data-settlement-overlay role="dialog" aria-modal="true" aria-labelledby="battle-settlement-title" tabindex="-1" hidden>
       <div class="battle-dialog battle-dialog--settlement">
         <div class="settlement-welcome" aria-hidden="true">
           <div class="settlement-symbol">潮</div>
@@ -257,7 +258,7 @@ export function renderBattleHudShell(): string {
           </div>
         </div>
         <span class="battle-dialog__eyebrow">RUN SETTLED</span>
-        <h2 data-settlement-title></h2>
+        <h2 id="battle-settlement-title" data-settlement-title></h2>
         <p data-settlement-description></p>
         <div class="arrival-ticket arrival-ticket--first-clear" data-arrival-ticket="first" aria-label="首次通关到站票" hidden><span>ARRIVAL PASS</span><b>FIRST CLEAR</b></div>
         <div class="arrival-ticket arrival-ticket--repeat-clear" data-arrival-ticket="repeat" aria-label="重复通关到站票" hidden><span>ARRIVAL PASS</span><b>REPEAT RUN</b></div>
@@ -301,6 +302,8 @@ export class BattleHUD {
   private nodes: HudNodes | null = null;
   private model: BattleHudModel | null = null;
   private exitRequested = false;
+  private activeOverlay: HTMLElement | null = null;
+  private focusBeforeOverlay: HTMLElement | null = null;
   private lastSettlementArchiveDiscoveries:
     | readonly TidalArchiveDiscoveryPresentation[]
     | null = null;
@@ -310,7 +313,7 @@ export class BattleHUD {
     const target = event.target;
     if (!(target instanceof Element)) return;
     const button = target.closest<HTMLButtonElement>('button');
-    if (!button || button.disabled) return;
+    if (!button || button.disabled || button.closest('[hidden], [inert]')) return;
     const skillId = button.dataset.battleSkill as BattleSkillId | undefined;
     if (skillId && SKILL_IDS.includes(skillId)) {
       this.callbacks.onSkill(skillId);
@@ -364,7 +367,23 @@ export class BattleHUD {
   };
 
   private readonly onKeyDown = (event: Event): void => {
-    if (!(event instanceof KeyboardEvent) || event.repeat || !this.model) {
+    if (!(event instanceof KeyboardEvent) || event.defaultPrevented
+      || event.ctrlKey || event.metaKey || event.altKey
+      || (event.repeat && event.key !== 'Tab') || !this.model) {
+      return;
+    }
+    if (event.key === 'Escape') {
+      if (this.activeOverlay && this.activeOverlay === this.nodes?.pauseOverlay) {
+        event.preventDefault();
+        this.callbacks.onResume();
+      } else if (!this.activeOverlay && this.model.status === 'running') {
+        event.preventDefault();
+        this.callbacks.onPause();
+      }
+      return;
+    }
+    if (this.activeOverlay) {
+      if (event.key === 'Tab') this.keepTabInOverlay(event, this.activeOverlay);
       return;
     }
     const target = event.target;
@@ -387,7 +406,7 @@ export class BattleHUD {
       }
       return;
     }
-    if (event.key.toLowerCase() === 'r' && !event.ctrlKey && !event.metaKey && !event.altKey) {
+    if (event.key.toLowerCase() === 'r') {
       const button = this.nodes?.resetAimButton;
       if (button && !button.hidden) {
         event.preventDefault();
@@ -395,12 +414,43 @@ export class BattleHUD {
       }
       return;
     }
-    if (event.key === 'Escape') {
-      event.preventDefault();
-      if (this.model.status === 'paused') this.callbacks.onResume();
-      else if (this.model.status === 'running') this.callbacks.onPause();
-    }
   };
+
+  private keepTabInOverlay(event: KeyboardEvent, overlay: HTMLElement): void {
+    const stops = [...overlay.querySelectorAll<HTMLElement>('button:not(:disabled), summary')]
+      .filter((element) => !element.closest('[hidden], [inert]'));
+    const index = stops.findIndex((stop) => stop === overlay.ownerDocument.activeElement);
+    if (stops.length === 0 || index < 0
+      || (event.shiftKey && index === 0) || (!event.shiftKey && index === stops.length - 1)) {
+      event.preventDefault();
+      (stops[event.shiftKey ? stops.length - 1 : 0] ?? overlay).focus();
+    }
+  }
+
+  private updateOverlayFocus(nodes: HudNodes): void {
+    // Later overlays also paint on top if more than one state is visible.
+    const next = [nodes.settlementOverlay, nodes.failureOverlay, nodes.upgradeOverlay, nodes.pauseOverlay]
+      .find((overlay) => !overlay.hidden) ?? null;
+    if (next === this.activeOverlay) return;
+    if (next && !this.activeOverlay) {
+      const focused = nodes.root.ownerDocument.activeElement;
+      this.focusBeforeOverlay = focused instanceof HTMLElement && nodes.root.contains(focused)
+        ? focused : null;
+    }
+    this.activeOverlay = next;
+    for (const region of nodes.root.children) {
+      region.toggleAttribute('inert', next !== null && region !== next);
+    }
+    if (next) {
+      next.focus({ preventScroll: true });
+    } else {
+      const previous = this.focusBeforeOverlay;
+      this.focusBeforeOverlay = null;
+      if (previous?.isConnected && !previous.closest('[hidden], [inert]') && !previous.matches(':disabled')) {
+        previous.focus({ preventScroll: true });
+      }
+    }
+  }
 
   public constructor(
     private readonly callbacks: BattleHudCallbacks,
@@ -727,6 +777,7 @@ export class BattleHUD {
     nodes.doubleButton.toggleAttribute('hidden', !model.doubleSettlementVisible);
     nodes.doubleButton.toggleAttribute('disabled', model.pendingActions.has('double-settlement'));
     nodes.returnButton.toggleAttribute('disabled', this.exitRequested);
+    this.updateOverlayFocus(nodes);
   }
 
   public dispose(): void {
@@ -738,6 +789,8 @@ export class BattleHUD {
     this.nodes = null;
     this.model = null;
     this.lastSettlementArchiveDiscoveries = null;
+    this.activeOverlay = null;
+    this.focusBeforeOverlay = null;
   }
 }
 
@@ -850,6 +903,7 @@ function collectNodes(host: HTMLElement): HudNodes {
       };
     });
   return {
+    root: requireElement(host, '[data-battle-hud-root]'),
     wave: requireElement(host, '[data-hud-wave]'),
     timer: requireElement(host, '[data-hud-time]'),
     runLevel: requireElement(host, '[data-hud-run-level]'),
