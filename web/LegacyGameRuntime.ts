@@ -2668,7 +2668,6 @@ const onChange = (event: Event): void => {
     settingsBridge.updateSettings({
       [target.dataset.setting]: target.checked,
     });
-    openSettingsPanel();
     return;
   }
   if (
@@ -2678,14 +2677,7 @@ const onChange = (event: Event): void => {
     const quality = target.value as QualityPreference;
     if (!['auto', 'high', 'medium', 'low'].includes(quality)) return;
     settingsBridge.updateSettings({ qualityPreference: quality });
-    openSettingsPanel();
   }
-};
-
-const onKeyDown = (event: KeyboardEvent): void => {
-  if (event.key !== 'Escape' || !shell.isSettingsOpen()) return;
-  event.preventDefault();
-  shell.closeSettings();
 };
 
 function e2eSnapshot(): BattleE2ESnapshot {
@@ -2825,7 +2817,6 @@ return {
     app.addEventListener('click', onClick);
     app.addEventListener('submit', onSubmit);
     app.addEventListener('change', onChange);
-    app.addEventListener('keydown', onKeyDown);
     await syncView();
   },
   applySettings(
@@ -2887,7 +2878,6 @@ return {
     app.removeEventListener('click', onClick);
     app.removeEventListener('submit', onSubmit);
     app.removeEventListener('change', onChange);
-    app.removeEventListener('keydown', onKeyDown);
     shell.closeSettings();
     router.destroy();
     activeStationScene = null;

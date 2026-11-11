@@ -3968,9 +3968,9 @@ async function exercisePauseAndSkills(client) {
   return { tidalUsed, barrierUsed };
 }
 
-async function pressBattleKey(client, key, windowsVirtualKeyCode) {
+async function pressBattleKey(client, key, windowsVirtualKeyCode, modifiers = 0) {
   for (const type of ['keyDown', 'keyUp']) {
-    await client.send('Input.dispatchKeyEvent', { type, key, code: key, windowsVirtualKeyCode });
+    await client.send('Input.dispatchKeyEvent', { type, key, code: key, windowsVirtualKeyCode, modifiers });
   }
 }
 
@@ -6049,6 +6049,82 @@ async function exerciseScenes(client, label) {
   );
 }
 
+async function assertSettingsKeyboardDialog(client, viewport, label) {
+  const layout = (width, height) => ({
+    width, height, deviceScaleFactor: 3, mobile: true,
+    screenWidth: width, screenHeight: height,
+  });
+  await client.send('Emulation.setDeviceMetricsOverride', layout(640, 360));
+  try {
+    const selector = 'dialog[data-settings-panel][open]';
+    const dialog = JSON.stringify(selector);
+    const trigger = '[data-action="open-settings"]';
+    const opened = `document.querySelector(${dialog})?.matches(':modal')
+      && document.activeElement?.matches('.settings-sheet__close')`;
+    const closed = `!document.querySelector(${dialog})
+      && document.activeElement?.matches(${JSON.stringify(trigger)})`;
+    await waitForEvaluation(client, 'innerWidth === 640 && innerHeight === 360', { label: 'landscape settings viewport' });
+    assert.equal(await clickBattleButton(client, trigger), true);
+    await waitForEvaluation(client, opened, { label: `${label} native settings focus` });
+    assert.equal(await evaluate(client, `(() => {
+      const departure = document.querySelector('.station-departure');
+      departure.focus();
+      return document.activeElement?.matches('.settings-sheet__close');
+    })()`), true, 'native settings must prevent background focus');
+    await pressBattleKey(client, 'Tab', 9, 8);
+    await waitForEvaluation(client, 'document.activeElement?.dataset.setting === "qualityPreference"',
+      { label: `${label} reverse Tab wraps into settings` });
+    const update = await evaluate(client, `(() => {
+      const select = document.activeElement;
+      const sheet = select.closest('.settings-sheet');
+      const previous = select.value;
+      const replacement = previous === 'low' ? 'medium' : 'low';
+      sheet.scrollTop = sheet.scrollHeight;
+      const scroll = sheet.scrollTop;
+      select.value = replacement;
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+      const result = {
+        visibleSheet: sheet.clientHeight <= 360 && scroll > 0,
+        sameFocus: select === document.activeElement,
+        sameScroll: sheet.scrollTop === scroll,
+        persisted: JSON.parse(localStorage.getItem('tidal-train-settings-v2')).qualityPreference === replacement,
+      };
+      select.value = previous;
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+      return result;
+    })()`);
+    assert.deepEqual(update, { visibleSheet: true, sameFocus: true, sameScroll: true, persisted: true },
+      'short-screen settings must scroll internally and update in place');
+    await pressBattleKey(client, 'Tab', 9);
+    await waitForEvaluation(client, opened, { label: `${label} forward Tab wraps to close` });
+    await pressBattleKey(client, 'Escape', 27);
+    await waitForEvaluation(client, closed, { label: `${label} Escape restores settings trigger` });
+    assert.equal(await clickBattleButton(client, trigger), true);
+    await waitForEvaluation(client, opened, { label: `${label} reopened settings` });
+    assert.equal(await evaluate(client, `document.elementFromPoint(5, 5)?.matches(${dialog})`), true);
+    const inside = await waitForEvaluation(client, `(() => {
+      const header = document.querySelector('.settings-sheet__header');
+      const rect = header.getBoundingClientRect();
+      const x = rect.left + rect.width / 2;
+      const y = rect.top + rect.height / 2;
+      return header.contains(document.elementFromPoint(x, y)) ? { x, y } : null;
+    })()`, { label: `${label} settings cabinet drag point` });
+    await client.send('Input.dispatchMouseEvent', {
+      type: 'mousePressed', ...inside, button: 'left', buttons: 1, clickCount: 1,
+    });
+    await client.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 5, y: 5, buttons: 1 });
+    await client.send('Input.dispatchMouseEvent', {
+      type: 'mouseReleased', x: 5, y: 5, button: 'left', buttons: 0, clickCount: 1,
+    });
+    assert.equal(await evaluate(client, `Boolean(document.querySelector(${dialog}))`), true,
+      'dragging from the cabinet to the backdrop must not close settings');
+    await tapAt(client, { x: 5, y: 5 });
+    await waitForEvaluation(client, closed, { label: `${label} outside tap restores settings trigger` });
+  } finally {
+    await client.send('Emulation.setDeviceMetricsOverride', layout(viewport.width, viewport.height));
+  }
+}
+
 async function runViewport(client, viewport, smokeId, browserErrors) {
   const label = `${viewport.width}x${viewport.height}`;
   const errorBaseline = browserErrors.length;
@@ -6062,6 +6138,7 @@ async function runViewport(client, viewport, smokeId, browserErrors) {
   await inspectHandDrawnStation(client, label);
   await captureQaScreenshot(client, `station-${label}`);
   if (viewport.full) {
+    await assertSettingsKeyboardDialog(client, viewport, label);
     await assertResetCancelKeepsProgress(client, label);
     await assertGuidebookMasteryDestination(client, label);
     await assertInsufficientStaminaStopsDeparture(client, label);

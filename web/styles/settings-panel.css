@@ -15,30 +15,38 @@
 
 .settings-panel {
   position: fixed;
-  z-index: 100;
   inset: 0;
-  display: grid;
+  box-sizing: border-box;
+  width: 100%;
+  height: 100dvh;
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  border: 0;
+  overflow: hidden;
+  overscroll-behavior: contain;
+  background: transparent;
   align-items: end;
-  padding: 12px;
+  grid-template-rows: minmax(0, 1fr);
+  padding: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right))
+    max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
 }
 
-.settings-panel__backdrop {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
+.settings-panel[open] { display: grid; }
+
+.settings-panel::backdrop {
   background: rgb(2 13 21 / 70%);
-  border: 0;
-  border-radius: 0;
   backdrop-filter: blur(7px);
 }
 
 .settings-sheet {
   position: relative;
   width: min(520px, 100%);
-  max-height: min(760px, calc(100dvh - 24px));
+  max-height: min(760px, 100%);
   margin: 0 auto;
   overflow: auto;
+  overscroll-behavior: contain;
+  scroll-padding-block-start: 88px;
   color: #e8eee5;
   background: #102a38;
   border: 3px solid #b58a4e;

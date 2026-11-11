@@ -3,6 +3,7 @@ import { requireElement } from './dom';
 import { renderResetSaveDialog } from '../views/ResetSaveDialogView';
 import {
   renderSettingsPanel,
+  updateSettingsPanel,
   type SettingsPanelModel,
 } from '../views/SettingsPanelView';
 
@@ -106,7 +107,8 @@ export function renderAppShell(snapshot: CurrencySnapshot): string {
         <button class="app-shell__reset" type="button" data-action="reset-save" aria-label="清空本地存档"
           aria-haspopup="dialog" aria-controls="reset-save-dialog">重置</button>
         <button class="app-shell__settings" type="button"
-          data-action="open-settings" aria-label="打开游戏设置">设置</button>
+          data-action="open-settings" aria-label="打开游戏设置"
+          aria-haspopup="dialog">设置</button>
       </div>
     </header>
     <main class="scene-viewport">
@@ -136,9 +138,15 @@ export function mountAppShell(
   const noticeCopy = requireElement<HTMLElement>(noticeHost, '[data-notice-copy]');
   const navigation = requireElement<HTMLElement>(root, '.hub-nav');
   const settingsHost = requireElement<HTMLElement>(root, '#settings-host');
+  const settingsTrigger = requireElement<HTMLButtonElement>(root, '[data-action="open-settings"]');
   const resetDialog = requireElement<HTMLDialogElement>(root, '#reset-save-dialog');
   const resetTrigger = requireElement<HTMLButtonElement>(root, '[data-action="reset-save"]');
   let noticeTimer: ReturnType<typeof globalThis.setTimeout> | null = null;
+  let settingsDialog: HTMLDialogElement | null = null;
+
+  function closeSettings(): void {
+    if (settingsDialog?.open) settingsDialog.close();
+  }
 
   resetDialog.addEventListener('close', () => {
     if (!resetDialog.open && settingsHost.hidden
@@ -214,6 +222,7 @@ export function mountAppShell(
     setBattleChrome(active): void {
       root.firstElementChild?.classList.toggle('app-shell--battle', active);
       if (active && resetDialog.open) resetDialog.close();
+      if (active) closeSettings();
       // The HUD updates continuously. Announce its own live notices, not the
       // timer, meters, and combat state of the whole scene.
       if (active) sceneHost.removeAttribute('aria-live');
@@ -231,7 +240,7 @@ export function mountAppShell(
 
     openResetSaveDialog(): boolean {
       if (resetDialog.open) return true;
-      if (!settingsHost.hidden || typeof resetDialog.showModal !== 'function'
+      if (settingsDialog?.open || typeof resetDialog.showModal !== 'function'
         || typeof resetDialog.close !== 'function') return false;
       try {
         resetDialog.showModal();
@@ -251,20 +260,68 @@ export function mountAppShell(
     },
 
     openSettings(model): void {
+      if (resetDialog.open || shellRoot.classList.contains('app-shell--battle')) return;
+      if (settingsDialog?.open) {
+        updateSettingsPanel(settingsDialog, model);
+        return;
+      }
       settingsHost.innerHTML = renderSettingsPanel(model);
+      const dialog = requireElement<HTMLDialogElement>(settingsHost, '[data-settings-panel]');
+      settingsDialog = dialog;
+      const clearDialog = () => {
+        if (settingsDialog !== dialog || dialog.open) return;
+        settingsDialog = null;
+        settingsHost.hidden = true;
+        settingsHost.replaceChildren();
+      };
+      dialog.addEventListener('close', () => {
+        if (settingsDialog !== dialog || dialog.open) return;
+        clearDialog();
+        if (!resetDialog.open && !shellRoot.classList.contains('app-shell--battle')) {
+          settingsTrigger.focus({ preventScroll: true });
+        }
+      });
+      let backdropPressed = false;
+      dialog.addEventListener('pointerdown', (event) => {
+        backdropPressed = event.isPrimary && event.button === 0 && event.target === dialog;
+      });
+      dialog.addEventListener('pointercancel', () => {
+        backdropPressed = false;
+      });
+      dialog.addEventListener('click', (event) => {
+        // A drag across the panel can produce a click on the shared dialog
+        // ancestor. Treat only a deliberate outside press and release as close.
+        const isBackdropClick = backdropPressed && event.target === dialog
+          && root.ownerDocument.elementFromPoint(event.clientX, event.clientY) === dialog;
+        backdropPressed = false;
+        if (isBackdropClick) closeSettings();
+      });
+      dialog.addEventListener('keydown', (event) => {
+        if (event.key !== 'Tab' || event.altKey || event.ctrlKey || event.metaKey) return;
+        const controls = [...dialog.querySelectorAll<HTMLElement>(
+          'button:not(:disabled), input:not(:disabled), select:not(:disabled)',
+        )];
+        const first = controls[0];
+        const last = controls.at(-1);
+        if (!first || !last) return;
+        const active = root.ownerDocument.activeElement;
+        if (active !== (event.shiftKey ? first : last)) return;
+        event.preventDefault();
+        (event.shiftKey ? last : first).focus();
+      });
       settingsHost.hidden = false;
-      settingsHost.querySelector<HTMLButtonElement>(
-        '[data-action="close-settings"]',
-      )?.focus();
+      try {
+        dialog.showModal();
+      } catch {
+        clearDialog();
+        this.setNotice('当前浏览器无法打开设置，请使用较新的浏览器。');
+      }
     },
 
-    closeSettings(): void {
-      settingsHost.hidden = true;
-      settingsHost.replaceChildren();
-    },
+    closeSettings,
 
     isSettingsOpen(): boolean {
-      return !settingsHost.hidden;
+      return settingsDialog?.open === true;
     },
   };
 }

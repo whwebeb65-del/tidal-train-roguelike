@@ -94,12 +94,12 @@ describe('living station non-battle coverage', () => {
     const panel = root(renderSettingsPanel({
       settings: defaultGameSettings(), audioAvailable: true, effectiveReducedMotion: false,
     }));
-    const dialog = panel.querySelector('aside.conductor-cabinet[role="dialog"][aria-modal="true"]');
+    const cabinet = panel.querySelector('aside.conductor-cabinet');
 
-    expect(panel.classList.contains('settings-panel')).toBe(true);
-    expect(dialog).not.toBeNull();
-    expect(dialog?.parentElement).toBe(panel);
-    expect(dialog?.classList.contains('system-card')).toBe(false);
+    expect(panel.matches('dialog.settings-panel[aria-modal="true"][aria-labelledby="settings-title"]')).toBe(true);
+    expect(cabinet).not.toBeNull();
+    expect(cabinet?.parentElement).toBe(panel);
+    expect(cabinet?.classList.contains('system-card')).toBe(false);
   });
 
   it('covers the BattleHUD surfaces instantiated by the production runtime', () => {
