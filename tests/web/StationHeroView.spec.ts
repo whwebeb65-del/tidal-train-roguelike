@@ -140,6 +140,7 @@ describe('StationHeroView', () => {
 
     expect(html).toContain('STATION 3');
     expect(html).toContain('普通航线');
+    expect(html).toContain('普通航线 · 5 体力');
     expect(html).toContain('8 分钟上限');
     expect(html).toContain('单局最高 Lv.20');
     expect(html).toContain('战斗时间最多 8 分钟，单局最高 Lv.20');
@@ -150,6 +151,22 @@ describe('StationHeroView', () => {
     expect(runTicket).toContain('border-top:');
     expect(runTicket).toContain('border-bottom:');
     expect(runTicket).not.toMatch(/\bborder:/);
+  });
+  it('shows the exact shortage and keeps the departure action available to recheck stamina', () => {
+    const html = renderStationHero({
+      captainId: 'captain-tide-female',
+      skinId: 'skin-tide-base',
+      mapName: '漂流近郊',
+      stationLevel: 1,
+      maxHp: 100,
+      damagePercent: 0,
+      reducedMotion: false,
+      stamina: 3,
+    });
+    expect(html).toContain('现有 3 点体力 · 还差 2 点');
+    expect(html).toContain('aria-describedby="station-run-tip"');
+    expect(html).toMatch(/<button class="station-departure"[^>]*>检票出发<\/button>/);
+    expect(html).not.toMatch(/class="station-departure"[^>]*\bdisabled\b/);
   });
   it('renders four ordered station layers, purposeful actors and ticket UI', () => {
     const html = renderHero();

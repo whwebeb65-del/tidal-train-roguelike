@@ -1133,6 +1133,43 @@ async function readStoredTidalArchive(client) {
   )`);
 }
 
+async function assertInsufficientStaminaStopsDeparture(client, label) {
+  const key = JSON.stringify(playerSaveStorageKey);
+  const seeded = await evaluate(client, `(() => {
+    if (new URLSearchParams(location.search).get('e2e') !== '1' || !${hookExpression}) return false;
+    const save = JSON.parse(localStorage.getItem(${key}) ?? 'null');
+    if (!save) return false;
+    localStorage.setItem(${key}, JSON.stringify({
+      ...save, stamina: 4, staminaUpdatedAtMs: Date.now(),
+    }));
+    return true;
+  })()`);
+  assert.equal(seeded, true, `${label} stamina fixture requires an isolated E2E page`);
+  await client.send('Page.reload', { ignoreCache: true });
+  await waitForEvaluation(client, `document.querySelector('#station-run-tip')?.textContent.includes('还差 1 点')`,
+    { label: `${label} station ticket stamina shortage` });
+  const point = await waitForEvaluation(client, `(() => {
+    const button = document.querySelector('.station-departure');
+    button.scrollIntoView({ block: 'center', behavior: 'instant' });
+    const rect = button.getBoundingClientRect();
+    const x = rect.left + rect.width / 2;
+    const y = rect.top + rect.height / 2;
+    const hit = document.elementFromPoint(x, y);
+    if (!button.contains(hit)) {
+      throw new Error(JSON.stringify({ x, y, scrollY, hit: hit?.className ?? null }));
+    }
+    return { x, y };
+  })()`, { label: `${label} uncovered station departure button`, timeoutMs: 3_000 });
+  const before = await evaluate(client, `localStorage.getItem(${key})`);
+  await tapAt(client, point);
+  assert.equal(await evaluate(client, `Boolean(document.querySelector('.station-hero[data-departure-state]'))`),
+    false, `${label} cannot charge or animate departure at 4 stamina`);
+  await waitForEvaluation(client, `document.querySelector('[data-notice-copy]')?.textContent.includes('每 10 分钟恢复 1 点')`,
+    { label: `${label} immediate stamina notice`, timeoutMs: 900 });
+  assert.equal(await evaluate(client, `localStorage.getItem(${key})`), before,
+    `${label} blocked departure must not spend stamina or grant account XP`);
+}
+
 async function assertGuidebookMasteryDestination(client, label) {
   const seeded = await evaluate(client, `(() => {
     if (new URLSearchParams(location.search).get('e2e') !== '1' || !${hookExpression}) return false;
@@ -6027,6 +6064,7 @@ async function runViewport(client, viewport, smokeId, browserErrors) {
   if (viewport.full) {
     await assertResetCancelKeepsProgress(client, label);
     await assertGuidebookMasteryDestination(client, label);
+    await assertInsufficientStaminaStopsDeparture(client, label);
     await resetSaveBetweenViewports(client);
     await ensureCaptainSelected(client);
     await assertInAppMotionPreference(client, label);

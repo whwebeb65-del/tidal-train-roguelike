@@ -131,6 +131,7 @@
 .station-run-ticket > span::before { color: #d15c4d; content: '•'; margin-right: 4px; }
 .station-run-ticket > span:first-child { color: #9b3f3b; }
 .station-run-ticket > small { flex-basis: 100%; color: var(--twilight-blue); font-size: 9px; letter-spacing: .02em; }
+.station-run-ticket > .station-run-ticket__shortage { color: #9b3f3b; }
 
 .station-departure {
   min-height: 44px;

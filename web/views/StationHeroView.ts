@@ -8,6 +8,7 @@ import {
 } from '../../src/domain/skin/SkinCatalog';
 import { CHIBI_ART } from '../assets/ChibiArtCatalog';
 import { BATTLE_HARD_CAP_MS, EXPERIENCE_THRESHOLDS } from '../battle/BattleConfig';
+import { NORMAL_RUN_STAMINA_COST } from '../../src/domain/progression/StaminaSystem';
 
 export interface StationHeroModel {
   readonly captainId: CaptainId;
@@ -32,6 +33,10 @@ export function renderStationHero(model: StationHeroModel): string {
   const captainArt = CHIBI_ART.captains[model.captainId][model.skinId];
   const battleMinutes = BATTLE_HARD_CAP_MS / 60_000;
   const maxRunLevel = EXPERIENCE_THRESHOLDS.length + 1;
+  const missingStamina = Math.max(0, NORMAL_RUN_STAMINA_COST - (model.stamina ?? NORMAL_RUN_STAMINA_COST));
+  const staminaTip = missingStamina > 0
+    ? `现有 ${model.stamina} 点体力 · 还差 ${missingStamina} 点`
+    : '点按战场任意位置，主炮即刻转向';
 
   return `<section class="station-hero" data-reduced-motion="${model.reducedMotion}" aria-labelledby="station-hero-title">
     <div class="station-hero__world" data-motion-role="background" aria-hidden="true">
@@ -53,13 +58,14 @@ export function renderStationHero(model: StationHeroModel): string {
         <span>生命 ${model.maxHp}</span>
         <span>永久伤害 +${model.damagePercent}%</span>
       </div>
-      <div class="station-run-ticket" aria-label="普通航线，战斗时间最多 ${battleMinutes} 分钟，单局最高 Lv.${maxRunLevel}">
-        <span>普通航线</span>
+      <div class="station-run-ticket" aria-label="普通航线，战斗时间最多 ${battleMinutes} 分钟，单局最高 Lv.${maxRunLevel}，消耗 ${NORMAL_RUN_STAMINA_COST} 点体力">
+        <span>普通航线 · ${NORMAL_RUN_STAMINA_COST} 体力</span>
         <span>${battleMinutes} 分钟上限</span>
         <span>单局最高 Lv.${maxRunLevel}</span>
-        <small>点按战场任意位置，主炮即刻转向</small>
+        <small id="station-run-tip"${missingStamina > 0 ? ' class="station-run-ticket__shortage"' : ''}>${staminaTip}</small>
       </div>
-      <button class="station-departure" data-action="start-run">检票出发</button>
+      <button class="station-departure" type="button" data-action="start-run"
+        aria-describedby="station-run-tip">检票出发</button>
     </div>
     <div class="station-hero__vehicle" data-motion-role="vehicle">
       <div class="station-hero__wake" data-motion-role="wake" aria-hidden="true"><i></i><i></i><i></i></div>

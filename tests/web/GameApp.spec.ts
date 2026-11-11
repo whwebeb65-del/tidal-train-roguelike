@@ -1379,7 +1379,7 @@ describe('LegacyGameRuntime departure transaction', () => {
     preferredBattleSpeed?: 1 | 1.5 | 2 | 3;
     preparation?: 'ready' | 'local-abort' | 'failure';
     scene?: () => never;
-    nowMs?: number;
+    nowMs?: number | (() => number);
   } = {}) {
     const app = document.createElement('div');
     const storage = window.localStorage;
@@ -1399,25 +1399,26 @@ describe('LegacyGameRuntime departure transaction', () => {
     const speedResolutions: Array<{ initial: number; available: readonly number[] }> = [];
     let sceneCreates = 0;
     const audio = new Proxy({}, { get: () => () => undefined }) as never;
+    const prepareStationRun = vi.fn(async () => {
+      if (options.preparation === 'local-abort') return { status: 'local-abort' } as const;
+      if (options.preparation === 'failure') return { status: 'failure', error: new Error('asset') } as const;
+      return { status: 'ready', assets: { failedIds: [], get: () => null } } as const;
+    });
     const runtime = createLegacyGameRuntime(app, storage, true, audio, {
       getSettings: () => ({ version: 2, musicEnabled: false, sfxEnabled: false, reducedMotion: true, qualityPreference: 'auto', preferredBattleSpeed: options.preferredBattleSpeed ?? 1 }),
       updateSettings: (patch) => { if (patch.preferredBattleSpeed) speedUpdates.push(patch.preferredBattleSpeed); return { version: 2, musicEnabled: false, sfxEnabled: false, reducedMotion: true, qualityPreference: 'auto', preferredBattleSpeed: patch.preferredBattleSpeed ?? 1 }; },
     }, {
-      prepareStationRun: async () => options.preparation === 'local-abort'
-        ? { status: 'local-abort' }
-        : options.preparation === 'failure'
-          ? { status: 'failure', error: new Error('asset') }
-          : { status: 'ready', assets: { failedIds: [], get: () => null } },
+      prepareStationRun,
       prepareBattleScene: (...args) => {
         sceneCreates += 1;
         return options.scene?.()
           ?? ({ id: 'battle', mount: async () => undefined, unmount: () => undefined } as never);
       },
-      nowMs: () => options.nowMs ?? 0,
+      nowMs: () => typeof options.nowMs === 'function' ? options.nowMs() : options.nowMs ?? 0,
       onTestSnapshot: (snapshot) => snapshots.push(snapshot),
       onBattleSpeedResolved: (initial, available) => speedResolutions.push({ initial, available }),
     });
-    return { app, storage, runtime, snapshots, speedUpdates, speedResolutions, getSceneCreates: () => sceneCreates };
+    return { app, storage, runtime, snapshots, speedUpdates, speedResolutions, prepareStationRun, getSceneCreates: () => sceneCreates };
   }
 
   it('commits normal stamina and start XP only after the prepared scene mounts', async () => {
@@ -1444,14 +1445,36 @@ describe('LegacyGameRuntime departure transaction', () => {
 
   it('keeps the save at station when preparation aborts or stamina is insufficient', async () => {
     for (const options of [{ preparation: 'local-abort' as const }, { stamina: 4 }]) {
-      const { app, storage, runtime, snapshots } = setup(options);
+      const { app, storage, runtime, snapshots, prepareStationRun } = setup(options);
       await runtime.start();
       const button = document.createElement('button'); button.dataset.action = 'start-run'; app.append(button); button.click();
       await new Promise((resolve) => setTimeout(resolve, 0));
       const saved = JSON.parse(storage.getItem(APP_STORAGE_KEYS.player) ?? '{}');
       expect(saved.stamina).toBe(options.stamina ?? 10);
+      expect(saved.accountXp).toBe(0);
       expect(snapshots.at(-1)?.phase).toBe('station');
+      expect(prepareStationRun).toHaveBeenCalledTimes('stamina' in options ? 0 : 1);
     }
+  });
+
+  it('rechecks recovered stamina on the same station ticket before starting', async () => {
+    let now = 1_000;
+    const { app, storage, runtime, snapshots, prepareStationRun } = setup({
+      stamina: 4,
+      staminaUpdatedAtMs: now,
+      nowMs: () => now,
+    });
+    await runtime.start();
+    expect(app.querySelector('#station-run-tip')?.textContent).toContain('还差 1 点');
+    now += 10 * 60 * 1000;
+    app.querySelector<HTMLButtonElement>('.station-departure')?.click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(prepareStationRun).toHaveBeenCalledTimes(1);
+    expect(snapshots.at(-1)).toMatchObject({ phase: 'combat', activeRunStaminaSpent: 5 });
+    expect(JSON.parse(storage.getItem(APP_STORAGE_KEYS.player) ?? '{}')).toMatchObject({
+      stamina: 0,
+      accountXp: 50,
+    });
   });
 
   it('keeps save and active run state unchanged when asset preparation fails before scene creation', async () => {
@@ -1467,11 +1490,12 @@ describe('LegacyGameRuntime departure transaction', () => {
   });
 
   it('does not charge a daily trial and resolves locked and unlocked speeds', async () => {
-    const daily = setup({ stationLevel: 2, preferredBattleSpeed: 3 });
+    const daily = setup({ stamina: 0, stationLevel: 2, preferredBattleSpeed: 3 });
     await daily.runtime.start();
     const dailyButton = document.createElement('button'); dailyButton.dataset.action = 'start-daily-trial'; daily.app.append(dailyButton); dailyButton.click();
     await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(JSON.parse(daily.storage.getItem(APP_STORAGE_KEYS.player) ?? '{}').stamina).toBe(10);
+    expect(JSON.parse(daily.storage.getItem(APP_STORAGE_KEYS.player) ?? '{}').stamina).toBe(0);
+    expect(daily.prepareStationRun).toHaveBeenCalledTimes(1);
     expect(daily.speedUpdates).toContain(1);
 
     const fast = setup({ accountLevel: 20, preferredBattleSpeed: 2 });

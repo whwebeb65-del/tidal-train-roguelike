@@ -65,6 +65,8 @@ import {
 } from '../src/domain/progression/SkillMasterySystem';
 import {
   MAX_STAMINA,
+  NORMAL_RUN_STAMINA_COST,
+  STAMINA_REGEN_MS,
   recoverStamina,
   spendNormalRunStamina,
 } from '../src/domain/progression/StaminaSystem';
@@ -1413,6 +1415,11 @@ function render(): void {
     });
 }
 
+function showStaminaShortage(): void {
+  const missing = NORMAL_RUN_STAMINA_COST - save.stamina;
+  notice = `当前 ${save.stamina} 点体力，还差 ${missing} 点；每 ${STAMINA_REGEN_MS / 60_000} 分钟恢复 1 点。`;
+}
+
 async function startRun(
   mode: 'normal' | 'daily-trial' = 'normal',
 ): Promise<void> {
@@ -1421,6 +1428,16 @@ async function startRun(
     notice = `每日潮汐试炼将在车站达到 Lv.${DAILY_TRIAL_MIN_STATION_LEVEL} 后开放。`;
     render();
     return;
+  }
+  if (mode === 'normal') {
+    // Recheck at the click, including time spent with the station left open.
+    // Spending still happens only after the prepared battle scene mounts.
+    syncStamina();
+    if (save.stamina < NORMAL_RUN_STAMINA_COST) {
+      showStaminaShortage();
+      render();
+      return;
+    }
   }
 
   battleStartPending = true;
@@ -1481,7 +1498,7 @@ async function startRun(
       ? spendNormalRunStamina(save)
       : null;
     if (staminaResult && !staminaResult.accepted) {
-      notice = '还需要 5 点体力才能发车。';
+      showStaminaShortage();
       return;
     }
     const account = mode === 'normal'
