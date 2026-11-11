@@ -63,3 +63,93 @@
 @media (prefers-reduced-motion: reduce) {
   .cargo-unloading .reward-crate .upgrade-family-seal { transform: none; }
 }
+
+.battle-hud__auto-aim {
+  position: absolute;
+  left: calc(8px + env(safe-area-inset-left));
+  bottom: 35px;
+  width: 44px;
+  min-height: 44px;
+  padding: 3px;
+  border: 2px solid #f1c980;
+  border-radius: 12px 7px 11px 8px;
+  color: #fff4d2;
+  background: #124b57;
+  box-shadow: 2px 3px #052e46;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1.15;
+}
+
+@media (max-width: 340px) {
+  .battle-hud__skills:has(.battle-hud__auto-aim:not([hidden])) {
+    padding-inline-start: calc(34px + env(safe-area-inset-left));
+  }
+}
+
+/* The folding captain's log keeps the default reward screen compact. */
+.battle-overlay.arrival-platform,
+.battle-overlay.trial-record-board {
+  overflow-y: auto;
+  align-items: safe center;
+}
+
+.battle-voyage-log {
+  margin-top: 12px;
+  border: 1px solid #d8b170b8;
+  border-radius: 10px 6px 11px 6px;
+  color: #fff0c3;
+  background: #0b333b;
+  box-shadow: 2px 3px #062128a6;
+  text-align: left;
+}
+
+.battle-voyage-log > summary {
+  display: grid;
+  grid-template-columns: 1fr auto 8px;
+  align-items: center;
+  gap: 9px;
+  min-height: 44px;
+  padding: 6px 11px;
+  list-style: none;
+  cursor: pointer;
+}
+.battle-voyage-log > summary::-webkit-details-marker { display: none; }
+.battle-voyage-log > summary b { font-size: 13px; }
+.battle-voyage-log > summary span { color: #bfe8d2; font-size: 11px; }
+.battle-voyage-log > summary::after {
+  width: 6px;
+  height: 6px;
+  border: solid #f2ce84;
+  border-width: 0 2px 2px 0;
+  transform: translateY(-2px) rotate(45deg);
+  content: '';
+}
+.battle-voyage-log[open] > summary::after { transform: translateY(2px) rotate(225deg); }
+.battle-voyage-log > summary:focus-visible { outline: 3px solid #fff2a4; outline-offset: 3px; }
+.battle-voyage-log__page {
+  padding: 10px;
+  border-top: 2px dashed #9d754a;
+  border-radius: 0 0 9px 5px;
+  color: #234d51;
+  background: #fff0c7;
+}
+.battle-voyage-log__stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  margin: 0 0 8px;
+  text-align: center;
+}
+.battle-voyage-log__stats dt { color: #675235; font-size: 10px; }
+.battle-voyage-log__stats dd { margin: 2px 0 0; font-size: 14px; font-weight: 900; overflow-wrap: anywhere; }
+.battle-voyage-log .battle-build { margin: 0; padding-inline: 0; background: transparent; }
+.battle-voyage-log .battle-build__tracks { grid-template-columns: 1fr; }
+.battle-voyage-log .battle-build__track {
+  grid-template-columns: 24px minmax(55px, .8fr) minmax(27px, .5fr) minmax(0, 1fr);
+  gap: 5px;
+}
+.battle-voyage-log .battle-build__pips,
+.battle-voyage-log .battle-build__track > small { grid-column: auto; margin: 0; }
+.battle-voyage-log .battle-build__track > small { font-size: 10px; }
+.battle-voyage-log .battle-build-inventory { margin: 0; padding-bottom: 0; border-bottom: 0; font-size: 11px; }

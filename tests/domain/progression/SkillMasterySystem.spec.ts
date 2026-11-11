@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   createSkillMasteryXp,
+  getSkillMasteryProgress,
   settleSkillMastery,
   skillMasteryLevelFromXp,
   skillMasteryPowerMultiplier,
@@ -32,6 +33,16 @@ describe('SkillMasterySystem', () => {
       'extreme-tide': 50,
     });
     expect(result.nextXp).toEqual(result.gainedXp);
+  });
+
+  it('reports in-level XP and resets the progress bar exactly at each boundary', () => {
+    expect(getSkillMasteryProgress(-10)).toEqual({ level: 1, levelXp: 0, nextLevelXp: 20 });
+    expect(getSkillMasteryProgress(19)).toEqual({ level: 1, levelXp: 19, nextLevelXp: 20 });
+    expect(getSkillMasteryProgress(20)).toEqual({ level: 2, levelXp: 0, nextLevelXp: 28 });
+    expect(getSkillMasteryProgress(127)).toEqual({ level: 4, levelXp: 43, nextLevelXp: 44 });
+    expect(getSkillMasteryProgress(128)).toEqual({ level: 5, levelXp: 0, nextLevelXp: 52 });
+    expect(getSkillMasteryProgress(1747)).toEqual({ level: 19, levelXp: 163, nextLevelXp: 164 });
+    expect(getSkillMasteryProgress(1748)).toEqual({ level: 20, levelXp: 0, nextLevelXp: null });
   });
 
   it('starts with one evolution and expands the permanent pool at 5, 10 and 15', () => {

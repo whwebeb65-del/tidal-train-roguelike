@@ -241,6 +241,47 @@
   font-size: clamp(20px, 4vw, 27px);
 }
 
+.archive-mastery {
+  margin: 0 4px 18px 12px;
+  padding: 10px 12px 12px;
+  border: 2px solid #947554;
+  border-radius: 5px 8px 4px 6px;
+  background: #f1dfae;
+  scroll-margin-block-start: calc(112px + env(safe-area-inset-top));
+}
+
+.archive-mastery:focus { outline: 2px solid #60427e; outline-offset: 3px; }
+.archive-mastery h3 { margin: 0 0 4px; color: #4c2e65; font-size: 16px; }
+.archive-mastery > p { margin: 0; color: #594a37; font-size: 12px; line-height: 1.5; }
+
+.archive-mastery__rows {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(200px, 100%), 1fr));
+  gap: 8px 12px;
+  margin: 9px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.archive-mastery__row {
+  display: grid;
+  grid-template-columns: 45px minmax(0, 1fr);
+  align-items: start;
+  gap: 8px;
+  padding: 8px 0 0;
+  border-top: 1px dashed #a4855d;
+}
+
+.archive-mastery__row img { width: 45px; height: 45px; object-fit: contain; }
+.archive-mastery__row h4 { margin: 0; color: #392a36; font-size: 13px; }
+.archive-mastery__row h4 span { color: #60427e; font-size: 11px; white-space: nowrap; }
+.archive-mastery__row p { margin: 3px 0 0; font-size: 11px; line-height: 1.45; }
+.archive-mastery__progress-text { color: #514235; }
+.archive-mastery__row progress { display: block; width: 100%; height: 7px; margin-block: 4px; accent-color: #326759; }
+.archive-mastery__pool { color: #27564b; font-weight: 700; }
+.archive-variant-status { display: block; margin-top: 5px; font-weight: 800; line-height: 1.4; }
+.archive-variant-status[data-variant-availability='candidate'] { color: #255c4c; }
+
 .tidal-archive-carriage .archive-card-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(230px, 100%), 1fr));

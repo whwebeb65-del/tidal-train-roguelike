@@ -10,6 +10,7 @@ import {
   BattleScene,
   type BattleEnginePort,
   type BattleSceneCallbacks,
+  type BattleSceneDependencies,
   type FrameScheduler,
 } from '../../../web/scenes/BattleScene';
 import {
@@ -329,7 +330,11 @@ function createHost(bounds: Partial<DOMRect> = {}): {
   };
 }
 
-function createPointerScene(host: HTMLElement, engine: TestEngine): BattleScene {
+function createPointerScene(
+  host: HTMLElement,
+  engine: TestEngine,
+  overrides: Partial<BattleSceneDependencies> = {},
+): BattleScene {
   const scene = new BattleScene({
     ...TEST_BATTLE_SPEED_DEPENDENCIES,
     engine,
@@ -344,12 +349,183 @@ function createPointerScene(host: HTMLElement, engine: TestEngine): BattleScene 
     scheduler: new ManualFrameScheduler(),
     eventTarget: new EventTarget(),
     getDevicePixelRatio: () => 1,
+    ...overrides,
   });
   scene.mount(host);
   return scene;
 }
 
 describe('BattleScene', () => {
+  it('applies every drag target immediately without drawing more than the next animation frame', () => {
+    const engine = createEngine();
+    const setAim = vi.fn<BattleEnginePort['setMainCannonAim']>((aim) => {
+      engine.setFrame({ ...engine.frame, mainCannonAim: aim });
+      return true;
+    });
+    engine.setMainCannonAim = setAim;
+    const update = vi.spyOn(engine, 'update');
+    const render = vi.fn();
+    const updateHud = vi.fn();
+    const scheduler = new ManualFrameScheduler();
+    const { host, dispatchCanvasPointer } = createHost();
+    const scene = createPointerScene(host, engine, {
+      manualStepMode: false,
+      scheduler,
+      createRenderer: () => ({ render }),
+      createHud: () => ({ mount: vi.fn(), update: updateHud, dispose: vi.fn() }),
+    });
+    scheduler.fire(0);
+    render.mockClear();
+    updateHud.mockClear();
+    dispatchCanvasPointer('pointerdown', { pointerId: 7, clientX: 160, clientY: 320 });
+    for (let index = 1; index <= 10; index += 1) {
+      dispatchCanvasPointer('pointermove', { pointerId: 7, clientX: 160 + index, clientY: 320 });
+    }
+
+    expect(setAim).toHaveBeenCalledTimes(11);
+    expect(engine.frame.mainCannonAim).toEqual({ x: 170, y: 320 });
+    expect(update).not.toHaveBeenCalled();
+    expect(render).not.toHaveBeenCalled();
+    expect(updateHud).not.toHaveBeenCalled();
+    expect(scheduler.activeCount).toBe(1);
+
+    scheduler.fire(FIXED_STEP_MS);
+    expect(update).toHaveBeenCalledTimes(1);
+    expect(render).toHaveBeenCalledTimes(1);
+    expect(render).toHaveBeenLastCalledWith(expect.objectContaining({
+      frame: expect.objectContaining({ mainCannonAim: { x: 170, y: 320 } }),
+    }));
+    expect(updateHud).toHaveBeenCalledTimes(1);
+    scene.unmount();
+  });
+
+  it('accepts a fresh pointer after the browser loses the active capture', () => {
+    const engine = createEngine();
+    const setAim = vi.fn(() => true);
+    engine.setMainCannonAim = setAim;
+    const { host, canvas, dispatchCanvasPointer } = createHost();
+    const scene = createPointerScene(host, engine);
+    const pointer = (type: string, pointerId: number) =>
+      dispatchCanvasPointer(type, { pointerId, clientX: 160, clientY: 320 });
+
+    pointer('pointerdown', 7);
+    pointer('lostpointercapture', 8);
+    pointer('pointerdown', 8);
+    expect(setAim).toHaveBeenCalledTimes(1);
+    pointer('lostpointercapture', 7);
+    pointer('pointermove', 7);
+    expect(setAim).toHaveBeenCalledTimes(1);
+    expect(canvas.releasePointerCapture).not.toHaveBeenCalled();
+
+    pointer('pointerdown', 8);
+    expect(setAim).toHaveBeenCalledTimes(2);
+    expect(canvas.setPointerCapture).toHaveBeenLastCalledWith(8);
+    scene.unmount();
+    expect(canvas.releasePointerCapture).toHaveBeenCalledExactlyOnceWith(8);
+    pointer('pointerdown', 9);
+    expect(setAim).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([false, true])('returns to automatic aim and releases the drag (manual step: %s)', (manualStepMode) => {
+    const engine = createEngine();
+    const setAim = vi.fn<BattleEnginePort['setMainCannonAim']>((aim) => {
+      engine.setFrame({ ...engine.frame, mainCannonAim: aim });
+      return true;
+    });
+    engine.setMainCannonAim = setAim;
+    const render = vi.fn();
+    const scheduler = new ManualFrameScheduler();
+    const hudCallbacks: { current?: BattleHudCallbacks } = {};
+    const { host, canvas, dispatchCanvasPointer } = createHost();
+    const scene = createPointerScene(host, engine, {
+      manualStepMode,
+      scheduler,
+      createRenderer: () => ({ render }),
+      createHud: (callbacks) => {
+        hudCallbacks.current = callbacks;
+        return { mount: vi.fn(), update: vi.fn(), dispose: vi.fn() };
+      },
+    });
+    dispatchCanvasPointer('pointerdown', { pointerId: 7, clientX: 160, clientY: 320 });
+    render.mockClear();
+    hudCallbacks.current?.onResetAim?.();
+    expect(setAim).toHaveBeenLastCalledWith(null);
+    expect(engine.frame.mainCannonAim).toBeNull();
+    expect(canvas.releasePointerCapture).toHaveBeenCalledExactlyOnceWith(7);
+    expect(render).toHaveBeenCalledTimes(manualStepMode ? 1 : 0);
+    if (!manualStepMode) scheduler.fire(0);
+    expect(render).toHaveBeenLastCalledWith(expect.objectContaining({
+      frame: expect.objectContaining({ mainCannonAim: null }),
+    }));
+
+    dispatchCanvasPointer('pointermove', { pointerId: 7, clientX: 180, clientY: 340 });
+    expect(setAim).toHaveBeenCalledTimes(2);
+    dispatchCanvasPointer('pointerdown', { pointerId: 8, clientX: 190, clientY: 350 });
+    expect(setAim).toHaveBeenLastCalledWith({ x: 190, y: 350 });
+    scene.unmount();
+  });
+
+  it.each(['manual', 'visibility', 'rewarded-ad', 'upgrade', 'boss-intro', 'e2e-manual'] as const)(
+    'ends an active drag during %s without resetting the last aim',
+    async (transition) => {
+      const engine = createEngine();
+      const setAim = vi.fn<BattleEnginePort['setMainCannonAim']>((aim) => {
+        engine.setFrame({ ...engine.frame, mainCannonAim: aim });
+        return true;
+      });
+      engine.setMainCannonAim = setAim;
+      const hudCallbacks: { current?: BattleHudCallbacks } = {};
+      const refresh = createDeferred<boolean>();
+      const { host, canvas, dispatchCanvasPointer } = createHost();
+      const scene = createPointerScene(host, engine, {
+        manualStepMode: transition !== 'manual',
+        callbacks: { ...createCallbacks(), onRequestSkillRefresh: () => refresh.promise },
+        createHud: (callbacks) => {
+          hudCallbacks.current = callbacks;
+          return { mount: vi.fn(), update: vi.fn(), dispose: vi.fn() };
+        },
+      });
+      dispatchCanvasPointer('pointerdown', { pointerId: 7, clientX: 160, clientY: 320 });
+      const aim = engine.frame.mainCannonAim;
+      const callbacks = hudCallbacks.current;
+      if (!callbacks) throw new Error('HUD callbacks were not created');
+      if (transition === 'manual') callbacks.onPause();
+      else if (transition === 'visibility') scene.pauseForVisibility();
+      else if (transition === 'rewarded-ad') callbacks.onRequestSkillRefresh();
+      else if (transition === 'e2e-manual') scene.requestPauseForE2E();
+      else {
+        engine.setFrame({ ...engine.frame, status: transition });
+        scene.advanceForE2E(0);
+      }
+      expect(canvas.releasePointerCapture).toHaveBeenCalledExactlyOnceWith(7);
+      expect(engine.frame.mainCannonAim).toEqual(aim);
+      callbacks.onResetAim?.();
+      dispatchCanvasPointer('pointerdown', { pointerId: 8, clientX: 190, clientY: 350 });
+      expect(setAim).toHaveBeenCalledTimes(1);
+      expect(canvas.setPointerCapture).toHaveBeenCalledTimes(1);
+
+      if (transition === 'manual') {
+        callbacks.onResume();
+        await flushMicrotasks();
+      } else if (transition === 'visibility') {
+        await scene.resumeForVisibility();
+      } else if (transition === 'rewarded-ad') {
+        refresh.resolve(false);
+        await flushMicrotasks();
+      } else if (transition === 'e2e-manual') {
+        await scene.requestResumeForE2E();
+      } else {
+        engine.setFrame({ ...engine.frame, status: 'running' });
+        scene.advanceForE2E(0);
+      }
+      dispatchCanvasPointer('pointermove', { pointerId: 7, clientX: 180, clientY: 340 });
+      expect(setAim).toHaveBeenCalledTimes(1);
+      dispatchCanvasPointer('pointerdown', { pointerId: 8, clientX: 190, clientY: 350 });
+      expect(setAim).toHaveBeenLastCalledWith({ x: 190, y: 350 });
+      scene.unmount();
+    },
+  );
+
   it('maps an active canvas pointer drag through the letterboxed viewport and keeps its final aim', () => {
     const engine = createEngine();
     engine.setMainCannonAim = vi.fn(() => true);

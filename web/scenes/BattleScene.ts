@@ -277,7 +277,7 @@ export class BattleScene implements GameScene {
   private readonly onCanvasPointerDown = (event: PointerEvent): void => {
     if (
       this.activeAimPointerId !== null
-      || this.dependencies.engine.frame.status !== 'running'
+      || !this.canAim()
     ) {
       event.preventDefault();
       return;
@@ -290,16 +290,23 @@ export class BattleScene implements GameScene {
 
   private readonly onCanvasPointerMove = (event: PointerEvent): void => {
     if (this.activeAimPointerId !== event.pointerId) return;
+    if (!this.canAim()) {
+      this.releaseAimPointer();
+      return;
+    }
     this.updateMainCannonAimFromPointer(event);
     event.preventDefault();
   };
 
   private readonly onCanvasPointerEnd = (event: PointerEvent): void => {
     if (this.activeAimPointerId !== event.pointerId) return;
-    if (this.canvas?.hasPointerCapture?.(event.pointerId)) {
-      this.canvas.releasePointerCapture(event.pointerId);
+    this.releaseAimPointer();
+  };
+
+  private readonly onCanvasPointerCaptureLost = (event: PointerEvent): void => {
+    if (this.activeAimPointerId === event.pointerId) {
+      this.activeAimPointerId = null;
     }
-    this.activeAimPointerId = null;
   };
 
   public constructor(
@@ -383,6 +390,7 @@ export class BattleScene implements GameScene {
     canvas.addEventListener('pointermove', this.onCanvasPointerMove);
     canvas.addEventListener('pointerup', this.onCanvasPointerEnd);
     canvas.addEventListener('pointercancel', this.onCanvasPointerEnd);
+    canvas.addEventListener('lostpointercapture', this.onCanvasPointerCaptureLost);
     const hudHost = requireElement<HTMLElement>(host, '[data-battle-hud]');
     const context = canvas.getContext('2d', {
       alpha: false,
@@ -446,6 +454,7 @@ export class BattleScene implements GameScene {
     if (!this.host || this.visibilityPaused) return;
     this.chargeArchiveDiscoveryClockAtTransition();
     this.visibilityPaused = true;
+    this.releaseAimPointer();
     this.pauseUpgradeChoiceTimer();
     const status = this.dependencies.engine.frame.status;
     if (status === 'running' || status === 'boss-intro') {
@@ -532,7 +541,7 @@ export class BattleScene implements GameScene {
   public requestPauseForE2E(): void {
     if (!this.dependencies.manualStepMode) return;
     this.chargeArchiveDiscoveryClockAtTransition();
-    this.dependencies.engine.pause('manual');
+    this.pauseEngine('manual');
     this.sound.pause();
     this.renderBattle();
   }
@@ -691,6 +700,10 @@ export class BattleScene implements GameScene {
 
   private renderBattle(): void {
     if (!this.host || !this.canvas || !this.renderer || !this.hud) return;
+    // Engine-driven overlays (upgrade, boss intro, defeat) also end the drag.
+    if (this.activeAimPointerId !== null && !this.canAim()) {
+      this.releaseAimPointer();
+    }
     const trainMotion = this.motion.view;
     const defeating = trainMotion.phase === 'defeat';
     this.sound.setTrainMotion({
@@ -763,7 +776,32 @@ export class BattleScene implements GameScene {
     if (reportTutorialStep) {
       this.dependencies.onFirstRunTutorialStep?.('aim');
     }
-    this.renderBattle();
+    this.renderAimChange();
+  }
+
+  private canAim(): boolean {
+    return this.host !== null
+      && !this.visibilityPaused
+      && this.dependencies.engine.frame.status === 'running';
+  }
+
+  private renderAimChange(): void {
+    // The engine has the latest aim already. Normal gameplay paints it on
+    // the next RAF, rather than repainting once per pointer event.
+    if (this.frameLoopPaused) this.renderBattle();
+  }
+
+  private releaseAimPointer(): void {
+    const pointerId = this.activeAimPointerId;
+    this.activeAimPointerId = null;
+    if (pointerId !== null && this.canvas?.hasPointerCapture?.(pointerId)) {
+      this.canvas.releasePointerCapture(pointerId);
+    }
+  }
+
+  private pauseEngine(reason: PauseReason): void {
+    this.dependencies.engine.pause(reason);
+    this.releaseAimPointer();
   }
 
   private isArchiveDiscoveryEligible(
@@ -796,17 +834,12 @@ export class BattleScene implements GameScene {
   private removeCanvasPointerListeners(): void {
     const canvas = this.canvas;
     if (!canvas) return;
-    if (
-      this.activeAimPointerId !== null
-      && canvas.hasPointerCapture?.(this.activeAimPointerId)
-    ) {
-      canvas.releasePointerCapture(this.activeAimPointerId);
-    }
-    this.activeAimPointerId = null;
+    this.releaseAimPointer();
     canvas.removeEventListener('pointerdown', this.onCanvasPointerDown);
     canvas.removeEventListener('pointermove', this.onCanvasPointerMove);
     canvas.removeEventListener('pointerup', this.onCanvasPointerEnd);
     canvas.removeEventListener('pointercancel', this.onCanvasPointerEnd);
+    canvas.removeEventListener('lostpointercapture', this.onCanvasPointerCaptureLost);
   }
 
   private startAnimationLoop(): void {
@@ -978,7 +1011,7 @@ export class BattleScene implements GameScene {
     this.clearUpgradeChoiceTimer();
     this.pendingActions.add('upgrade-choice');
     this.pendingActions.add('upgrade-resume');
-    this.dependencies.engine.pause('upgrade');
+    this.pauseEngine('upgrade');
     this.sound.pause();
     this.upgradeResumePromise = new Promise((resolve) => {
       this.resolveUpgradeResume = resolve;
@@ -1004,6 +1037,11 @@ export class BattleScene implements GameScene {
       onSkill: (skillId) => {
         if (this.dependencies.engine.frame.status !== 'running') return;
         this.dependencies.engine.useSkill(skillId);
+      },
+      onResetAim: () => {
+        if (!this.canAim() || !this.dependencies.engine.setMainCannonAim(null)) return;
+        this.releaseAimPointer();
+        this.renderAimChange();
       },
       onChooseUpgrade: (upgradeId) => {
         this.acceptUpgrade(upgradeId, 'manual');
@@ -1045,7 +1083,7 @@ export class BattleScene implements GameScene {
       onRequestSkillRefresh: () => {
         void this.runPending('skill-refresh', async () => {
           if (this.dependencies.engine.frame.status !== 'running') return;
-          this.dependencies.engine.pause('rewarded-ad');
+          this.pauseEngine('rewarded-ad');
           this.sound.pause();
           let accepted = false;
           try {
@@ -1063,7 +1101,7 @@ export class BattleScene implements GameScene {
       onPause: () => {
         if (this.dependencies.engine.frame.status !== 'running') return;
         this.chargeArchiveDiscoveryClockAtTransition();
-        this.dependencies.engine.pause('manual');
+        this.pauseEngine('manual');
         this.sound.pause();
         this.stopAnimationLoop();
         this.renderBattle();

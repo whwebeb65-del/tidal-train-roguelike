@@ -1,4 +1,5 @@
 import {
+  BATTLE_HARD_CAP_MS,
   createBaseModifiers,
   DEFENCE_LINE_Y,
   ENEMY_CONFIG,
@@ -513,7 +514,7 @@ export class BattleEngine {
 
       this.elapsedMs += stepMs;
       this.phaseElapsedMs += stepMs;
-      if (this.elapsedMs >= 480_000) {
+      if (this.elapsedMs >= BATTLE_HARD_CAP_MS) {
         this.finish(false, true);
         return;
       }

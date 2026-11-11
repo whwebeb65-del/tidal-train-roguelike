@@ -2,6 +2,8 @@ export type DailyTrialRuleId = 'armored-current' | 'glass-express' | 'rescue-win
 export type DailyTrialMilestoneId = 'participation' | 'mastery';
 export type DailyTrialOutcome = 'victory' | 'extract' | 'defeat';
 
+export const DAILY_TRIAL_MIN_STATION_LEVEL = 2;
+
 export interface DailyTrialReward {
   readonly gears: number;
   readonly routeMarks: number;

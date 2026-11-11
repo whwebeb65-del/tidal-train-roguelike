@@ -7,9 +7,11 @@ import type { SkillMasteryXp } from '../../src/domain/progression/SkillMasterySy
 import {
   TIDAL_ARCHIVE_ENEMIES,
   buildTidalArchiveEquipmentCards,
+  buildTidalArchiveMasteryRows,
   buildTidalArchiveVariantCards,
   type TidalArchiveEnemyCard,
   type TidalArchiveEquipmentCard,
+  type TidalArchiveMasteryRow,
   type TidalArchiveVariantCard,
 } from './TidalArchiveCatalog';
 
@@ -20,6 +22,7 @@ export interface TidalArchiveViewModel {
   readonly enemies: readonly (TidalArchiveEnemyCard & { readonly isNew: boolean })[];
   readonly variants: readonly (TidalArchiveVariantCard & { readonly isNew: boolean })[];
   readonly equipment: readonly TidalArchiveEquipmentCard[];
+  readonly mastery: readonly TidalArchiveMasteryRow[];
 }
 
 export interface TidalArchiveViewModelInput {
@@ -70,6 +73,7 @@ export function buildTidalArchiveViewModel(
     enemies,
     variants,
     equipment,
+    mastery: buildTidalArchiveMasteryRows(input.skillMasteryXp),
   };
 }
 
@@ -93,10 +97,42 @@ function renderEnemyCard(
 function renderVariantCard(
   entry: TidalArchiveVariantCard & { readonly isNew: boolean },
 ): string {
+  const availability = entry.discovered ? 'discovered' : entry.inCandidatePool ? 'candidate' : 'locked';
+  const status = entry.discovered
+    ? '已发现'
+    : entry.inCandidatePool
+      ? `已入候选池 · 局内潮阶 ${entry.requiredRank} 后可能出现`
+      : `未入候选池 · 精通 Lv.${entry.requiredMasteryLevel} 解锁`;
   return `<article class="archive-card archive-card--variant ${entry.discovered ? 'is-discovered' : 'is-locked'}${entry.isNew ? ' is-new' : ''}" data-archive-variant="${entry.id}">
     ${archiveImage(entry.artUrl, entry.name, entry.discovered)}
-    <div class="archive-card__copy">${entry.isNew ? '<span class="archive-new-stamp" aria-label="新档案">NEW</span>' : ''}<small>${entry.skillName} · 精通 Lv.${entry.requiredMasteryLevel}</small><h3>${entry.name}</h3><p>${entry.effect}</p><p>${entry.synergy}</p><p class="archive-card__source">来源：${entry.source}</p></div>
+    <div class="archive-card__copy">${entry.isNew ? '<span class="archive-new-stamp" aria-label="新档案">NEW</span>' : ''}<small>${entry.skillName} · 精通 Lv.${entry.requiredMasteryLevel}</small><h3>${entry.name}</h3><p>${entry.effect}</p><p>${entry.synergy}</p><p class="archive-card__source">来源：${entry.source}</p><small class="archive-variant-status" data-variant-availability="${availability}">${status}</small></div>
   </article>`;
+}
+
+function renderMasteryRow(row: TidalArchiveMasteryRow): string {
+  const progress = row.nextLevelXp === null
+    ? '<p class="archive-mastery__progress-text">精通已满级</p>'
+    : `<p class="archive-mastery__progress-text">下一级：${row.levelXp} / ${row.nextLevelXp} XP</p>
+      <progress value="${row.levelXp}" max="${row.nextLevelXp}" aria-label="${row.name}下一精通等级进度"></progress>`;
+  const next = row.nextVariant === null
+    ? '全部进化已入候选池'
+    : `Lv.${row.nextVariant.level} 可解锁「${row.nextVariant.name}」`;
+  return `<li class="archive-mastery__row" data-mastery-skill="${row.id}">
+    <img src="${row.artUrl}" alt="" width="45" height="45" loading="lazy" />
+    <div>
+      <h4>${row.name} <span>Lv.${row.level}</span></h4>
+      ${progress}
+      <p class="archive-mastery__pool">候选池 ${row.poolCount} / ${row.variantCount} · ${next}</p>
+    </div>
+  </li>`;
+}
+
+function renderMastery(rows: readonly TidalArchiveMasteryRow[]): string {
+  return `<section class="archive-mastery" data-archive-mastery tabindex="-1" aria-labelledby="archive-mastery-title">
+    <h3 id="archive-mastery-title">技能精通进度</h3>
+    <p>普通航线中施放技能，结算后积累该技能的精通 XP。达到门槛会扩充候选池；局内达到所需潮阶并实际选中进化，才会记入档案。</p>
+    <ul class="archive-mastery__rows">${rows.map(renderMasteryRow).join('')}</ul>
+  </section>`;
 }
 
 function renderEquipmentCard(entry: TidalArchiveEquipmentCard): string {
@@ -124,6 +160,7 @@ export function renderTidalArchive(model: TidalArchiveViewModel): string {
     </section>
     <section class="archive-ledger archive-ledger--variants">
       <header><span>LEDGER II</span><h2>技能进化标本册</h2></header>
+      ${renderMastery(model.mastery)}
       <div class="archive-card-grid">${model.variants.map(renderVariantCard).join('')}</div>
     </section>
     <section class="archive-ledger archive-ledger--equipment">

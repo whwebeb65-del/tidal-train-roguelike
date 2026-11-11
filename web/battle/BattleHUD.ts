@@ -33,6 +33,7 @@ export interface BattleHudCallbacks {
   onReturnStation(): void;
   onSkipTutorial?(): void;
   onBattleSpeed?(speed: BattleSpeed): void;
+  onResetAim?(): void;
 }
 
 interface TutorialPanelNodes {
@@ -40,6 +41,41 @@ interface TutorialPanelNodes {
   readonly progress: HTMLElement;
   readonly title: HTMLElement;
   readonly body: HTMLElement;
+}
+
+interface SkillButtonNodes {
+  readonly button: HTMLButtonElement;
+  readonly rank: HTMLElement;
+  readonly icon: HTMLImageElement;
+  readonly glyphs: readonly HTMLImageElement[];
+  readonly cooldown: HTMLElement;
+  readonly charge: HTMLElement;
+  readonly status: HTMLElement;
+}
+
+interface UpgradeCardNodes {
+  readonly button: HTMLButtonElement;
+  readonly family: HTMLElement;
+  readonly kind: HTMLElement;
+  readonly name: HTMLElement;
+  readonly level: HTMLElement;
+  readonly icon: HTMLImageElement;
+  readonly sigil: HTMLElement;
+  readonly effect: HTMLElement;
+  readonly synergy: HTMLElement;
+}
+
+interface BuildTrackNodes {
+  readonly root: HTMLElement;
+  readonly rank: HTMLElement;
+  readonly variants: HTMLElement;
+  readonly pips: readonly HTMLElement[];
+}
+
+interface BuildOverviewNodes {
+  readonly placement: string | undefined;
+  readonly summary: HTMLElement;
+  readonly tracks: ReadonlyMap<BattleSkillId, BuildTrackNodes>;
 }
 
 interface HudNodes {
@@ -54,8 +90,11 @@ interface HudNodes {
   readonly combo: HTMLElement;
   readonly experienceLabel: HTMLElement;
   readonly experienceFill: HTMLElement;
-  readonly skillButtons: ReadonlyMap<BattleSkillId, HTMLButtonElement>;
+  readonly skillButtons: ReadonlyMap<BattleSkillId, SkillButtonNodes>;
   readonly speedButton: HTMLButtonElement;
+  readonly speedValue: HTMLElement;
+  readonly speedUnlock: HTMLElement;
+  readonly resetAimButton: HTMLButtonElement;
   readonly tutorialPanels: readonly TutorialPanelNodes[];
   readonly archiveDiscovery: HTMLElement;
   readonly archiveDiscoveryArt: HTMLImageElement;
@@ -66,9 +105,9 @@ interface HudNodes {
   readonly upgradeOptions: HTMLElement;
   readonly evolutionRibbon: HTMLElement;
   readonly evolutionCrest: HTMLElement;
-  readonly upgradeButtons: readonly HTMLButtonElement[];
+  readonly upgradeCards: readonly UpgradeCardNodes[];
   readonly upgradeCountdown: HTMLElement;
-  readonly buildOverviews: readonly HTMLElement[];
+  readonly buildOverviews: readonly BuildOverviewNodes[];
   readonly acquiredBuild: HTMLElement;
   readonly rerollButton: HTMLButtonElement;
   readonly skillRefreshButton: HTMLButtonElement;
@@ -91,6 +130,12 @@ interface HudNodes {
   readonly settlementAccount: HTMLElement;
   readonly settlementMastery: HTMLElement;
   readonly settlementArchive: HTMLElement;
+  readonly voyageLog: HTMLDetailsElement;
+  readonly voyageSummary: HTMLElement;
+  readonly voyageTime: HTMLElement;
+  readonly voyageWave: HTMLElement;
+  readonly voyageHp: HTMLElement;
+  readonly voyageInventory: HTMLElement;
   readonly expedition: HTMLElement;
   readonly dailyScore: HTMLElement;
   readonly firstClearTicket: HTMLElement;
@@ -129,7 +174,7 @@ export function renderBattleHudShell(): string {
         <div><span>经验轨道</span><b data-hud-experience-label>0 / 180</b></div>
         <div class="battle-meter battle-meter--experience"><i data-hud-experience-fill></i></div>
       </div>
-      <button class="battle-hud__speed" type="button" data-battle-action="speed" aria-label="战斗速度 1×">1×</button>
+      <button class="battle-hud__speed" type="button" data-battle-action="speed" aria-label="战斗速度 1×"><span data-speed-value>1×</span><small data-speed-unlock hidden></small></button>
       <button class="battle-hud__pause" type="button" data-battle-action="pause" aria-label="暂停战斗">暂停</button>
     </header>
 
@@ -155,6 +200,7 @@ export function renderBattleHudShell(): string {
       ${skillButton('tidal-volley', '潮汐齐射', '1', BATTLE_ART_URLS.skillTidalVolley)}
       ${skillButton('bubble-barrier', '泡泡屏障', '2', BATTLE_ART_URLS.skillBubbleBarrier)}
       ${skillButton('extreme-tide', '极潮爆发', '3', BATTLE_ART_URLS.skillExtremeTide)}
+      <button class="battle-hud__auto-aim" type="button" data-battle-action="reset-aim" aria-label="恢复自动瞄准" aria-keyshortcuts="R" title="恢复自动瞄准（R）" hidden>恢复<br />自动</button>
       <button class="battle-hud__refresh" type="button" data-battle-action="skill-refresh" aria-label="观看激励广告，重整技能冷却" hidden>补给短片 · 重整技能</button>
     </div>
 
@@ -225,6 +271,18 @@ export function renderBattleHudShell(): string {
           <p data-settlement-account hidden></p>
           <p data-settlement-mastery hidden></p>
         </div>
+        <details class="battle-voyage-log" data-voyage-log hidden>
+          <summary><b>航行日志</b><span data-voyage-summary></span></summary>
+          <div class="battle-voyage-log__page">
+            <dl class="battle-voyage-log__stats">
+              <div><dt>航行用时</dt><dd data-voyage-time></dd></div>
+              <div><dt>抵达波次</dt><dd data-voyage-wave></dd></div>
+              <div><dt>剩余耐久</dt><dd data-voyage-hp></dd></div>
+            </dl>
+            ${buildOverview('settlement')}
+            <p class="battle-build-inventory" data-voyage-inventory></p>
+          </div>
+        </details>
         <section class="settlement-archive-luggage" data-settlement-archive hidden></section>
         <div class="battle-settlement-meta">
           <span data-settlement-expedition hidden></span>
@@ -278,6 +336,7 @@ export class BattleHUD {
       return;
     }
     if (action === 'pause') this.callbacks.onPause();
+    if (action === 'reset-aim' && !button.hidden) this.callbacks.onResetAim?.();
     if (action === 'resume') this.callbacks.onResume();
     if (action === 'upgrade-reroll') {
       this.callbacks.onRequestUpgradeReroll();
@@ -321,10 +380,18 @@ export class BattleHUD {
     const skillIndex = ['1', '2', '3'].indexOf(event.key);
     if (skillIndex >= 0 && this.model.status === 'running') {
       const skillId = SKILL_IDS[skillIndex];
-      const button = skillId && this.nodes?.skillButtons.get(skillId);
+      const button = skillId && this.nodes?.skillButtons.get(skillId)?.button;
       if (skillId && button && !button.disabled) {
         event.preventDefault();
         this.callbacks.onSkill(skillId);
+      }
+      return;
+    }
+    if (event.key.toLowerCase() === 'r' && !event.ctrlKey && !event.metaKey && !event.altKey) {
+      const button = this.nodes?.resetAimButton;
+      if (button && !button.hidden) {
+        event.preventDefault();
+        this.callbacks.onResetAim?.();
       }
       return;
     }
@@ -357,6 +424,7 @@ export class BattleHUD {
     const nodes = this.nodes;
     if (!nodes) throw new Error('Battle HUD must be mounted before update');
     this.model = model;
+    nodes.resetAimButton.toggleAttribute('hidden', !model.resetAimVisible || !this.callbacks.onResetAim);
 
     setText(nodes.wave, model.waveLabel);
     setText(nodes.timer, model.timerLabel);
@@ -371,15 +439,11 @@ export class BattleHUD {
     setWidth(nodes.experienceFill, model.experiencePercent);
 
     const archiveDiscovery = model.archiveDiscovery;
-    nodes.archiveDiscovery.hidden = archiveDiscovery === null;
+    nodes.archiveDiscovery.toggleAttribute('hidden', archiveDiscovery === null);
     if (archiveDiscovery) {
-      nodes.archiveDiscovery.dataset.archiveDiscoveryKind =
-        archiveDiscovery.entryType;
-      nodes.archiveDiscovery.dataset.archiveDiscoveryKey =
-        archiveDiscovery.key;
-      if (nodes.archiveDiscoveryArt.getAttribute('src') !== archiveDiscovery.artUrl) {
-        nodes.archiveDiscoveryArt.src = archiveDiscovery.artUrl;
-      }
+      setAttribute(nodes.archiveDiscovery, 'data-archive-discovery-kind', archiveDiscovery.entryType);
+      setAttribute(nodes.archiveDiscovery, 'data-archive-discovery-key', archiveDiscovery.key);
+      setAttribute(nodes.archiveDiscoveryArt, 'src', archiveDiscovery.artUrl);
       setText(
         nodes.archiveDiscoveryType,
         archiveDiscovery.entryType === 'enemy'
@@ -388,20 +452,20 @@ export class BattleHUD {
       );
       setText(nodes.archiveDiscoveryName, archiveDiscovery.name);
     } else {
-      delete nodes.archiveDiscovery.dataset.archiveDiscoveryKind;
-      delete nodes.archiveDiscovery.dataset.archiveDiscoveryKey;
+      setAttribute(nodes.archiveDiscovery, 'data-archive-discovery-kind', null);
+      setAttribute(nodes.archiveDiscovery, 'data-archive-discovery-key', null);
     }
 
     for (const panel of nodes.tutorialPanels) {
       const prompt = model.firstRunTutorialPrompt;
       const visible = prompt !== null
         && prompt.placement === panel.root.dataset.battleTutorial;
-      panel.root.hidden = !visible;
+      panel.root.toggleAttribute('hidden', !visible);
       if (!visible || !prompt) {
-        delete panel.root.dataset.step;
+        setAttribute(panel.root, 'data-step', null);
         continue;
       }
-      panel.root.dataset.step = prompt.stepId;
+      setAttribute(panel.root, 'data-step', prompt.stepId);
       setText(
         panel.progress,
         `首次值班 ${prompt.stepNumber} / ${prompt.totalSteps}`,
@@ -410,87 +474,84 @@ export class BattleHUD {
       setText(panel.body, prompt.body);
     }
 
-    setText(nodes.speedButton, formatBattleSpeed(model.speed.current));
-    nodes.speedButton.setAttribute(
+    const speedLabel = formatBattleSpeed(model.speed.current);
+    const unlockLevel = model.speed.nextUnlockLevel;
+    const showUnlock = model.speed.available.length <= 1 && unlockLevel !== null;
+    setText(nodes.speedValue, speedLabel);
+    setText(nodes.speedUnlock, showUnlock ? `Lv.${unlockLevel}` : '');
+    nodes.speedUnlock.toggleAttribute('hidden', !showUnlock);
+    setAttribute(
+      nodes.speedButton,
       'aria-label',
-      `战斗速度 ${formatBattleSpeed(model.speed.current)}${model.speed.nextUnlockLevel === null ? '' : `，下一级解锁 Lv.${model.speed.nextUnlockLevel}`}`,
+      `战斗速度 ${speedLabel}${unlockLevel === null ? '' : `，账号 Lv.${unlockLevel} 解锁下一档倍速`}`,
     );
     const speedEnabled = this.callbacks.onBattleSpeed !== undefined
-      && model.speed.available.length > 0;
-    nodes.speedButton.disabled = !speedEnabled;
-    nodes.speedButton.setAttribute('aria-disabled', String(!speedEnabled));
+      && model.speed.available.length > 1;
+    nodes.speedButton.toggleAttribute('disabled', !speedEnabled);
+    setAttribute(nodes.speedButton, 'aria-disabled', String(!speedEnabled));
 
     for (const skill of model.skills) {
-      const button = nodes.skillButtons.get(skill.id);
-      if (!button) continue;
-      button.dataset.rank = String(skill.rank);
-      button.style.setProperty('--cooldown', `${100 - skill.rechargePercent}%`);
-      setText(requireElement(button, '[data-skill-rank]'), `潮阶 ${skill.rank}`);
-      const icon = requireElement<HTMLImageElement>(button, '[data-skill-icon]');
-      if (icon.src !== skill.iconUrl) icon.src = skill.iconUrl;
-      const glyphs = [...button.querySelectorAll<HTMLImageElement>('[data-skill-variant]')];
-      glyphs.forEach((glyph, index) => {
+      const control = nodes.skillButtons.get(skill.id);
+      if (!control) continue;
+      const { button } = control;
+      setAttribute(button, 'data-rank', String(skill.rank));
+      setStyle(button, '--cooldown', `${100 - skill.rechargePercent}%`);
+      setText(control.rank, `潮阶 ${skill.rank}`);
+      setAttribute(control.icon, 'src', skill.iconUrl);
+      control.glyphs.forEach((glyph, index) => {
         const variantId = skill.variantIds[index];
-        glyph.hidden = !variantId;
-        if (!variantId) {
-          delete glyph.dataset.skillVariantId;
-          glyph.removeAttribute('src');
-          glyph.removeAttribute('alt');
-          return;
-        }
-        const glyphUrl = BATTLE_VARIANT_GLYPH_URLS[variantId];
-        glyph.dataset.skillVariantId = variantId;
-        if (glyph.src !== glyphUrl) glyph.src = glyphUrl;
-        glyph.alt = getBattleUpgradeCopy(variantId).name;
+        glyph.toggleAttribute('hidden', !variantId);
+        setAttribute(glyph, 'data-skill-variant-id', variantId ?? null);
+        setAttribute(glyph, 'src', variantId ? BATTLE_VARIANT_GLYPH_URLS[variantId] : null);
+        setAttribute(glyph, 'alt', variantId ? getBattleUpgradeCopy(variantId).name : null);
       });
       setText(
-        requireElement(button, '[data-skill-cooldown]'),
+        control.cooldown,
         skill.ready ? '点击释放' : skill.energyRequired ? '命中蓄能' : '冷却回复',
       );
-      setText(requireElement(button, '[data-skill-charge]'), skill.cooldownLabel);
+      setText(control.charge, skill.cooldownLabel);
       button.classList.toggle('is-ready', skill.ready);
       button.classList.toggle('is-charging', !skill.ready);
-      button.disabled = (
+      button.toggleAttribute(
+        'disabled',
         model.status !== 'running'
         || !skill.ready
-        || model.pendingActions.has(`skill:${skill.id}`)
+        || model.pendingActions.has(`skill:${skill.id}`),
       );
       const variantStatus = skill.variantIds.length > 0
         ? `，进化 ${skill.variantIds.map((id) => getBattleUpgradeCopy(id).name).join('、')}`
         : '';
       const status = `${skill.name}，潮阶 ${skill.rank}${variantStatus}，${skill.cooldownLabel}`;
-      setText(requireElement(button, '[data-skill-status]'), status);
-      button.setAttribute('aria-label', status);
+      setText(control.status, status);
+      setAttribute(button, 'aria-label', status);
     }
 
-    nodes.skillRefreshButton.hidden = !model.skillRefreshVisible;
-    nodes.skillRefreshButton.disabled =
-      model.pendingActions.has('skill-refresh');
-    nodes.upgradeOverlay.hidden = !model.upgradeVisible;
-    nodes.upgradeOptions.hidden = model.upgradeCountdownVisible;
-    const evolutionVisible = model.upgradeVisible
-      && !model.upgradeCountdownVisible
-      && model.upgradeCards.some((card) => card.isEvolution);
+    nodes.skillRefreshButton.toggleAttribute('hidden', !model.skillRefreshVisible);
+    nodes.skillRefreshButton.toggleAttribute('disabled', model.pendingActions.has('skill-refresh'));
+    nodes.upgradeOverlay.toggleAttribute('hidden', !model.upgradeVisible);
+    nodes.upgradeOptions.toggleAttribute('hidden', model.upgradeCountdownVisible);
+    const hasEvolution = model.upgradeCards.some((card) => card.isEvolution);
+    const evolutionVisible = model.upgradeVisible && !model.upgradeCountdownVisible && hasEvolution;
     nodes.upgradeDialog.classList.toggle(
       'battle-dialog--evolution',
       evolutionVisible,
     );
-    nodes.evolutionCrest.hidden = !evolutionVisible;
-    nodes.evolutionRibbon.hidden = !model.upgradeCards.some(
-      (card) => card.isEvolution,
-    ) || model.upgradeCountdownVisible;
-    nodes.upgradeCountdown.hidden = !model.upgradeCountdownVisible;
+    nodes.evolutionCrest.toggleAttribute('hidden', !evolutionVisible);
+    nodes.evolutionRibbon.toggleAttribute('hidden', !hasEvolution || model.upgradeCountdownVisible);
+    nodes.upgradeCountdown.toggleAttribute('hidden', !model.upgradeCountdownVisible);
     for (const overview of nodes.buildOverviews) {
-      if (overview.dataset.buildOverview === 'pause' && !model.pauseOverlayVisible) continue;
-      if (overview.dataset.buildOverview === 'upgrade' && !model.upgradeVisible) continue;
-      setText(requireElement(overview, '[data-build-summary]'), `${model.runLevelLabel} · ${model.buildSummary}`);
+      if (overview.placement === 'pause' && !model.pauseOverlayVisible) continue;
+      if (overview.placement === 'upgrade' && !model.upgradeVisible) continue;
+      if (overview.placement === 'settlement' && !model.voyageReport) continue;
+      setText(overview.summary, `${model.runLevelLabel} · ${model.buildSummary}`);
       for (const skill of model.skills) {
-        const track = requireElement(overview, `[data-build-skill="${skill.id}"]`);
-        setText(requireElement(track, '[data-build-rank]'), `潮阶 ${skill.rank}`);
+        const track = overview.tracks.get(skill.id);
+        if (!track) continue;
+        setText(track.rank, `潮阶 ${skill.rank}`);
         const variants = skill.variantIds.map((id) => getBattleUpgradeCopy(id).name);
-        setText(requireElement(track, '[data-build-variants]'), variants.length ? variants.join(' / ') : '尚未进化');
-        track.setAttribute('aria-label', `${skill.name}，潮阶 ${skill.rank}，${variants.length ? variants.join('、') : '尚未进化'}`);
-        track.querySelectorAll<HTMLElement>('[data-build-pip]').forEach((pip, index) => {
+        setText(track.variants, variants.length ? variants.join(' / ') : '尚未进化');
+        setAttribute(track.root, 'aria-label', `${skill.name}，潮阶 ${skill.rank}，${variants.length ? variants.join('、') : '尚未进化'}`);
+        track.pips.forEach((pip, index) => {
           pip.classList.toggle('is-filled', index < skill.rank);
         });
       }
@@ -499,89 +560,72 @@ export class BattleHUD {
       setText(nodes.acquiredBuild, model.acquiredUpgrades.length
         ? model.acquiredUpgrades.join(' / ') : '还没装上强化，下一次升级就能选择。');
     }
-    nodes.upgradeButtons.forEach((button, index) => {
-      button.style.setProperty('--reward-index', String(index));
+    nodes.upgradeCards.forEach((control, index) => {
+      const { button } = control;
       const card = model.upgradeCards[index];
-      button.hidden = !card;
+      button.toggleAttribute('hidden', !card);
       if (!card) {
-        delete button.dataset.upgradeId;
-        delete button.dataset.upgradeKind;
-        delete button.dataset.upgradeSkill;
-        button.classList.remove('is-evolution');
+        setAttribute(button, 'data-upgrade-id', null);
+        setAttribute(button, 'data-upgrade-kind', null);
+        setAttribute(button, 'data-upgrade-skill', null);
+        button.classList.toggle('is-evolution', false);
         return;
       }
-      button.dataset.upgradeId = card.id;
-      button.dataset.upgradeKind = card.kind;
-      button.dataset.buildFamily = card.family;
+      setAttribute(button, 'data-upgrade-id', card.id);
+      setAttribute(button, 'data-upgrade-kind', card.kind);
+      setAttribute(button, 'data-build-family', card.family);
       button.classList.toggle('has-build-connection', card.connection !== null);
-      setText(requireElement(button, '[data-upgrade-family]'), `${card.familyLabel}${card.connection ? ' · 连携' : ''}`);
-      if (card.skillId) {
-        button.dataset.upgradeSkill = card.skillId;
-      } else {
-        delete button.dataset.upgradeSkill;
-      }
-      button.disabled = model.pendingActions.has('upgrade-choice');
+      setText(control.family, `${card.familyLabel}${card.connection ? ' · 连携' : ''}`);
+      setAttribute(button, 'data-upgrade-skill', card.skillId);
+      button.toggleAttribute('disabled', model.pendingActions.has('upgrade-choice'));
       button.classList.toggle('is-evolution', card.isEvolution);
-      setText(
-        requireElement(button, '[data-upgrade-kind]'),
-        card.kindLabel,
-      );
-      setText(requireElement(button, '[data-upgrade-name]'), card.name);
-      setText(
-        requireElement(button, '[data-upgrade-level]'),
-        card.levelLabel,
-      );
-      const icon = requireElement<HTMLImageElement>(
-        button,
-        '[data-upgrade-icon]',
-      );
-      const sigil = requireElement<HTMLElement>(
-        button,
-        '[data-upgrade-sigil]',
-      );
-      icon.hidden = card.iconUrl === null;
-      sigil.hidden = card.iconUrl !== null;
-      if (card.iconUrl) {
-        icon.src = card.iconUrl;
-      } else {
-        icon.removeAttribute('src');
-      }
-      setText(sigil, card.sigil);
-      setText(requireElement(button, '[data-upgrade-effect]'), card.effect);
-      setText(
-        requireElement(button, '[data-upgrade-synergy]'),
-        card.connection ?? card.synergy,
-      );
+      setText(control.kind, card.kindLabel);
+      setText(control.name, card.name);
+      setText(control.level, card.levelLabel);
+      control.icon.toggleAttribute('hidden', card.iconUrl === null);
+      control.sigil.toggleAttribute('hidden', card.iconUrl !== null);
+      setAttribute(control.icon, 'src', card.iconUrl);
+      setText(control.sigil, card.sigil);
+      setText(control.effect, card.effect);
+      setText(control.synergy, card.connection ?? card.synergy);
     });
-    nodes.rerollButton.hidden = !model.upgradeRerollVisible;
-    nodes.rerollButton.disabled = model.pendingActions.has('upgrade-reroll');
+    nodes.rerollButton.toggleAttribute('hidden', !model.upgradeRerollVisible);
+    nodes.rerollButton.toggleAttribute('disabled', model.pendingActions.has('upgrade-reroll'));
 
-    nodes.interactionCard.hidden = model.interaction === null;
+    nodes.interactionCard.toggleAttribute('hidden', model.interaction === null);
     if (model.interaction) {
-      nodes.interactionCard.dataset.interactionId =
-        model.interaction.actionId;
-      nodes.interactionCard.dataset.interactionAttempt =
-        String(model.interaction.attempt);
-      nodes.interactionCard.disabled =
-        model.pendingActions.has('interaction');
+      setAttribute(nodes.interactionCard, 'data-interaction-id', model.interaction.actionId);
+      setAttribute(nodes.interactionCard, 'data-interaction-attempt', String(model.interaction.attempt));
+      nodes.interactionCard.toggleAttribute('disabled', model.pendingActions.has('interaction'));
       setText(nodes.interactionTitle, model.interaction.label);
       setText(
         nodes.interactionMeta,
         `本局 ${model.interaction.attempt}/${model.interaction.maxClaims} · +${model.interaction.amount} ${model.interaction.currencyLabel}`,
       );
     } else {
-      delete nodes.interactionCard.dataset.interactionId;
-      delete nodes.interactionCard.dataset.interactionAttempt;
+      setAttribute(nodes.interactionCard, 'data-interaction-id', null);
+      setAttribute(nodes.interactionCard, 'data-interaction-attempt', null);
     }
     setText(nodes.interactionNotice, model.interactionNotice);
 
-    nodes.pauseOverlay.hidden = !model.pauseOverlayVisible;
-    nodes.failureOverlay.hidden = !model.failureVisible;
+    nodes.pauseOverlay.toggleAttribute('hidden', !model.pauseOverlayVisible);
+    nodes.failureOverlay.toggleAttribute('hidden', !model.failureVisible);
     setText(nodes.failureSummary, model.failureSummary);
-    nodes.reviveButton.hidden = !model.reviveAvailable;
-    nodes.reviveButton.disabled = model.pendingActions.has('revive');
+    nodes.reviveButton.toggleAttribute('hidden', !model.reviveAvailable);
+    nodes.reviveButton.toggleAttribute('disabled', model.pendingActions.has('revive'));
 
-    nodes.settlementOverlay.hidden = !model.settlementVisible;
+    nodes.settlementOverlay.toggleAttribute('hidden', !model.settlementVisible);
+    nodes.voyageLog.toggleAttribute('hidden', model.voyageReport === null);
+    if (model.voyageReport) {
+      setText(nodes.voyageSummary, `${model.runLevelLabel} · 击破 ${model.voyageReport.kills}`);
+      setText(nodes.voyageTime, model.timerLabel);
+      setText(nodes.voyageWave, String(model.voyageReport.wave));
+      setText(nodes.voyageHp, model.hpLabel);
+      setText(nodes.voyageInventory, model.acquiredUpgrades.length
+        ? model.acquiredUpgrades.join(' / ') : '本局未装配强化。');
+    } else if (nodes.voyageLog.open) {
+      nodes.voyageLog.open = false;
+    }
     const trialSettlement = model.settlement !== null
       && model.settlement.dailyTrialScore !== null;
     const firstClearSettlement = !trialSettlement
@@ -610,9 +654,9 @@ export class BattleHUD {
         && !trialSettlement
         && model.settlement.firstClear == null,
     );
-    nodes.firstClearTicket.hidden = !firstClearSettlement;
-    nodes.repeatClearTicket.hidden = !repeatClearSettlement;
-    nodes.settlementRewards.hidden = trialSettlement;
+    nodes.firstClearTicket.toggleAttribute('hidden', !firstClearSettlement);
+    nodes.repeatClearTicket.toggleAttribute('hidden', !repeatClearSettlement);
+    nodes.settlementRewards.toggleAttribute('hidden', trialSettlement);
     const settlementArchiveDiscoveries =
       model.settlement?.archiveDiscoveries ?? null;
     if (
@@ -650,7 +694,7 @@ export class BattleHUD {
         String(model.settlement.rewards.starTickets),
       );
       const account = model.settlement.accountProgression;
-      nodes.settlementAccount.hidden = !account || account.gainedXp <= 0;
+      nodes.settlementAccount.toggleAttribute('hidden', !account || account.gainedXp <= 0);
       setText(
         nodes.settlementAccount,
         !account || account.gainedXp <= 0
@@ -661,16 +705,18 @@ export class BattleHUD {
         .filter(([, result]) => result.gainedXp > 0)
         .map(([skillId, result]) => `${skillLabel(skillId)} 熟练度 +${result.gainedXp} · Lv.${result.level}`)
         .join('；');
-      nodes.settlementMastery.hidden = mastery.length === 0;
+      nodes.settlementMastery.toggleAttribute('hidden', mastery.length === 0);
       setText(nodes.settlementMastery, mastery);
-      nodes.settlementProgression.hidden =
-        nodes.settlementAccount.hidden && nodes.settlementMastery.hidden;
-      nodes.expedition.hidden = model.settlement.expeditionPoints <= 0;
+      nodes.settlementProgression.toggleAttribute(
+        'hidden',
+        nodes.settlementAccount.hidden && nodes.settlementMastery.hidden,
+      );
+      nodes.expedition.toggleAttribute('hidden', model.settlement.expeditionPoints <= 0);
       setText(
         nodes.expedition,
         `军团远征贡献 +${model.settlement.expeditionPoints}`,
       );
-      nodes.dailyScore.hidden = model.settlement.dailyTrialScore === null;
+      nodes.dailyScore.toggleAttribute('hidden', model.settlement.dailyTrialScore === null);
       setText(
         nodes.dailyScore,
         model.settlement.dailyTrialScore === null
@@ -678,10 +724,9 @@ export class BattleHUD {
           : `本局得分 ${model.settlement.dailyTrialScore}`,
       );
     }
-    nodes.doubleButton.hidden = !model.doubleSettlementVisible;
-    nodes.doubleButton.disabled =
-      model.pendingActions.has('double-settlement');
-    nodes.returnButton.disabled = this.exitRequested;
+    nodes.doubleButton.toggleAttribute('hidden', !model.doubleSettlementVisible);
+    nodes.doubleButton.toggleAttribute('disabled', model.pendingActions.has('double-settlement'));
+    nodes.returnButton.toggleAttribute('disabled', this.exitRequested);
   }
 
   public dispose(): void {
@@ -723,7 +768,7 @@ function tutorialTicket(placement: 'battle' | 'upgrade'): string {
 }
 
 function upgradeSlot(index: number): string {
-  return `<button class="battle-upgrade-card reward-crate" type="button" data-upgrade-slot="${index}" hidden>
+  return `<button class="battle-upgrade-card reward-crate" type="button" data-upgrade-slot="${index}" style="--reward-index:${index}" hidden>
     <span class="battle-upgrade-card__mark" aria-hidden="true"><img data-upgrade-icon alt="" hidden /><i data-upgrade-sigil></i></span>
     <span class="battle-upgrade-card__kind" data-upgrade-kind></span>
     <span data-upgrade-level></span>
@@ -734,7 +779,7 @@ function upgradeSlot(index: number): string {
   </button>`;
 }
 
-function buildOverview(placement: 'pause' | 'upgrade'): string {
+function buildOverview(placement: 'pause' | 'upgrade' | 'settlement'): string {
   const skills = [
     ['tidal-volley', '齐射', BATTLE_ART_URLS.skillTidalVolley],
     ['bubble-barrier', '屏障', BATTLE_ART_URLS.skillBubbleBarrier],
@@ -751,12 +796,20 @@ function buildOverview(placement: 'pause' | 'upgrade'): string {
 }
 
 function collectNodes(host: HTMLElement): HudNodes {
-  const skillButtons = new Map<BattleSkillId, HTMLButtonElement>();
+  const skillButtons = new Map<BattleSkillId, SkillButtonNodes>();
   for (const button of host.querySelectorAll<HTMLButtonElement>(
     '[data-battle-skill]',
   )) {
     const id = button.dataset.battleSkill as BattleSkillId;
-    skillButtons.set(id, button);
+    skillButtons.set(id, {
+      button,
+      rank: requireElement(button, '[data-skill-rank]'),
+      icon: requireElement<HTMLImageElement>(button, '[data-skill-icon]'),
+      glyphs: [...button.querySelectorAll<HTMLImageElement>('[data-skill-variant]')],
+      cooldown: requireElement(button, '[data-skill-cooldown]'),
+      charge: requireElement(button, '[data-skill-charge]'),
+      status: requireElement(button, '[data-skill-status]'),
+    });
   }
   const tutorialPanels = [
     ...host.querySelectorAll<HTMLElement>('[data-battle-tutorial]'),
@@ -766,6 +819,36 @@ function collectNodes(host: HTMLElement): HudNodes {
     title: requireElement(root, '[data-tutorial-title]'),
     body: requireElement(root, '[data-tutorial-body]'),
   }));
+  const upgradeCards = [...host.querySelectorAll<HTMLButtonElement>('[data-upgrade-slot]')]
+    .map((button): UpgradeCardNodes => ({
+      button,
+      family: requireElement(button, '[data-upgrade-family]'),
+      kind: requireElement(button, '[data-upgrade-kind]'),
+      name: requireElement(button, '[data-upgrade-name]'),
+      level: requireElement(button, '[data-upgrade-level]'),
+      icon: requireElement<HTMLImageElement>(button, '[data-upgrade-icon]'),
+      sigil: requireElement(button, '[data-upgrade-sigil]'),
+      effect: requireElement(button, '[data-upgrade-effect]'),
+      synergy: requireElement(button, '[data-upgrade-synergy]'),
+    }));
+  const buildOverviews = [...host.querySelectorAll<HTMLElement>('[data-build-overview]')]
+    .map((root): BuildOverviewNodes => {
+      const tracks = new Map<BattleSkillId, BuildTrackNodes>();
+      for (const id of SKILL_IDS) {
+        const track = requireElement<HTMLElement>(root, `[data-build-skill="${id}"]`);
+        tracks.set(id, {
+          root: track,
+          rank: requireElement(track, '[data-build-rank]'),
+          variants: requireElement(track, '[data-build-variants]'),
+          pips: [...track.querySelectorAll<HTMLElement>('[data-build-pip]')],
+        });
+      }
+      return {
+        placement: root.dataset.buildOverview,
+        summary: requireElement(root, '[data-build-summary]'),
+        tracks,
+      };
+    });
   return {
     wave: requireElement(host, '[data-hud-wave]'),
     timer: requireElement(host, '[data-hud-time]'),
@@ -780,6 +863,8 @@ function collectNodes(host: HTMLElement): HudNodes {
     experienceFill: requireElement(host, '[data-hud-experience-fill]'),
     skillButtons,
     speedButton: requireElement(host, '[data-battle-action="speed"]'),
+    speedValue: requireElement(host, '[data-speed-value]'),
+    speedUnlock: requireElement(host, '[data-speed-unlock]'),
     tutorialPanels,
     archiveDiscovery: requireElement(host, '[data-archive-discovery]'),
     archiveDiscoveryArt: requireElement<HTMLImageElement>(
@@ -799,11 +884,9 @@ function collectNodes(host: HTMLElement): HudNodes {
     upgradeOptions: requireElement(host, '[data-upgrade-options]'),
     evolutionRibbon: requireElement(host, '[data-evolution-ribbon]'),
     evolutionCrest: requireElement(host, '[data-evolution-crest]'),
-    upgradeButtons: [...host.querySelectorAll<HTMLButtonElement>(
-      '[data-upgrade-slot]',
-    )],
+    upgradeCards,
     upgradeCountdown: requireElement(host, '[data-upgrade-countdown]'),
-    buildOverviews: [...host.querySelectorAll<HTMLElement>('[data-build-overview]')],
+    buildOverviews,
     acquiredBuild: requireElement(host, '[data-acquired-build]'),
     rerollButton: requireElement(host, '[data-battle-action="upgrade-reroll"]'),
     skillRefreshButton: requireElement(
@@ -822,6 +905,13 @@ function collectNodes(host: HTMLElement): HudNodes {
     failureSummary: requireElement(host, '[data-failure-summary]'),
     reviveButton: requireElement(host, '[data-battle-action="revive"]'),
     settlementOverlay: requireElement(host, '[data-settlement-overlay]'),
+    resetAimButton: requireElement(host, '[data-battle-action="reset-aim"]'),
+    voyageLog: requireElement(host, '[data-voyage-log]'),
+    voyageSummary: requireElement(host, '[data-voyage-summary]'),
+    voyageTime: requireElement(host, '[data-voyage-time]'),
+    voyageWave: requireElement(host, '[data-voyage-wave]'),
+    voyageHp: requireElement(host, '[data-voyage-hp]'),
+    voyageInventory: requireElement(host, '[data-voyage-inventory]'),
     settlementTitle: requireElement(host, '[data-settlement-title]'),
     settlementDescription: requireElement(
       host,
@@ -896,6 +986,18 @@ function setText(node: HTMLElement, value: string): void {
   if (node.textContent !== value) node.textContent = value;
 }
 
+function setAttribute(node: Element, name: string, value: string | null): void {
+  // Compare the raw attribute: img.src resolves a relative Vite URL to an
+  // absolute one, which would otherwise look different on every render.
+  if (node.getAttribute(name) === value) return;
+  if (value === null) node.removeAttribute(name);
+  else node.setAttribute(name, value);
+}
+
+function setStyle(node: HTMLElement, name: string, value: string): void {
+  if (node.style.getPropertyValue(name) !== value) node.style.setProperty(name, value);
+}
+
 function skillLabel(skillId: string): string {
   return ({
     'tidal-volley': '潮汐齐射',
@@ -905,8 +1007,9 @@ function skillLabel(skillId: string): string {
 }
 
 function setWidth(node: HTMLElement, percent: number): void {
-  const value = `${Math.min(100, Math.max(0, percent)).toFixed(2)}%`;
-  if (node.style.width !== value) node.style.width = value;
+  // CSSOM strips redundant trailing zeros (e.g. "72.00%" becomes "72%").
+  const value = `${Number(Math.min(100, Math.max(0, percent)).toFixed(2))}%`;
+  setStyle(node, 'width', value);
 }
 
 function formatBattleSpeed(speed: BattleSpeed): string {

@@ -1,4 +1,5 @@
 import {
+  DAILY_TRIAL_MIN_STATION_LEVEL,
   DAILY_TRIAL_MILESTONES,
   type DailyTrialDefinition,
   type DailyTrialReward,
@@ -28,7 +29,7 @@ function signed(value: number): string {
 }
 
 export function renderDailyTrialHub(model: DailyTrialHubViewModel): string {
-  const unlocked = model.stationLevel >= 2;
+  const unlocked = model.stationLevel >= DAILY_TRIAL_MIN_STATION_LEVEL;
   const rule = model.definition.rule;
   const milestones = DAILY_TRIAL_MILESTONES.map((milestone) => {
     const claimed = model.state.claimedMilestoneIds.includes(milestone.id);
@@ -42,7 +43,7 @@ export function renderDailyTrialHub(model: DailyTrialHubViewModel): string {
   }).join('');
   const startAction = unlocked
     ? '<button class="trial-bell" data-action="start-daily-trial">敲钟开始试炼</button>'
-    : '<button class="trial-bell" disabled>车站 Lv.2 点亮信号</button>';
+    : `<button class="trial-bell" disabled>车站 Lv.${DAILY_TRIAL_MIN_STATION_LEVEL} 点亮信号</button>`;
 
   return `<section class="deferred-section living-zone tide-trial-yard ${unlocked ? '' : 'is-locked'}">
     <div class="daily-trial-heading"><div><span class="eyebrow">DAILY / ${model.definition.dayId}</span><h2>今日潮汐试炼</h2><p>固定种子、同一规则、无限重试；冲击个人最佳，不售卖挑战次数。</p></div>${startAction}</div>

@@ -61,6 +61,16 @@
 .route-sign::after { right: 13px; }
 
 .route-sign .map-copy { position: relative; z-index: 1; }
+.route-sign__record { display: flex; align-items: center; flex-wrap: wrap; gap: 5px 9px; }
+.route-sign__stamp {
+  padding: 2px 6px;
+  color: #e4d6ac;
+  border: 1px dashed currentColor;
+  border-radius: 3px 5px 4px 3px;
+  font-size: 10px;
+  line-height: 1.3;
+}
+.route-sign__stamp.is-cleared { color: #c9e6ad; border-style: solid; }
 .route-sign .map-copy small { color: #d3b875; }
 .route-sign .map-copy h3 { margin: 7px 0 5px; font-size: 20px; }
 .route-sign .map-copy p { margin: 0; color: #b7cdcb; font-size: 11px; line-height: 1.5; }
@@ -139,6 +149,9 @@
 .station-work-order .station-stamp { width: max-content; color: #9a3c2d; }
 .station-work-order b { font-size: 19px; }
 .station-work-order small { color: #58645b; }
+.station-work-order__funds { margin: 0; font-size: 12px; line-height: 1.5; }
+.station-work-order .station-work-order__availability { color: #3e563a; font-weight: 800; }
+.station-work-order .station-work-order__availability.is-short { color: #873c27; }
 .station-work-order .secondary {
   border-color: #4b3d2f;
   background: #31525a;

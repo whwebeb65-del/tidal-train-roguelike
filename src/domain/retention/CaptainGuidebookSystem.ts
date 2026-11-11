@@ -13,6 +13,7 @@ export type CaptainGuidebookDestination =
   | 'station'
   | 'equipment'
   | 'captain'
+  | 'skill-mastery'
   | 'legion';
 
 export interface CaptainGuidebookState {
@@ -88,10 +89,10 @@ readonly CaptainGuidebookObjectiveDefinition[] = [
     id: 'skill-mastery-level-5',
     chapter: '第四程',
     title: '唤醒第二种技能进化',
-    description: '将任意技能精通提升到 Lv.5，扩充局内进化池。',
+    description: '在普通航线施放技能并结算，将任意技能精通提升到 Lv.5。',
     target: 5,
-    destination: 'captain',
-    actionLabel: '去技能培养',
+    destination: 'skill-mastery',
+    actionLabel: '查看技能精通',
     reward: { gears: 0, routeMarks: 3 },
   },
   {

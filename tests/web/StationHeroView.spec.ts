@@ -140,8 +140,9 @@ describe('StationHeroView', () => {
 
     expect(html).toContain('STATION 3');
     expect(html).toContain('普通航线');
-    expect(html).toContain('10 分钟终点');
-    expect(html).toContain('20 次潮汐强化');
+    expect(html).toContain('8 分钟上限');
+    expect(html).toContain('单局最高 Lv.20');
+    expect(html).toContain('战斗时间最多 8 分钟，单局最高 Lv.20');
     expect(html).toContain('点按战场任意位置，主炮即刻转向');
     expect(html).not.toContain('账号 Lv.12');
     expect(html).not.toContain('340 / 500 XP');

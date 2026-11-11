@@ -75,6 +75,52 @@ describe('BattleHUD', () => {
     expect(html).not.toContain('data-boss-label');
   });
 
+  it.each(['running', 'upgrade', 'paused'] as const)(
+    'does not mutate stable HUD DOM on consecutive %s frames',
+    (status) => {
+      const hud = new BattleHUD(createCallbacks({ onBattleSpeed: vi.fn() }));
+      const host = document.createElement('div');
+      hud.mount(host);
+      const frame = createFrameFixture({
+        status,
+        skillVariants: { 'tidal-volley': ['split-tide-arrow'], 'bubble-barrier': [], 'extreme-tide': [] },
+        offeredUpgradeIds: status === 'upgrade' ? ['rank-tidal-volley', 'multi-barrel'] : [],
+      });
+      const baseModel = createBattleHudModel(frame, createHudModelOptionsFixture());
+      const model = {
+        ...baseModel,
+        skills: baseModel.skills.map((skill) => skill.id === 'tidal-volley'
+          ? { ...skill, iconUrl: './assets/relative-volley.webp' }
+          : skill),
+      };
+      hud.update(model);
+      const observer = new MutationObserver(() => {});
+      observer.observe(host, { subtree: true, attributes: true, childList: true, characterData: true });
+      const query = vi.spyOn(Element.prototype, 'querySelector');
+      const queryAll = vi.spyOn(Element.prototype, 'querySelectorAll');
+      const setProperty = vi.spyOn(CSSStyleDeclaration.prototype, 'setProperty');
+      try {
+        hud.update(model);
+        hud.update({ ...model, skills: model.skills.map((skill) => ({ ...skill })) });
+        const mutations: Record<string, number> = {};
+        for (const record of observer.takeRecords()) {
+          const key = record.attributeName ?? record.type;
+          mutations[key] = (mutations[key] ?? 0) + 1;
+        }
+        expect(mutations).toEqual({});
+        expect(query).not.toHaveBeenCalled();
+        expect(queryAll).not.toHaveBeenCalled();
+        expect(setProperty).not.toHaveBeenCalled();
+      } finally {
+        query.mockRestore();
+        queryAll.mockRestore();
+        setProperty.mockRestore();
+        observer.disconnect();
+        hud.dispose();
+      }
+    },
+  );
+
   it('shows the live build during choices and forwards linked upgrades without auto-selecting', () => {
     const onChooseUpgrade = vi.fn();
     const hud = new BattleHUD(createCallbacks({ onChooseUpgrade }), window);
@@ -664,6 +710,85 @@ describe('BattleHUD', () => {
     host.remove();
   });
 
+  it('folds the final wave, durability and entire build into a voyage log', () => {
+    const hud = new BattleHUD(createCallbacks(), window);
+    const host = document.createElement('div');
+    hud.mount(host);
+    const frame = createFrameFixture({
+      status: 'victory', elapsedMs: 183_450, wave: 5, runLevel: 4, kills: 38,
+      trainHp: 27.2, maxTrainHp: 120,
+      skillRanks: { 'tidal-volley': 2, 'bubble-barrier': 1, 'extreme-tide': 1 },
+      skillVariants: { 'tidal-volley': ['split-tide-arrow'], 'bubble-barrier': [], 'extreme-tide': [] },
+    });
+    const completed = {
+      ...frame,
+      upgradeLevels: { ...frame.upgradeLevels, 'rank-tidal-volley': 1, 'split-tide-arrow': 1 },
+    };
+    const options = createHudModelOptionsFixture();
+    const settlement = {
+      title: '到站', description: '', rewards: { gears: 0, routeMarks: 0, starTickets: 0 },
+      expeditionPoints: 0, dailyTrialScore: null, archiveDiscoveries: [],
+      doubleSettlementAvailable: true, doubled: false,
+    };
+    const log = host.querySelector<HTMLDetailsElement>('[data-voyage-log]')!;
+    expect(log.previousElementSibling?.matches('.battle-settlement-progression')).toBe(true);
+    expect(log.nextElementSibling?.matches('[data-settlement-archive]')).toBe(true);
+    hud.update(createBattleHudModel(completed, options));
+    expect(log.hidden).toBe(true);
+    hud.update(createBattleHudModel(completed, { ...options, settlement }));
+    expect(log.hidden).toBe(false);
+    expect(log.open).toBe(false);
+    expect(log.querySelector('[data-voyage-summary]')?.textContent).toBe('Lv.4 · 击破 38');
+    expect(log.querySelector('[data-voyage-time]')?.textContent).toBe('03:03');
+    expect(log.querySelector('[data-voyage-wave]')?.textContent).toBe('5');
+    expect(log.querySelector('[data-voyage-hp]')?.textContent).toBe('28 / 120');
+    expect(log.querySelector('[data-voyage-inventory]')?.textContent).toContain('分汐浪箭 · 进化');
+    expect(log.querySelectorAll('[data-build-skill="tidal-volley"] .is-filled')).toHaveLength(2);
+    expect(log.querySelector('[data-build-skill="tidal-volley"] [data-build-variants]')?.textContent)
+      .toBe('分汐浪箭');
+    log.open = true;
+    hud.update(createBattleHudModel(completed, { ...options, settlement: { ...settlement, doubled: true } }));
+    expect(log.open).toBe(true);
+    hud.update(createBattleHudModel(createFrameFixture(), options));
+    expect(log.hidden).toBe(true);
+    expect(log.open).toBe(false);
+    hud.dispose();
+  });
+
+  it('exposes the same restore-auto action to touch and R only while manually aiming in battle', () => {
+    const onResetAim = vi.fn();
+    const hud = new BattleHUD(createCallbacks({ onResetAim }), window);
+    const host = document.createElement('div');
+    hud.mount(host);
+    const button = host.querySelector<HTMLButtonElement>('[data-battle-action="reset-aim"]')!;
+    const options = createHudModelOptionsFixture();
+    const manual = createFrameFixture({ mainCannonAim: { x: 195, y: 300 } });
+    hud.update(createBattleHudModel(createFrameFixture(), options));
+    expect(button.hidden).toBe(true);
+    button.click();
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'r' }));
+    expect(onResetAim).not.toHaveBeenCalled();
+
+    hud.update(createBattleHudModel(manual, options));
+    expect(button.hidden).toBe(false);
+    button.click();
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'R' }));
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'r', ctrlKey: true }));
+    expect(onResetAim).toHaveBeenCalledTimes(2);
+    for (const settings of [
+      { ...options, visibilityResumeRequired: true },
+      { ...options, pendingActions: new Set(['upgrade-resume']) },
+    ]) {
+      hud.update(createBattleHudModel(manual, settings));
+      expect(button.hidden).toBe(true);
+    }
+    hud.update(createBattleHudModel({ ...manual, status: 'paused' }, options));
+    expect(button.hidden).toBe(true);
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'r' }));
+    expect(onResetAim).toHaveBeenCalledTimes(2);
+    hud.dispose();
+  });
+
   it('uses compact paper settlement progression rows that wrap safely at 360px', () => {
     expect(battleHudCss).toMatch(
       /\.battle-settlement-progression\s*\{[^}]*display:\s*grid;[^}]*gap:\s*4px;[^}]*margin-top:\s*8px;/s,
@@ -777,6 +902,36 @@ describe('BattleHUD', () => {
 
     hud.dispose();
     host.remove();
+  });
+
+  it('shows the account unlock threshold and only enables speed selection after an unlock', () => {
+    const onBattleSpeed = vi.fn();
+    const hud = new BattleHUD(createCallbacks({ onBattleSpeed }));
+    const host = document.createElement('div');
+    hud.mount(host);
+    const frame = createFrameFixture();
+    const options = createHudModelOptionsFixture();
+    hud.update(createBattleHudModel(frame, { ...options, availableBattleSpeeds: [1] }));
+    const speed = host.querySelector<HTMLButtonElement>('[data-battle-action="speed"]');
+    const unlock = speed?.querySelector<HTMLElement>('[data-speed-unlock]');
+    if (!speed || !unlock) throw new Error('Expected mounted speed control and unlock label');
+
+    expect(speed.querySelector('[data-speed-value]')?.textContent).toBe('1×');
+    expect(speed.disabled).toBe(true);
+    expect(speed.getAttribute('aria-disabled')).toBe('true');
+    expect(speed.getAttribute('aria-label')).toContain('账号 Lv.10 解锁下一档倍速');
+    expect(unlock.textContent).toBe('Lv.10');
+    expect(unlock.hidden).toBe(false);
+    speed.click();
+    expect(onBattleSpeed).not.toHaveBeenCalled();
+
+    hud.update(createBattleHudModel(frame, { ...options, availableBattleSpeeds: [1, 1.5] }));
+    expect(speed.disabled).toBe(false);
+    expect(speed.getAttribute('aria-disabled')).toBe('false');
+    expect(unlock.hidden).toBe(true);
+    speed.click();
+    expect(onBattleSpeed).toHaveBeenCalledExactlyOnceWith(1.5);
+    hud.dispose();
   });
 
   it('shows cooldown, shield, energy and upgrade information', () => {

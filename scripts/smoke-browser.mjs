@@ -857,6 +857,7 @@ const approvedE2EHookKeys = Object.freeze([
   'useSkill',
 ]);
 const playerSaveStorageKey = 'tidal-train-prototype-save-v1';
+const guidebookStorageKey = 'tidal-train-captain-guidebook-v1';
 const tidalArchiveStorageKey = 'tidal-train-tidal-archive-v1';
 const firstRunBattleTutorialStorageKey =
   'tidal-train-first-run-battle-tutorial-v1';
@@ -1130,6 +1131,66 @@ async function readStoredTidalArchive(client) {
   return evaluate(client, `JSON.parse(
     localStorage.getItem(${JSON.stringify(tidalArchiveStorageKey)}) ?? '{}'
   )`);
+}
+
+async function assertGuidebookMasteryDestination(client, label) {
+  const seeded = await evaluate(client, `(() => {
+    if (new URLSearchParams(location.search).get('e2e') !== '1' || !${hookExpression}) return false;
+    const key = ${JSON.stringify(playerSaveStorageKey)};
+    const save = JSON.parse(localStorage.getItem(key) ?? 'null');
+    if (!save) return false;
+    localStorage.setItem(key, JSON.stringify({
+      ...save,
+      stationLevel: 2,
+      firstClearMapIds: ['drift-suburb'],
+      equipmentInventory: save.equipmentInventory.map((item, index) => index === 0 ? { ...item, level: 2 } : item),
+      skillMasteryXp: { 'tidal-volley': 127, 'bubble-barrier': 12, 'extreme-tide': 0 },
+    }));
+    localStorage.setItem(${JSON.stringify(guidebookStorageKey)}, JSON.stringify({
+      version: 1,
+      claimedObjectiveIds: ['first-clear', 'station-level-2', 'equipment-level-2'],
+    }));
+    return true;
+  })()`);
+  assert.equal(seeded, true, `${label} mastery fixture must be isolated to the exact E2E gate`);
+  await client.send('Page.reload', { ignoreCache: true });
+  const destination = '[data-guidebook-destination="skill-mastery"]';
+  await waitForEvaluation(client, `Boolean(document.querySelector(${JSON.stringify(destination)}))`,
+    { label: `${label} mastery guidebook ticket` });
+  const playerBefore = await evaluate(client, `localStorage.getItem(${JSON.stringify(playerSaveStorageKey)})`);
+  assert.equal(await clickBattleButton(client, destination), true);
+  await waitForEvaluation(client, `document.activeElement?.matches('[data-archive-mastery]') === true`,
+    { label: `${label} focused mastery destination` });
+  const board = await evaluate(client, `(() => {
+    const root = document.querySelector('[data-archive-mastery]');
+    const heading = root.querySelector('h3');
+    const rect = heading.getBoundingClientRect();
+    const rows = [...root.querySelectorAll('[data-mastery-skill]')];
+    const progress = rows[0].querySelector('progress');
+    return {
+      tab: root.closest('.otter-workshop')
+        ?.querySelector('[data-action="show-tidal-archive"]')?.getAttribute('aria-pressed'),
+      rows: rows.map((row) => row.dataset.masterySkill),
+      value: progress.value, max: progress.max,
+      unlockText: rows[0].textContent,
+      candidates: document.querySelectorAll('[data-variant-availability="candidate"]').length,
+      discoveries: document.querySelectorAll('[data-variant-availability="discovered"]').length,
+      headingInView: rect.top >= 0 && rect.bottom <= innerHeight
+        && heading.contains(document.elementFromPoint((rect.left + rect.right) / 2, (rect.top + rect.bottom) / 2)),
+    };
+  })()`);
+  assert.equal(board.tab, 'true', `${label} mastery link must activate the archive tab`);
+  assert.deepEqual(board.rows, ['tidal-volley', 'bubble-barrier', 'extreme-tide']);
+  assert.deepEqual([board.value, board.max], [43, 44]);
+  assert.match(board.unlockText, /Lv\.5 可解锁/);
+  assert.equal(board.candidates, 3, `${label} mastery should expose one initial candidate per skill`);
+  assert.equal(board.discoveries, 0, `${label} candidates are not discoveries`);
+  assert.equal(board.headingInView, true, `${label} mastery destination must scroll into view`);
+  assert.equal(await evaluate(client, `localStorage.getItem(${JSON.stringify(playerSaveStorageKey)})`), playerBefore,
+    `${label} opening mastery must not change player inventory or XP`);
+  await assertNoHorizontalOverflow(client, `${label} skill mastery`);
+  await captureQaScreenshot(client, `skill-mastery-${label}`);
+  await navigateScene(client, 'station');
 }
 
 async function assertArchiveUnreadSeal(client, label) {
@@ -1896,6 +1957,7 @@ async function assertBattleHudGeometry(client, label) {
     const canvas = document.querySelector('[data-battle-canvas]');
     const skills = [...document.querySelectorAll('[data-battle-skill]')];
     const refresh = document.querySelector('[data-battle-action="skill-refresh"]');
+    const speed = document.querySelector('[data-battle-action="speed"]');
     if (!(hud instanceof HTMLElement) || !(canvas instanceof HTMLCanvasElement)) {
       throw new Error('battle HUD or canvas is missing');
     }
@@ -1912,12 +1974,46 @@ async function assertBattleHudGeometry(client, label) {
     const hudBottom = hud.getBoundingClientRect().bottom;
     const canvasRect = canvas.getBoundingClientRect();
     const logicalScale = window.visualViewport?.scale ?? 1;
+    const viewport = canvas.closest('.scene-viewport');
+    const shell = canvas.closest('.app-shell--v2');
+    const notice = viewport.querySelector('.app-notice');
+    const normalPadding = getComputedStyle(viewport).paddingTop;
+    const viewportTransitions = viewport.getAnimations()
+      .filter((animation) => animation instanceof CSSTransition)
+      .map((animation) => ({
+        property: animation.transitionProperty,
+        duration: animation.effect.getTiming().duration,
+      }));
+    const hadChrome = shell.classList.contains('app-shell--battle');
+    const hadNotice = notice.classList.contains('is-visible');
+    // The mounted scene must win even if the shell's chrome update is late.
+    let noticeFallback;
+    try {
+      shell.classList.remove('app-shell--battle');
+      notice.classList.add('is-visible');
+      noticeFallback = {
+        canvasTop: canvas.getBoundingClientRect().top,
+        paddingTop: getComputedStyle(viewport).paddingTop,
+      };
+    } finally {
+      shell.classList.toggle('app-shell--battle', hadChrome);
+      notice.classList.toggle('is-visible', hadNotice);
+    }
     return {
       hudBottom: Number.parseFloat(getComputedStyle(hud).height),
       canvasTop: canvasRect.top,
       canvasBottom: canvasRect.bottom,
       viewportHeight: innerHeight,
       logicalScale,
+      normalPadding,
+      viewportTransitions,
+      noticeFallback,
+      speedLocked: speed?.disabled,
+      speedUnlock: speed?.querySelector('[data-speed-unlock]:not([hidden])')?.textContent ?? '',
+      accountLevel: window.__TIDAL_TRAIN_E2E__.snapshot().progression.accountLevel,
+      clippedVitals: [...hud.querySelectorAll('.battle-vital > span, .battle-vital > b')]
+        .filter((node) => node.scrollWidth > node.clientWidth + 1)
+        .map((node) => node.textContent),
       enemyLaneTop: (canvasRect.top + canvasRect.height * 120 / 844) / logicalScale,
       skillMin: Math.min(...skills.map((skill) => skill.getBoundingClientRect().height)) / logicalScale,
       skillCopy: skills.map((skill) => {
@@ -1978,8 +2074,18 @@ async function assertBattleHudGeometry(client, label) {
     `${label} enemy lane gap is below 12px: ${JSON.stringify(geometry)}`,
   );
   assert.ok(geometry.skillMin >= 56, `${label} skill target is below 56px`);
+  assert.deepEqual(geometry.clippedVitals, [], `${label} vital labels must fit`);
+  assert.equal(geometry.speedLocked, geometry.accountLevel < 10, `${label} account speed lock`);
+  assert.equal(geometry.speedUnlock, geometry.accountLevel < 10 ? 'Lv.10' : '',
+    `${label} locked speed must show the next account threshold`);
   assert.ok(geometry.canvasTop >= -1 && geometry.canvasTop <= 1,
     `${label} battle canvas must start at the viewport top: ${JSON.stringify(geometry)}`);
+  assert.deepEqual(geometry.viewportTransitions, [],
+    `${label} station-to-battle viewport geometry must not transition`);
+  assert.equal(geometry.noticeFallback.paddingTop, '0px',
+    `${label} station notice must not reserve space over a mounted battle`);
+  assert.ok(Math.abs(geometry.noticeFallback.canvasTop) <= 1,
+    `${label} visible station notice must not move the mounted battle: ${JSON.stringify(geometry.noticeFallback)}`);
   assert.ok(geometry.canvasBottom <= geometry.viewportHeight + 1,
     `${label} battle canvas must fit the viewport: ${JSON.stringify(geometry)}`);
   assert.ok(geometry.skillCopy.every((copy) => copy.nameVisible), `${label} skill names are clipped or ellipsized: ${JSON.stringify(geometry.skillCopy)}`);
@@ -2763,28 +2869,14 @@ async function assertFirstRunBattleTutorial(client, label) {
     };
   })()`);
   assert.ok(aimPoint, `${label} battle canvas must accept real pointer aim`);
-  await client.send('Input.dispatchMouseEvent', {
-    type: 'mousePressed',
-    x: aimPoint.x,
-    y: aimPoint.y,
-    button: 'left',
-    buttons: 1,
-    clickCount: 1,
-  });
-  await client.send('Input.dispatchMouseEvent', {
-    type: 'mouseReleased',
-    x: aimPoint.x,
-    y: aimPoint.y,
-    button: 'left',
-    buttons: 0,
-    clickCount: 1,
-  });
+  await tapAt(client, aimPoint);
   await waitForEvaluation(
     client,
     `${hookExpression}?.snapshot().verification.firstRunTutorialStep === 'skill'`,
     { label: `${label} first-run skill direction` },
   );
   await captureQaScreenshot(client, `first-run-skill-${label}`);
+  await assertRestoreAutoAim(client, label);
 
   await advanceBattle(client, 1_000);
   let skillUsed = await callHook(client, `return hook.useSkill('tidal-volley');`);
@@ -3818,6 +3910,7 @@ async function runBriefBattle(client, label) {
   await assertTravelMotion(client);
   await assertBattleHudGeometry(client, label);
   await captureQaScreenshot(client, `battle-ready-${label}`);
+  await assertRestoreAutoAim(client, label);
   const fire = await probeAutomaticFire(client);
   const skills = await exercisePauseAndSkills(client);
   await assertNoHorizontalOverflow(client, `${label} battle`);
@@ -3851,6 +3944,98 @@ async function clickBattleButton(client, selector) {
       return true;
     })()`,
   );
+}
+
+async function tapAt(client, point) {
+  await client.send('Input.dispatchMouseEvent', {
+    type: 'mousePressed', ...point, button: 'left', buttons: 1, clickCount: 1,
+  });
+  await client.send('Input.dispatchMouseEvent', {
+    type: 'mouseReleased', ...point, button: 'left', buttons: 0, clickCount: 1,
+  });
+}
+
+async function assertRestoreAutoAim(client, label) {
+  const selector = '[data-battle-action="reset-aim"]';
+  if (!(await snapshot(client)).battle?.mainCannonAim) {
+    const canvasPoint = await evaluate(client, `(() => {
+      const rect = document.querySelector('[data-battle-canvas]').getBoundingClientRect();
+      return { x: rect.left + rect.width * .72, y: rect.top + rect.height * .34 };
+    })()`);
+    await tapAt(client, canvasPoint);
+  }
+  assert.ok((await snapshot(client)).battle?.mainCannonAim, `${label} real pointer should aim manually`);
+  const control = await evaluate(client, `(() => {
+    const button = document.querySelector(${JSON.stringify(selector)});
+    if (!(button instanceof HTMLButtonElement) || button.hidden) return null;
+    const rect = button.getBoundingClientRect();
+    const x = (rect.left + rect.right) / 2;
+    const y = (rect.top + rect.bottom) / 2;
+    return {
+      x, y, width: rect.width, height: rect.height,
+      topmost: button.contains(document.elementFromPoint(x, y)),
+      overlapsSkill: [...document.querySelectorAll('[data-battle-skill]')].some((skill) => {
+        const other = skill.getBoundingClientRect();
+        return rect.left < other.right && rect.right > other.left
+          && rect.top < other.bottom && rect.bottom > other.top;
+      }),
+    };
+  })()`);
+  assert.ok(control, `${label} manual aim must show its restore button`);
+  assert.ok(control.width >= 44 && control.height >= 44, `${label} restore-aim target is too small`);
+  assert.equal(control.topmost, true, `${label} restore-aim target is covered`);
+  assert.equal(control.overlapsSkill, false, `${label} restore-aim target overlaps a skill`);
+  await tapAt(client, { x: control.x, y: control.y });
+  assert.equal((await snapshot(client)).battle?.mainCannonAim, null, `${label} restore should clear manual aim`);
+  assert.equal(await evaluate(client, `document.querySelector(${JSON.stringify(selector)}).hidden`), true);
+}
+
+async function assertVoyageLog(client, battle) {
+  const evidence = await evaluate(client, `(() => {
+    const log = document.querySelector('[data-voyage-log]');
+    if (!(log instanceof HTMLDetailsElement) || log.hidden) return null;
+    const folded = !log.open;
+    const summary = log.querySelector('summary');
+    const size = summary.getBoundingClientRect();
+    summary.click();
+    const returnButton = document.querySelector('[data-battle-action="return-station"]');
+    returnButton.scrollIntoView({ block: 'nearest' });
+    const rect = returnButton.getBoundingClientRect();
+    const returnTopmost = returnButton.contains(document.elementFromPoint(
+      (rect.left + rect.right) / 2, (rect.top + rect.bottom) / 2,
+    ));
+    return {
+      folded, opened: log.open, targetHeight: size.height, returnTopmost,
+      summary: log.querySelector('[data-voyage-summary]').textContent,
+      wave: Number(log.querySelector('[data-voyage-wave]').textContent),
+      hp: log.querySelector('[data-voyage-hp]').textContent,
+      time: log.querySelector('[data-voyage-time]').textContent,
+      ranks: [...log.querySelectorAll('[data-build-skill]')].map((track) => ({
+        id: track.dataset.buildSkill,
+        rank: track.querySelectorAll('.is-filled').length,
+      })),
+    };
+  })()`);
+  assert.ok(evidence, 'settlement must show its voyage log');
+  assert.equal(evidence.folded, true, 'new voyage log must start folded');
+  assert.equal(evidence.opened, true, 'voyage log must open through its summary');
+  assert.ok(evidence.targetHeight >= 44, 'voyage log touch target is too small');
+  assert.equal(evidence.returnTopmost, true, 'return action must remain reachable with expanded log');
+  assert.equal(evidence.summary, `Lv.${battle.runLevel} · 击破 ${battle.kills}`);
+  assert.equal(evidence.wave, battle.wave);
+  assert.equal(evidence.hp, `${Math.ceil(battle.trainHp)} / ${battle.maxTrainHp}`);
+  const seconds = Math.floor(battle.elapsedMs / 1000);
+  assert.equal(evidence.time, `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`);
+  assert.equal(evidence.ranks.length, 3);
+  for (const skill of evidence.ranks) assert.equal(skill.rank, battle.skillRanks[skill.id]);
+  await evaluate(client, "document.querySelector('[data-voyage-log]').scrollIntoView({ block: 'start' })");
+  await captureQaScreenshot(client, '390x844-voyage-log');
+  assert.equal(await evaluate(client, `(() => {
+    const log = document.querySelector('[data-voyage-log]');
+    log.querySelector('summary').click();
+    log.closest('[data-settlement-overlay]').scrollTop = 0;
+    return log.open;
+  })()`), false);
 }
 
 async function reloadWithSkillEvolutionFixture(client) {
@@ -5403,11 +5588,17 @@ async function finishFullBattle(
   );
   const settled = await snapshot(client);
   assert.equal(settled.settlementCount, settlementBaseline + 1);
+  await assertVoyageLog(client, settled.battle);
   if (inspectSettlement) await inspectSettlement(settled);
 
   const station = await returnToStation(client, listenerBaseline);
   assert.equal(station.settlementCount, settlementBaseline + 1);
   if (claimSalvage) {
+    if (terminalStatus === 'victory') {
+      const selector = `[data-route-id="${terminalBattle.mapId}"] .route-sign__stamp`;
+      assert.equal(await evaluate(client, `document.querySelector(${JSON.stringify(selector)})?.textContent`),
+        '已首通', 'first clear should stamp the real station route');
+    }
     assert.equal(
       await clickBattleButton(
         client,
@@ -5732,6 +5923,9 @@ async function runViewport(client, viewport, smokeId, browserErrors) {
   await inspectHandDrawnStation(client, label);
   await captureQaScreenshot(client, `station-${label}`);
   if (viewport.full) {
+    await assertGuidebookMasteryDestination(client, label);
+    await resetSaveBetweenViewports(client);
+    await ensureCaptainSelected(client);
     await assertLowQualityResilience(client, label);
     await assertReducedMotionResilience(client, label);
     await resetSaveBetweenViewports(client);

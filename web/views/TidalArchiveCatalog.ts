@@ -18,7 +18,10 @@ import {
   type SkillVariantId,
 } from '../../src/domain/skill/SkillProgressionTypes';
 import {
-  skillMasteryLevelFromXp,
+  getSkillMasteryProgress,
+  SKILL_MASTERY_VARIANT_LEVELS,
+  unlockedSkillVariants,
+  type SkillMasteryProgress,
   type SkillMasteryXp,
 } from '../../src/domain/progression/SkillMasterySystem';
 import {
@@ -26,6 +29,7 @@ import {
   BATTLE_VARIANT_GLYPH_URLS,
 } from '../assets/BattleArtCatalog';
 import { getBattleUpgradeCopy } from '../battle/BattleUpgradeCopy';
+import { getBattleUpgradeDefinition } from '../battle/BattleUpgradeCatalog';
 
 export interface TidalArchiveEnemyDefinition {
   readonly id: TideBeastArchiveId;
@@ -49,9 +53,19 @@ export interface TidalArchiveVariantCard {
   readonly artUrl: string;
   readonly skillId: BattleSkillId;
   readonly skillName: string;
-  readonly requiredMasteryLevel: 1 | 5 | 10 | 15;
-  readonly currentMasteryLevel: number;
+  readonly requiredMasteryLevel: (typeof SKILL_MASTERY_VARIANT_LEVELS)[number];
+  readonly requiredRank: number;
+  readonly inCandidatePool: boolean;
   readonly source: string;
+}
+
+export interface TidalArchiveMasteryRow extends SkillMasteryProgress {
+  readonly id: BattleSkillId;
+  readonly name: string;
+  readonly artUrl: string;
+  readonly poolCount: number;
+  readonly variantCount: number;
+  readonly nextVariant: { readonly name: string; readonly level: number } | null;
 }
 
 export interface TidalArchiveEquipmentCard {
@@ -141,7 +155,11 @@ const SKILL_NAMES: Readonly<Record<BattleSkillId, string>> = {
   'extreme-tide': '极潮爆发',
 };
 
-const MASTERY_MILESTONES = [1, 5, 10, 15] as const;
+const SKILL_ART: Readonly<Record<BattleSkillId, string>> = {
+  'tidal-volley': BATTLE_ART_URLS.skillTidalVolley,
+  'bubble-barrier': BATTLE_ART_URLS.skillBubbleBarrier,
+  'extreme-tide': BATTLE_ART_URLS.skillExtremeTide,
+};
 
 const SLOT_NAMES: Readonly<Record<EquipmentSlot, string>> = {
   cannon: '主炮',
@@ -191,7 +209,8 @@ export function buildTidalArchiveVariantCards(
   return SKILL_VARIANT_IDS.map((id) => {
     const skillId = skillForVariant(id);
     const variants = SKILL_VARIANTS_BY_SKILL[skillId] as readonly SkillVariantId[];
-    const requiredMasteryLevel = MASTERY_MILESTONES[variants.indexOf(id)]!;
+    const requiredMasteryLevel = SKILL_MASTERY_VARIANT_LEVELS[variants.indexOf(id)]!;
+    const level = getSkillMasteryProgress(masteryXp[skillId] ?? 0).level;
     const copy = getBattleUpgradeCopy(id);
     const isDiscovered = discovered.has(id);
     return {
@@ -204,8 +223,32 @@ export function buildTidalArchiveVariantCards(
       skillId,
       skillName: SKILL_NAMES[skillId],
       requiredMasteryLevel,
-      currentMasteryLevel: skillMasteryLevelFromXp(masteryXp[skillId] ?? 0),
+      requiredRank: getBattleUpgradeDefinition(id).requiredRank ?? 1,
+      inCandidatePool: unlockedSkillVariants(skillId, level).includes(id),
       source: `${SKILL_NAMES[skillId]}精通 Lv.${requiredMasteryLevel}`,
+    };
+  });
+}
+
+export function buildTidalArchiveMasteryRows(
+  masteryXp: Readonly<SkillMasteryXp>,
+): readonly TidalArchiveMasteryRow[] {
+  return BATTLE_SKILL_IDS.map((id) => {
+    const progress = getSkillMasteryProgress(masteryXp[id] ?? 0);
+    const poolCount = unlockedSkillVariants(id, progress.level).length;
+    const variants = SKILL_VARIANTS_BY_SKILL[id];
+    const nextVariantId = variants[poolCount];
+    const unlockLevel = SKILL_MASTERY_VARIANT_LEVELS[poolCount];
+    return {
+      ...progress,
+      id,
+      name: SKILL_NAMES[id],
+      artUrl: SKILL_ART[id],
+      poolCount,
+      variantCount: variants.length,
+      nextVariant: nextVariantId && unlockLevel !== undefined
+        ? { name: getBattleUpgradeCopy(nextVariantId).name, level: unlockLevel }
+        : null,
     };
   });
 }

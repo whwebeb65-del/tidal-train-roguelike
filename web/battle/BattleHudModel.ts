@@ -84,6 +84,7 @@ export interface BattleHudModel {
   readonly buildSummary: string;
   readonly acquiredUpgrades: readonly string[];
   readonly skills: readonly BattleSkillModel[];
+  readonly resetAimVisible: boolean;
   readonly speed: BattleSpeedModel;
   readonly upgradeVisible: boolean;
   readonly upgradeCountdownVisible: boolean;
@@ -97,6 +98,10 @@ export interface BattleHudModel {
   readonly reviveAvailable: boolean;
   readonly failureSummary: string;
   readonly settlement: BattleSettlementPresentation | null;
+  readonly voyageReport: {
+    readonly wave: number;
+    readonly kills: number;
+  } | null;
   readonly settlementVisible: boolean;
   readonly doubleSettlementVisible: boolean;
   readonly pendingActions: ReadonlySet<string>;
@@ -248,6 +253,10 @@ export function createBattleHudModel(
         `${getBattleUpgradeCopy(id as BattleUpgradeId).name} ${level}`
       )),
     skills: createSkillModels(frame),
+    resetAimVisible: frame.status === 'running'
+      && frame.mainCannonAim !== null
+      && !visibilityResumeRequired
+      && !upgradeCountdownVisible,
     speed: {
       current: options.battleSpeed ?? 1,
       available: [...availableBattleSpeeds],
@@ -284,6 +293,9 @@ export function createBattleHudModel(
     reviveAvailable: options.reviveAvailable ?? false,
     failureSummary: `坚持到第 ${frame.wave} 波 · 击败 ${frame.kills} 只潮兽`,
     settlement,
+    voyageReport: settlement && (frame.status === 'victory' || frame.status === 'defeat')
+      ? { wave: frame.wave, kills: frame.kills }
+      : null,
     settlementVisible: !visibilityResumeRequired && settlement !== null,
     doubleSettlementVisible:
       !visibilityResumeRequired

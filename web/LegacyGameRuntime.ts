@@ -9,8 +9,8 @@ import {
 import {
   canUnlockMap,
   getMapDefinition,
-  isMapUnlocked,
   MAP_PROGRESSION,
+  stationUpgradeGearCost,
   unlockMap,
   unlockModule,
   unlockPassenger,
@@ -82,6 +82,7 @@ import {
 import {
   claimDailyTrialMilestone,
   createDailyTrialState,
+  DAILY_TRIAL_MIN_STATION_LEVEL,
   getChinaDayId,
   getDailyTrialDefinition,
   normalizeDailyTrialState,
@@ -152,6 +153,7 @@ import { renderDailyCheckIn } from './views/DailyCheckInView';
 import { renderCommerceStore } from './views/CommerceView';
 import { renderCaptainSelection } from './views/CaptainSelectionView';
 import { renderStationHero } from './views/StationHeroView';
+import { renderStationRouteYard, renderStationWorkOrder } from './views/StationRouteYardView';
 import { renderWardrobe } from './views/WardrobeView';
 import {
   PROTOTYPE_REROLL,
@@ -1065,7 +1067,6 @@ function renderSocialHub(): string {
 }
 
 function renderStationScene(): string {
-  const nextLevelCost = save.stationLevel * 80;
   const currentDayId = getChinaDayId(Date.now());
   const dailyDefinition = syncDailyTrialDay();
   const progression = getProgressionSnapshot();
@@ -1083,21 +1084,6 @@ function renderStationScene(): string {
       objectiveId: currentGuidebookObjective.id,
     });
   }
-  const mapCards = MAP_PROGRESSION.map((map) => {
-    const unlocked = isMapUnlocked(save, map.id);
-    const canUnlock = canUnlockMap(save, map.id);
-    const selected = currentMapId === map.id;
-    const action = unlocked
-      ? `<button class="chip ${selected ? 'selected' : ''}" data-action="select-map" data-map-id="${map.id}">${selected ? '当前路线' : '选择路线'}</button>`
-      : canUnlock
-        ? `<button class="chip" data-action="unlock-map" data-map-id="${map.id}">解锁地图</button>`
-        : `<span class="locked">车站 Lv.${map.minStationLevel} 开放</span>`;
-    return `<article class="route-sign ${unlocked ? 'is-open' : 'is-locked'} ${selected ? 'is-current' : ''}">
-      <div class="route-sign__lamp" aria-hidden="true"></div>
-      <div class="map-copy"><small>站台 ${map.minStationLevel}</small><h3>${map.name}</h3><p>${map.feature}</p></div>${action}
-    </article>`;
-  }).join('');
-
   return `<section class="station scene">
     ${renderStationHero({
       captainId: getActiveCaptainId(),
@@ -1115,14 +1101,8 @@ function renderStationScene(): string {
       nextSpeedUnlock: accountTicketSnapshot().nextSpeedUnlock,
     })}
     ${renderCaptainGuidebook({ objectives: guidebookObjectives })}
-    <div class="station-route-yard living-zone">
-      <div class="station-route-yard__heading"><h2>航线发车牌</h2><span>已开放 ${save.unlockedMapIds.length}/${MAP_PROGRESSION.length}</span></div>
-      <div class="map-grid">${mapCards}</div>
-    </div>
-    <div class="station-work-order station-prop">
-      <div><span class="station-stamp">站务维修</span><b>车站 Lv.${save.stationLevel}</b><small>下一次升级需要 ${nextLevelCost} 齿轮</small></div>
-      <button class="secondary" data-action="upgrade-station" ${save.gears < nextLevelCost ? 'disabled' : ''}>提交升级工单</button>
-    </div>
+    ${renderStationRouteYard(save, currentMapId)}
+    ${renderStationWorkOrder(save)}
     ${renderDailyCheckIn({ state: dailyCheckInState, currentDayId })}
     ${renderDailyTrialHub({ stationLevel: save.stationLevel, state: dailyTrialState, definition: dailyDefinition })}
     ${renderLaunchCampaignCenter()}
@@ -1434,8 +1414,8 @@ async function startRun(
   mode: 'normal' | 'daily-trial' = 'normal',
 ): Promise<void> {
   if (battleStartPending) return;
-  if (mode === 'daily-trial' && save.stationLevel < 2) {
-    notice = '每日潮汐试炼将在车站达到 Lv.2 后开放。';
+  if (mode === 'daily-trial' && save.stationLevel < DAILY_TRIAL_MIN_STATION_LEVEL) {
+    notice = `每日潮汐试炼将在车站达到 Lv.${DAILY_TRIAL_MIN_STATION_LEVEL} 后开放。`;
     render();
     return;
   }
@@ -2081,7 +2061,7 @@ function exitBattle(): void {
 }
 
 function upgradeStationAtStation(): void {
-  const cost = save.stationLevel * 80;
+  const cost = stationUpgradeGearCost(save.stationLevel);
   if (save.gears < cost) {
     notice = `还需要 ${cost - save.gears} 齿轮才能升级车站。`;
     render();
@@ -2424,6 +2404,56 @@ async function handleShareSquad(): Promise<void> {
   render();
 }
 
+function selectTidalArchivePanel(): void {
+  if (
+    equipmentPanel !== 'archive'
+    || tidalArchiveState.unreadEntryKeys.length > 0
+  ) {
+    archiveVisitNewKeys = Object.freeze([...tidalArchiveState.unreadEntryKeys]);
+  }
+  equipmentPanel = 'archive';
+}
+
+function markArchiveEntriesRead(): boolean {
+  const next = markTidalArchiveRead(tidalArchiveState);
+  if (next === tidalArchiveState) return false;
+  const count = tidalArchiveState.unreadEntryKeys.length;
+  appStateRepository.saveTidalArchive(next);
+  tidalArchiveState = next;
+  track('tidal_archive_entries_read', { count });
+  return true;
+}
+
+async function openSkillMasteryFromGuidebook(): Promise<void> {
+  const previousPanel = equipmentPanel;
+  // A station announcement must not cover the destination's heading.
+  notice = '';
+  setHubView('equipment');
+  selectTidalArchivePanel();
+  render();
+  await renderQueue;
+  const isStillOpeningArchive = () => (
+    started && phase === 'station' && hubView === 'equipment' && equipmentPanel === 'archive'
+  );
+  if (!isStillOpeningArchive()) return;
+  if (!app.querySelector('[data-archive-mastery]')) {
+    equipmentPanel = previousPanel;
+    setHubView('station');
+    notice = '技能精通页暂时未打开，可从装备舱的潮汐档案重试。';
+    render();
+    return;
+  }
+  // Consume NEW only after reaching the archive, as when opening it directly.
+  if (markArchiveEntriesRead()) {
+    render();
+    await renderQueue;
+  }
+  if (!isStillOpeningArchive()) return;
+  const mastery = app.querySelector<HTMLElement>('[data-archive-mastery]');
+  mastery?.focus({ preventScroll: true });
+  mastery?.scrollIntoView?.({ block: 'start' });
+}
+
 const onClick = async (event: Event): Promise<void> => {
   const target = event.target as HTMLElement;
   const navigation = target.closest<HTMLButtonElement>('[data-nav-scene]');
@@ -2483,6 +2513,10 @@ const onClick = async (event: Event): Promise<void> => {
       });
       return;
     }
+    if (destination === 'skill-mastery') {
+      await openSkillMasteryFromGuidebook();
+      return;
+    }
     if (['captain', 'equipment', 'legion'].includes(destination)) {
       setHubView(destination as HubView);
       render();
@@ -2514,22 +2548,8 @@ const onClick = async (event: Event): Promise<void> => {
     return;
   }
   if (action === 'show-tidal-archive') {
-    if (
-      equipmentPanel !== 'archive'
-      || tidalArchiveState.unreadEntryKeys.length > 0
-    ) {
-      archiveVisitNewKeys = Object.freeze([
-        ...tidalArchiveState.unreadEntryKeys,
-      ]);
-    }
-    const next = markTidalArchiveRead(tidalArchiveState);
-    if (next !== tidalArchiveState) {
-      const count = tidalArchiveState.unreadEntryKeys.length;
-      tidalArchiveState = next;
-      appStateRepository.saveTidalArchive(next);
-      track('tidal_archive_entries_read', { count });
-    }
-    equipmentPanel = 'archive';
+    selectTidalArchivePanel();
+    markArchiveEntriesRead();
     render();
     return;
   }

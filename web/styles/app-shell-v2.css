@@ -74,7 +74,7 @@
   overflow: clip;
 }
 
-.scene-viewport:has(.app-notice.is-visible) {
+.scene-viewport:has(.app-notice.is-visible):not(:has(.game-scene--battle)) {
   padding-top: 96px;
 }
 
@@ -403,10 +403,6 @@
   .scene-viewport {
     padding: 16px 12px;
     padding-bottom: calc(150px + env(safe-area-inset-bottom));
-  }
-
-  .scene-viewport:has(.app-notice.is-visible) {
-    padding-top: 96px;
   }
 
   .app-notice.station-announcement {

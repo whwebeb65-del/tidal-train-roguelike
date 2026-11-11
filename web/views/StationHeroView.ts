@@ -7,6 +7,7 @@ import {
   type SkinId,
 } from '../../src/domain/skin/SkinCatalog';
 import { CHIBI_ART } from '../assets/ChibiArtCatalog';
+import { BATTLE_HARD_CAP_MS, EXPERIENCE_THRESHOLDS } from '../battle/BattleConfig';
 
 export interface StationHeroModel {
   readonly captainId: CaptainId;
@@ -29,6 +30,8 @@ export function renderStationHero(model: StationHeroModel): string {
   const skin = getSkinDefinition(model.skinId);
   if (!skin) throw new Error(`Unknown skin: ${model.skinId}`);
   const captainArt = CHIBI_ART.captains[model.captainId][model.skinId];
+  const battleMinutes = BATTLE_HARD_CAP_MS / 60_000;
+  const maxRunLevel = EXPERIENCE_THRESHOLDS.length + 1;
 
   return `<section class="station-hero" data-reduced-motion="${model.reducedMotion}" aria-labelledby="station-hero-title">
     <div class="station-hero__world" data-motion-role="background" aria-hidden="true">
@@ -50,10 +53,10 @@ export function renderStationHero(model: StationHeroModel): string {
         <span>生命 ${model.maxHp}</span>
         <span>永久伤害 +${model.damagePercent}%</span>
       </div>
-      <div class="station-run-ticket" aria-label="普通航线，10 分钟内到达终点，每局 20 次潮汐强化">
+      <div class="station-run-ticket" aria-label="普通航线，战斗时间最多 ${battleMinutes} 分钟，单局最高 Lv.${maxRunLevel}">
         <span>普通航线</span>
-        <span>10 分钟终点</span>
-        <span>20 次潮汐强化</span>
+        <span>${battleMinutes} 分钟上限</span>
+        <span>单局最高 Lv.${maxRunLevel}</span>
         <small>点按战场任意位置，主炮即刻转向</small>
       </div>
       <button class="station-departure" data-action="start-run">检票出发</button>

@@ -14,25 +14,25 @@ export const MAP_PROGRESSION: readonly MapDefinition[] = [
     id: 'drift-suburb',
     name: '漂流郊区',
     minStationLevel: 1,
-    feature: '基础列车与自动战斗',
+    feature: '标准潮兽编队，适合练习主炮瞄准。',
   },
   {
     id: 'old-port',
     name: '旧港口',
     minStationLevel: 3,
-    feature: '维修工坊与第二条航线',
+    feature: '潮壳幼蟹更常见，雷鳐破绽持续更久。',
   },
   {
     id: 'glass-city',
     name: '玻璃城',
     minStationLevel: 5,
-    feature: '乘客休息舱与固定种子挑战',
+    feature: '灯笼鳐更常见，精准命中潮眼收益更高。',
   },
   {
     id: 'deep-tunnel',
     name: '深海隧道',
     minStationLevel: 8,
-    feature: '赛季挑战与高风险 Boss',
+    feature: '寄潮螺更常见，Boss 断潮预警更短。',
   },
 ];
 
@@ -61,6 +61,10 @@ function getMapOrThrow(mapId: MapId): MapDefinition {
 
 export function getMapDefinition(mapId: MapId): MapDefinition {
   return getMapOrThrow(mapId);
+}
+
+export function stationUpgradeGearCost(stationLevel: number): number {
+  return stationLevel * 80;
 }
 
 export function isMapUnlocked(save: PlayerSave, mapId: MapId): boolean {

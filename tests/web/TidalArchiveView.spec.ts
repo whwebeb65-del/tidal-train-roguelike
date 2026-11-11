@@ -145,5 +145,62 @@ describe('TidalArchiveView', () => {
     expect(host.querySelector('[data-archive-equipment] .archive-new-stamp'))
       .toBeNull();
   });
+
+  it('shows current skill XP and the next evolution without counting the candidate pool as discoveries', () => {
+    const model = buildTidalArchiveViewModel({
+      archive: {
+        version: 2,
+        discoveredEnemyKinds: [],
+        discoveredSkillVariantIds: ['undertow-eye'],
+        unreadEntryKeys: [],
+      },
+      equipmentInventory: [],
+      skillMasteryXp: { 'tidal-volley': 127, 'bubble-barrier': 128, 'extreme-tide': 1748 },
+    });
+    const host = document.createElement('div');
+    host.innerHTML = renderTidalArchive(model);
+    const panel = host.querySelector('[data-archive-mastery]');
+    expect(panel?.getAttribute('tabindex')).toBe('-1');
+    expect(panel?.querySelectorAll('[data-mastery-skill]')).toHaveLength(3);
+    const volley = panel?.querySelector('[data-mastery-skill="tidal-volley"]');
+    const barrier = panel?.querySelector('[data-mastery-skill="bubble-barrier"]');
+    const extreme = panel?.querySelector('[data-mastery-skill="extreme-tide"]');
+    expect(volley?.textContent).toContain('Lv.4');
+    expect(volley?.textContent).toContain('43 / 44 XP');
+    expect(volley?.textContent).toContain('Lv.5 可解锁「贯礁箭鳍」');
+    expect(volley?.querySelector('progress')?.max).toBe(44);
+    expect(volley?.querySelector('progress')?.value).toBe(43);
+    expect(barrier?.textContent).toContain('候选池 2 / 4');
+    expect(barrier?.textContent).toContain('Lv.10 可解锁「过量潮膜」');
+    expect(extreme?.textContent).toContain('Lv.20');
+    expect(extreme?.textContent).toContain('精通已满级');
+    expect(extreme?.textContent).toContain('全部进化已入候选池');
+    expect(extreme?.querySelector('progress')).toBeNull();
+    expect(model.variantSummary).toEqual({ discovered: 1, total: 12 });
+
+    const locked = host.querySelector('[data-archive-variant="reef-piercer"]');
+    const candidate = host.querySelector('[data-archive-variant="reflective-spines"]');
+    const discovered = host.querySelector('[data-archive-variant="undertow-eye"]');
+    expect(locked?.querySelector('[data-variant-availability="locked"]')?.textContent)
+      .toBe('未入候选池 · 精通 Lv.5 解锁');
+    expect(candidate?.querySelector('[data-variant-availability="candidate"]')?.textContent)
+      .toBe('已入候选池 · 局内潮阶 2 后可能出现');
+    expect(candidate?.querySelector('h3')?.textContent).toBe('未发现进化');
+    expect(candidate?.querySelector('img')?.getAttribute('aria-hidden')).toBe('true');
+    expect(candidate?.textContent).not.toContain('返还吸收伤害');
+    expect(discovered?.querySelector('[data-variant-availability="discovered"]')?.textContent)
+      .toBe('已发现');
+  });
+
+  it('keeps leveling progress after all evolutions enter the pool at Lv.15', () => {
+    const model = buildTidalArchiveViewModel({
+      archive: { version: 2, discoveredEnemyKinds: [], discoveredSkillVariantIds: [], unreadEntryKeys: [] },
+      equipmentInventory: [],
+      skillMasteryXp: { ...createSkillMasteryXp(), 'tidal-volley': 1008 },
+    });
+    expect(model.mastery[0]).toMatchObject({
+      level: 15, levelXp: 0, nextLevelXp: 132, poolCount: 4, nextVariant: null,
+    });
+  });
 });
 // @vitest-environment jsdom

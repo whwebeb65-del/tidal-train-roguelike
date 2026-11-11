@@ -8,7 +8,8 @@ import {
 export type SkillMasteryXp = Record<BattleSkillId, number>;
 export type SkillCastCounts = Record<BattleSkillId, number>;
 
-const MAX_LEVEL = 20;
+export const SKILL_MASTERY_MAX_LEVEL = 20;
+export const SKILL_MASTERY_VARIANT_LEVELS = [1, 5, 10, 15] as const;
 const CAST_XP: Readonly<Record<BattleSkillId, number>> = {
   'tidal-volley': 5,
   'bubble-barrier': 5,
@@ -16,7 +17,12 @@ const CAST_XP: Readonly<Record<BattleSkillId, number>> = {
 };
 const CAST_XP_CAP = 60;
 const FIRST_CLEAR_XP = 40;
-const MILESTONES = [1, 5, 10, 15] as const;
+
+export interface SkillMasteryProgress {
+  readonly level: number;
+  readonly levelXp: number;
+  readonly nextLevelXp: number | null;
+}
 
 export function createSkillMasteryXp(): SkillMasteryXp {
   return Object.fromEntries(
@@ -24,20 +30,24 @@ export function createSkillMasteryXp(): SkillMasteryXp {
   ) as SkillMasteryXp;
 }
 
-export function skillMasteryLevelFromXp(totalXp: number): number {
+export function getSkillMasteryProgress(totalXp: number): SkillMasteryProgress {
   let remaining = Math.max(0, Math.floor(totalXp));
   let level = 1;
-  while (level < MAX_LEVEL) {
+  while (level < SKILL_MASTERY_MAX_LEVEL) {
     const required = 20 + 8 * (level - 1);
-    if (remaining < required) break;
+    if (remaining < required) return { level, levelXp: remaining, nextLevelXp: required };
     remaining -= required;
     level += 1;
   }
-  return level;
+  return { level, levelXp: 0, nextLevelXp: null };
+}
+
+export function skillMasteryLevelFromXp(totalXp: number): number {
+  return getSkillMasteryProgress(totalXp).level;
 }
 
 export function skillMasteryPowerMultiplier(level: number): number {
-  const safeLevel = Math.max(1, Math.min(MAX_LEVEL, Math.floor(level)));
+  const safeLevel = Math.max(1, Math.min(SKILL_MASTERY_MAX_LEVEL, Math.floor(level)));
   return 1 + 0.0075 * (safeLevel - 1);
 }
 
@@ -45,7 +55,7 @@ export function unlockedSkillVariants(
   skillId: BattleSkillId,
   level: number,
 ): readonly SkillVariantId[] {
-  const count = MILESTONES.filter((milestone) => level >= milestone).length;
+  const count = SKILL_MASTERY_VARIANT_LEVELS.filter((milestone) => level >= milestone).length;
   return SKILL_VARIANTS_BY_SKILL[skillId].slice(0, count);
 }
 
