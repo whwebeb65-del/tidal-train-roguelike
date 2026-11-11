@@ -1952,6 +1952,14 @@ async function assertBattleRadioNotice(client, viewportName) {
 }
 
 async function assertBattleHudGeometry(client, label) {
+  // The CSS entrance can start after the router's timer. Measuring a scaled
+  // frame can put a 1px border just outside the strict viewport bound.
+  await waitForEvaluation(client, `(() => {
+    const scene = document.querySelector('.scene-host > .game-scene--battle');
+    return Boolean(scene
+      && !scene.parentElement.classList.contains('scene-host--entering')
+      && !scene.getAnimations().some((animation) => animation.pending || animation.playState === 'running'));
+  })()`, { label: `${label} settled battle entrance` });
   const geometry = await evaluate(client, `(() => {
     const hud = document.querySelector('.battle-hud__tide-log');
     const canvas = document.querySelector('[data-battle-canvas]');
