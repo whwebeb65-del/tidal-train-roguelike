@@ -1,0 +1,49 @@
+/* The shell reflects the effective in-game or system preference.
+   Leave authored poses, transforms, and the station's short opacity fade intact. */
+.app-shell[data-reduced-motion="true"] :is(
+  .scene-host > .game-scene,
+  .settings-sheet,
+  .guidebook-current-ticket,
+  .guidebook-action--claim,
+  .daily-check-in-layer--sky,
+  .daily-check-in-layer--horizon,
+  .daily-check-in-layer--platform,
+  .daily-check-in-lights i,
+  .daily-check-in-cell.current,
+  .daily-check-in-mascot,
+  .beacon-beam,
+  .dock-tide i,
+  .battle-interaction button,
+  .battle-upgrade-countdown,
+  .battle-skill[data-rank="5"],
+  .evolution-crest,
+  .evolution-crest i,
+  .battle-dialog--evolution .battle-upgrade-card,
+  .battle-tutorial-ticket,
+  .settlement-porter img
+),
+.app-shell[data-reduced-motion="true"] :is(.battle-skill.is-ready, .battle-hud__refresh)::after {
+  animation: none;
+}
+
+.app-shell[data-reduced-motion="true"] :is(
+  .app-notice,
+  .hub-nav__icon svg,
+  .captain-choice-card img,
+  .primary,
+  .secondary,
+  .chip,
+  .support-card,
+  .progress i,
+  .cabinet-switch i,
+  .battle-meter i,
+  .battle-meter b,
+  .battle-archive-discovery,
+  .archive-unread-seal,
+  .archive-new-stamp,
+  .settlement-archive-luggage,
+  [data-settlement-archive-entry]
+),
+.app-shell[data-reduced-motion="true"] .cabinet-switch i::after {
+  transition: none;
+}

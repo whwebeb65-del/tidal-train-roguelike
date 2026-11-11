@@ -440,6 +440,7 @@ const shell = mountAppShell(app, {
   starTickets: save.starTickets,
   account: accountTicketSnapshot(),
 });
+shell.setReducedMotion(effectiveReducedMotion);
 const featureContext: FeatureSceneContext = {
   renderStation: () => renderStationScene(),
   renderCaptain: () => renderCaptainScene(),
@@ -716,6 +717,7 @@ function applyRuntimeSettings(
   }
   effectiveReducedMotion = nextReducedMotion;
   qualityPreference = settings.qualityPreference;
+  shell.setReducedMotion(nextReducedMotion);
   router.setReducedMotion(nextReducedMotion);
   activeStationScene?.setReducedMotion(nextReducedMotion);
   activeStationScene?.setLowPerformance(qualityPreference === 'low');

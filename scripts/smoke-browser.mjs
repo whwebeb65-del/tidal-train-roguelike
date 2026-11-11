@@ -3654,6 +3654,38 @@ async function assertReducedMotionArchive(client, label) {
   await navigateScene(client, 'station');
 }
 
+async function assertInAppMotionPreference(client, label) {
+  await client.send('Emulation.setEmulatedMedia', {
+    media: 'screen',
+    features: [{ name: 'prefers-reduced-motion', value: 'no-preference' }],
+  });
+  const shellSelector = '.app-shell--v2[data-reduced-motion="true"]';
+  await setDisplaySettings(client, { reducedMotion: true }, `${label} game-only reduced motion`);
+  assert.equal(await evaluate(client, `matchMedia('(prefers-reduced-motion: reduce)').matches`), false);
+  assert.equal(await evaluate(client, `Boolean(document.querySelector(${JSON.stringify(shellSelector)}))`), true);
+  await client.send('Page.reload', { ignoreCache: true });
+  await waitForEvaluation(client, `Boolean(${hookExpression})
+    && Boolean(document.querySelector(${JSON.stringify(shellSelector)}))
+    && Boolean(document.querySelector('.station-hero'))`,
+  { label: `${label} game motion preference after reload` });
+  assert.equal(await evaluate(client, `getComputedStyle(document.querySelector('.scene-host > .game-scene')).animationName`),
+    'none', `${label} in-app motion setting must stop the CSS scene entrance`);
+
+  const baseline = await snapshot(client);
+  await startNormalBattle(client);
+  const skillMotion = await evaluate(client, `(() => {
+    const ready = document.querySelector('[data-battle-skill].is-ready');
+    return ready ? getComputedStyle(ready, '::after').animationName : null;
+  })()`);
+  assert.equal(skillMotion, 'none', `${label} game-only motion setting must stop the skill readiness pulse`);
+  await assertTravelMotion(client);
+  await returnToStation(client, baseline.diagnostics.activeListeners);
+  await setDisplaySettings(client, { reducedMotion: false }, `${label} restore game motion`);
+  assert.equal(await evaluate(client, `Boolean(document.querySelector(${JSON.stringify(shellSelector)}))`), false);
+  assert.notEqual(await evaluate(client, `getComputedStyle(document.querySelector('.scene-host > .game-scene')).animationName`),
+    'none', `${label} disabling the game setting should restore normal animation`);
+}
+
 async function assertReducedMotionResilience(client, label) {
   await reloadWithE2EArchiveFixture(client);
   await client.send('Emulation.setEmulatedMedia', {
@@ -5995,6 +6027,9 @@ async function runViewport(client, viewport, smokeId, browserErrors) {
   if (viewport.full) {
     await assertResetCancelKeepsProgress(client, label);
     await assertGuidebookMasteryDestination(client, label);
+    await resetSaveBetweenViewports(client);
+    await ensureCaptainSelected(client);
+    await assertInAppMotionPreference(client, label);
     await resetSaveBetweenViewports(client);
     await ensureCaptainSelected(client);
     await assertLowQualityResilience(client, label);

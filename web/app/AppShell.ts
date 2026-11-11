@@ -35,6 +35,7 @@ export interface AppShellHandles {
   setNotice(message: string): void;
   setNavigationHidden(hidden: boolean): void;
   setBattleChrome(active: boolean): void;
+  setReducedMotion(reduced: boolean): void;
   openResetSaveDialog(): boolean;
   closeResetSaveDialog(): void;
   isResetSaveDialogOpen(): boolean;
@@ -129,6 +130,7 @@ export function mountAppShell(
   snapshot: CurrencySnapshot,
 ): AppShellHandles {
   root.innerHTML = renderAppShell(snapshot);
+  const shellRoot = requireElement<HTMLElement>(root, '.app-shell');
   const sceneHost = requireElement<HTMLElement>(root, '#scene-host');
   const noticeHost = requireElement<HTMLElement>(root, '#app-notice');
   const noticeCopy = requireElement<HTMLElement>(noticeHost, '[data-notice-copy]');
@@ -217,6 +219,13 @@ export function mountAppShell(
       if (active) sceneHost.removeAttribute('aria-live');
       else if (sceneHost.getAttribute('aria-live') !== 'polite') {
         sceneHost.setAttribute('aria-live', 'polite');
+      }
+    },
+
+    setReducedMotion(reduced): void {
+      const preference = String(reduced);
+      if (shellRoot.dataset.reducedMotion !== preference) {
+        shellRoot.dataset.reducedMotion = preference;
       }
     },
 
