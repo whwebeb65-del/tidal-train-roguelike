@@ -4313,6 +4313,7 @@ async function sampleSignaturePixels(
   evidence,
   signature,
   geometry,
+  { requireEvidence = true } = {},
 ) {
   const bounds = geometry.type === 'particle'
     ? signatureMotifBounds(geometry.particle, evidence.effects.camera)
@@ -4447,25 +4448,18 @@ async function sampleSignaturePixels(
     };
   })()`);
   assert.ok(sample, 'signature Canvas sample must be readable');
-  const minimumPrimaryMatches = geometry.type === 'ring' ? 6 : 3;
-  assert.ok(
-    sample.primaryMatches >= minimumPrimaryMatches,
-    `${signature.variantId} renderer lacks catalog-primary pixels: ${JSON.stringify(sample)}`,
-  );
-  assert.ok(
-    sample.primaryMatchIncrease >= 3 && sample.newPrimaryMatches >= 3,
-    `${signature.variantId} renderer lacks baseline-to-target primary-color evidence: ${JSON.stringify(sample)}`,
-  );
-  const minimumSecondaryMatches = geometry.type === 'ring' ? 6 : 3;
-  assert.ok(
-    sample.secondaryMatches >= minimumSecondaryMatches,
-    `${signature.variantId} renderer lacks catalog-secondary pixels: ${JSON.stringify(sample)}`,
-  );
-  assert.ok(
-    sample.secondaryMatchIncrease >= 3 && sample.newSecondaryMatches >= 3,
-    `${signature.variantId} renderer lacks baseline-to-target secondary-color evidence: ${JSON.stringify(sample)}`,
-  );
-  return { bounds, sample };
+  const minimumMatches = geometry.type === 'ring' ? 6 : 3;
+  const failures = [
+    sample.primaryMatches < minimumMatches && 'catalog-primary pixels',
+    (sample.primaryMatchIncrease < 3 || sample.newPrimaryMatches < 3) && 'new primary pixels',
+    sample.secondaryMatches < minimumMatches && 'catalog-secondary pixels',
+    (sample.secondaryMatchIncrease < 3 || sample.newSecondaryMatches < 3) && 'new secondary pixels',
+  ].filter(Boolean);
+  if (requireEvidence) {
+    assert.equal(failures.length, 0,
+      `${signature.variantId} renderer lacks ${failures.join(', ')}: ${JSON.stringify(sample)}`);
+  }
+  return { bounds, sample, failures };
 }
 
 async function chooseEvolutionThroughRealProgression(client, signature, label) {
@@ -4826,23 +4820,38 @@ async function castAndObserveSignature(client, signature, label, reducedMotion) 
       evidence.verification.effectKinds.includes(signature.effectKind),
       `${label} current effectKinds must contain ${signature.effectKind}`,
     );
-    const particle = animatedSignatureParticle(
+    const firstParticle = animatedSignatureParticle(
       evidence.effects,
       signature,
       label,
     );
-    const causalPixels = await sampleSignaturePixels(
-      client,
-      evidence,
-      signature,
-      { type: 'particle', particle },
-    );
-    await assertSignatureAvoidsProtectedControls(
-      client,
-      signature,
-      label,
-      causalPixels.bounds,
-    );
+    const sampledFrames = [];
+    let hasEvidence = false;
+    // A moving motif can be nearly the same color as the scene on its first
+    // visible frame. Keep the thresholds and the pre-cast baseline; observe
+    // the same still-bright particle for up to 85 ms of real simulation.
+    for (let frame = 0; frame < 6; frame += 1) {
+      const particle = evidence.effects?.particles.find((item) => item.id === firstParticle.id);
+      if (!particle || particle.alpha < 0.65) break;
+      const raster = await sampleSignaturePixels(
+        client,
+        evidence,
+        signature,
+        { type: 'particle', particle },
+        { requireEvidence: false },
+      );
+      await assertSignatureAvoidsProtectedControls(client, signature, label, raster.bounds);
+      sampledFrames.push({ failures: raster.failures, sample: raster.sample });
+      if (raster.failures.length === 0) {
+        hasEvidence = true;
+        break;
+      }
+      if (frame < 5) {
+        await advanceBattle(client, 17);
+        evidence = await snapshot(client);
+      }
+    }
+    assert.ok(hasEvidence, `${label} same-cast color evidence missing: ${JSON.stringify(sampledFrames)}`);
     assert.ok(
       evidence.battle.cooldowns[signature.skillId] > 0
         || signature.skillId === 'extreme-tide',
@@ -6205,6 +6214,9 @@ async function assertShortBattleControls(client) {
       await resize(width, height, mobile);
       await waitForEvaluation(client, `(() => {
         if (innerWidth !== ${width} || innerHeight !== ${height}) return false;
+        // A zero-step render lets the manual E2E clock apply the resize
+        // without advancing any battle timers or changing the frame state.
+        ${hookExpression}.advanceBattle(0);
         const canvas = document.querySelector('[data-battle-canvas]').getBoundingClientRect();
         const host = document.querySelector('.battle-canvas-host').getBoundingClientRect();
         return Math.abs(canvas.width - host.width) < 1 && Math.abs(canvas.height - host.height) < 1;
@@ -6239,6 +6251,8 @@ async function assertShortBattleControls(client) {
       `${label} every skill and pause must fit and receive clicks: ${JSON.stringify(metrics)}`);
       if (width === 640) {
         await tapAt(client, metrics.skills[1].point);
+        // The E2E battle clock is manual; process the real pointer action.
+        await advanceBattle(client, 34);
         await waitForEvaluation(client, `!document.querySelector('[data-battle-skill="bubble-barrier"]').classList.contains('is-ready')
           && !document.querySelector('[data-hud-shield]').textContent.includes('未展开')`,
         { label: 'landscape skill rail releases the bubble barrier' });
