@@ -772,12 +772,20 @@ function assertBossWarningCountdownDelta(
       normal.controlPixelRect,
       `paired ${region} control Canvas rect must be identical`,
     );
+    // A few incidental target pixels divided by an empty control can have
+    // an outsized ratio. Use the region's existing minimum evidence count
+    // as the same denominator floor for both sides of the comparison.
+    const ratioFloor = warning.threshold.minTarget;
+    const normalRatio = normal.target / Math.max(ratioFloor, normal.control);
+    const warningRatio = warning.target / Math.max(ratioFloor, warning.control);
     assert.ok(
       warning.pixelDelta >= normal.pixelDelta + 6
-        && warning.ratio >= normal.ratio + 0.5,
+        && warningRatio >= normalRatio + 0.5,
       `warning countdown paired Canvas delta failed: ${JSON.stringify({
         phase: warningCountdown.phase,
         region,
+        normalRatio,
+        warningRatio,
         normal,
         warning,
       })}`,
